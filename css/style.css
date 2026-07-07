@@ -113,6 +113,18 @@ header{
 .off-table th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
 .off-table th.sortable:hover{color:var(--gold)}
 
+/* ---------- Onglets du replay (Déroulé / Stats) ---------- */
+.replay-tabs{display:flex;gap:8px;padding:14px 16px 0}
+.replay-tab-btn{
+  flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
+  padding:9px 12px;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;
+  font-family:'Inter',sans-serif;
+}
+.replay-tab-btn:hover{border-color:var(--gold-dim)}
+.replay-tab-btn.active{border-color:var(--gold-dim);color:var(--gold);background:var(--panel-2)}
+.replay-tab{display:none}
+.replay-tab.active{display:block}
+
 /* ---------- Scoreboard ---------- */
 #scoreboard{display:none}
 .scorebar{

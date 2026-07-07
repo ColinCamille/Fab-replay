@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=13">
+<link rel="stylesheet" href="css/style.css?v=14">
 </head>
 <body>
 
@@ -76,36 +76,47 @@
 
     <div id="scoreboard">
       <div id="matchBanner"></div>
-      <div id="curveWrap">
-        <svg id="curveSvg" viewBox="0 0 400 132" preserveAspectRatio="none"></svg>
-        <div class="curve-readout" id="curveReadout"></div>
-      </div>
-      <div id="chainWrap"><div class="chain" id="chain"></div></div>
 
-      <div id="turnDetail">
-        <div class="turn-title">
-          <h2 id="turnLabel"></h2>
-          <div class="nav-btns">
-            <button id="prevTurn">‹</button>
-            <button id="nextTurn">›</button>
+      <!-- Onglets : séparer le déroulé tour-par-tour des stats globales -->
+      <div class="replay-tabs" id="replayTabs">
+        <button class="replay-tab-btn active" data-tab="replay">⚔ Déroulé</button>
+        <button class="replay-tab-btn" data-tab="stats">📊 Stats</button>
+      </div>
+
+      <div class="replay-tab active" id="tab-replay">
+        <div id="curveWrap">
+          <svg id="curveSvg" viewBox="0 0 400 132" preserveAspectRatio="none"></svg>
+          <div class="curve-readout" id="curveReadout"></div>
+        </div>
+        <div id="chainWrap"><div class="chain" id="chain"></div></div>
+
+        <div id="turnDetail">
+          <div class="turn-title">
+            <h2 id="turnLabel"></h2>
+            <div class="nav-btns">
+              <button id="prevTurn">‹</button>
+              <button id="nextTurn">›</button>
+            </div>
           </div>
+          <div class="toggle-row">
+            <label><input type="checkbox" id="detailToggle"> Afficher le détail technique (passes, résolutions de chaîne…)</label>
+          </div>
+          <div id="turnBoard"></div>
         </div>
-        <div class="toggle-row">
-          <label><input type="checkbox" id="detailToggle"> Afficher le détail technique (passes, résolutions de chaîne…)</label>
+
+        <div id="knownCardsWrap">
+          <details open>
+            <summary>Cartes vues depuis le début de la partie</summary>
+            <div id="knownCardsBody"></div>
+          </details>
         </div>
-        <div id="turnBoard"></div>
       </div>
 
-      <div id="knownCardsWrap">
-        <details open>
-          <summary>Cartes vues depuis le début de la partie</summary>
-          <div id="knownCardsBody"></div>
-        </details>
-      </div>
-
-      <div id="statsWrap">
-        <h3>Stats de la partie</h3>
-        <div class="stat-grid" id="statGrid"></div>
+      <div class="replay-tab" id="tab-stats">
+        <div id="statsWrap">
+          <h3>Stats de la partie</h3>
+          <div class="stat-grid" id="statGrid"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -117,12 +128,12 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=13"></script>
-<script src="js/images.js?v=13"></script>
-<script src="js/db.js?v=13"></script>
-<script src="js/sync.js?v=13"></script>
-<script src="js/replay.js?v=13"></script>
-<script src="js/dashboard.js?v=13"></script>
+<script src="talishar-parser.js?v=14"></script>
+<script src="js/images.js?v=14"></script>
+<script src="js/db.js?v=14"></script>
+<script src="js/sync.js?v=14"></script>
+<script src="js/replay.js?v=14"></script>
+<script src="js/dashboard.js?v=14"></script>
 
 <script>
 // ============================================================
@@ -158,8 +169,19 @@
     return entries;
   }
 
+  // ---------- Onglets du replay (Déroulé / Stats) ----------
+  function setReplayTab(name) {
+    document.querySelectorAll('.replay-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    const r = $('#tab-replay'), s = $('#tab-stats');
+    if (r) r.classList.toggle('active', name === 'replay');
+    if (s) s.classList.toggle('active', name === 'stats');
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('.replay-tab-btn').forEach(b => b.addEventListener('click', () => setReplayTab(b.dataset.tab)));
+
   function openGame(entry) {
     window.Replay.show(entry.record);
+    setReplayTab('replay');   // toujours ouvrir sur le déroulé
     showView('replay');
     if (history.replaceState) history.replaceState(null, '', '#game=' + encodeURIComponent(entry.gameId));
     else location.hash = 'game=' + encodeURIComponent(entry.gameId);
