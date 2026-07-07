@@ -124,9 +124,16 @@
         .filter(Boolean);
       const label = '<div class="eq-label ' + side + '">' + (side === 'me' ? 'Toi' : 'Adv') + '</div>';
       if (!slots.length) return '<div class="eq-strip">' + label + '<div class="eq-empty">équipement non capté</div></div>';
-      const cells = slots.map(eq =>
-        '<div class="eq-slot" data-card="' + escapeHtml(eq.name) + '" title="' + escapeHtml(eq.name) + '">' +
-        '<div class="eq-ph">🛡</div></div>').join('');
+      const cells = slots.map(eq => {
+        // Face cachée : pas d'identifiant / carte "Cardback" (mécanique Enigma…).
+        // Sinon on affiche le nom en repli (l'image peut manquer chez goagain).
+        const faceDown = !eq.id || /cardback/i.test(eq.name);
+        if (faceDown) {
+          return '<div class="eq-slot" title="Équipement face cachée"><div class="eq-ph" title="Équipement face cachée">🂠</div></div>';
+        }
+        return '<div class="eq-slot" data-card="' + escapeHtml(eq.name) + '" title="' + escapeHtml(eq.name) + '">' +
+          '<div class="eq-ph eq-name">' + escapeHtml(eq.name) + '</div></div>';
+      }).join('');
       return '<div class="eq-strip">' + label + '<div class="eq-slots">' + cells + '</div></div>';
     };
 
