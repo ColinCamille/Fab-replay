@@ -23,6 +23,7 @@
   <!-- ====================== MODE DASHBOARD ====================== -->
   <section id="dashboardView" class="view active">
     <div class="lib-toolbar" id="libToolbar">
+      <button class="lib-btn" id="syncBtn">☁ Synchro GitHub</button>
       <button class="lib-btn" id="exportBtn">⤓ Exporter la bibliothèque</button>
       <button class="lib-btn" id="importBtn">⤒ Importer une sauvegarde</button>
       <input type="file" id="importInput" accept=".json,application/json" hidden>
@@ -112,6 +113,7 @@
 <script src="talishar-parser.js"></script>
 <script src="js/images.js"></script>
 <script src="js/db.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/replay.js"></script>
 <script src="js/dashboard.js"></script>
 
@@ -209,6 +211,44 @@
     }
   });
 
+  // ---------- Synchro GitHub (dépôt = base ; lecture libre, écriture par token) ----------
+  const syncBtn = $('#syncBtn');
+
+  function refreshSyncBtn() {
+    const repo = window.FabSync.detectRepo();
+    if (!repo) { syncBtn.textContent = '☁ Synchro indisponible'; syncBtn.title = 'La synchro nécessite un déploiement GitHub Pages.'; return; }
+    if (window.FabSync.hasToken()) { syncBtn.textContent = '☁ Synchro : connectée'; syncBtn.title = 'Cliquer pour déconnecter ce token.'; }
+    else { syncBtn.textContent = '☁ Connecter la synchro'; syncBtn.title = 'Coller un token GitHub pour publier tes parties depuis cet appareil.'; }
+  }
+
+  syncBtn.addEventListener('click', async () => {
+    const repo = window.FabSync.detectRepo();
+    if (!repo) { alert('La synchro GitHub n’est active que sur le site déployé (GitHub Pages).'); return; }
+
+    if (window.FabSync.hasToken()) {
+      if (confirm('Déconnecter la synchro sur cet appareil ? (Le token sera oublié ; tes parties locales restent.)')) {
+        window.FabSync.clearToken(); refreshSyncBtn();
+        libHint.textContent = 'Synchro déconnectée sur cet appareil.';
+      }
+      return;
+    }
+
+    const token = prompt('Colle ton token GitHub (accès en écriture au dépôt ' + repo.owner + '/' + repo.repo + ').\n'
+      + 'Astuce : un token « fine-grained » limité à ce seul dépôt, permission Contents = Read and write.');
+    if (!token || !token.trim()) return;
+    window.FabSync.setToken(token);
+    libHint.textContent = 'Vérification du token…';
+    const res = await window.FabSync.verifyToken();
+    if (!res.ok) {
+      window.FabSync.clearToken(); refreshSyncBtn();
+      alert('Token refusé (' + res.reason + '). Vérifie qu’il donne l’accès en écriture à ' + repo.owner + '/' + repo.repo + '.');
+      libHint.textContent = '';
+      return;
+    }
+    refreshSyncBtn();
+    libHint.textContent = 'Synchro connectée. Tes prochains imports seront publiés dans le dépôt.';
+  });
+
   // ---------- Identité (log ancien sans META) ----------
   // Recalcule les champs dépendant de l'identité sans re-parser tout.
   function reresolveIdentity(g, chosenMe) {
@@ -242,6 +282,7 @@
 
   async function importTexts(texts) {
     let imported = 0, errors = 0, lastEntry = null;
+    const importedIds = [];
     for (const text of texts) {
       if (!text || !text.trim()) continue;
       let rec;
@@ -252,6 +293,7 @@
       try {
         const id = await window.FabDB.putGame(rec, text);
         lastEntry = { gameId: id, record: rec };
+        importedIds.push(id);
         imported++;
       } catch (e) { console.error(e); errors++; }
     }
@@ -264,6 +306,19 @@
     resetDropzoneLabel();
 
     await reloadDashboard();
+
+    // Publication cloud (si un token est connecté sur cet appareil).
+    if (importedIds.length && window.FabSync.canWrite()) {
+      libHint.textContent = 'Publication dans le dépôt…';
+      try {
+        const entries = (await Promise.all(importedIds.map(id => window.FabDB.getEntry(id)))).filter(Boolean);
+        const res = await window.FabSync.push(entries);
+        libHint.textContent = res.pushed + ' partie(s) publiée(s) dans le dépôt (visibles sur tes autres appareils après le redéploiement Pages).';
+      } catch (e) {
+        console.error(e);
+        libHint.textContent = 'Import local OK, mais publication cloud échouée : ' + e.message;
+      }
+    }
 
     // Un seul .txt → on ouvre directement le replay ; plusieurs → dashboard.
     if (imported === 1 && lastEntry) openGame(lastEntry);
@@ -316,12 +371,22 @@
 
   // ---------- Démarrage ----------
   (async function boot() {
-    const entries = await reloadDashboard();
-    // Reprise d'un lien profond #game=<id>
+    refreshSyncBtn();
+    await reloadDashboard();
+
+    // Synchro descendante : récupère les parties publiées dans le dépôt
+    // (lecture statique, sans token) et les fusionne dans le cache local.
+    try {
+      const r = await window.FabSync.pull();
+      if (r.added) await reloadDashboard();
+    } catch (e) { console.error(e); }
+
+    // Reprise d'un lien profond #game=<id> (après la synchro, la partie
+    // liée peut provenir du dépôt).
     const m = location.hash.match(/game=([^&]+)/);
     if (m) {
       const id = decodeURIComponent(m[1]);
-      const entry = entries.find(e => String(e.gameId) === id);
+      const entry = await window.FabDB.getEntry(id);
       if (entry) { openGame(entry); return; }
     }
     showView('dashboard');

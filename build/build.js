@@ -16,7 +16,7 @@ const ROOT = path.resolve(__dirname, '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
 const css = read('css/style.css');
-const scripts = ['talishar-parser.js', 'js/images.js', 'js/db.js', 'js/replay.js', 'js/dashboard.js']
+const scripts = ['talishar-parser.js', 'js/images.js', 'js/db.js', 'js/sync.js', 'js/replay.js', 'js/dashboard.js']
   .map(f => '<script>\n' + read(f) + '\n</script>').join('\n');
 
 let html = read('index.html');
