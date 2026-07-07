@@ -34,7 +34,7 @@ Pourquoi ce découpage :
 - Vérifié : appareil vierge → brut ingéré, parsé, `raw` conservé en local,
   dashboard peuplé, **idempotent** (pas de doublon au 2ᵉ chargement).
 
-### Grabber (`talishar-log-grabber_user.js` v1.10.0) — à tester en vrai ⚠️
+### Grabber (`talishar-log-grabber.user.js` v1.10.0) — à tester en vrai ⚠️
 - Config via bouton **⚙** (`owner`, `repo`, token, mode auto/manuel), stockée en
   `localStorage`.
 - Envoi via bouton **☁ Dépôt**, raccourci **Alt+Shift+S**, ou **auto** quand les
