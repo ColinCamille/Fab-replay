@@ -127,13 +127,16 @@
 
     // Performance des cartes agrégée (endStats.me.cards sommé sur toutes les parties)
     const cardMap = {};
+    const num = v => Number(v) || 0;   // défensif : d'anciennes parties peuvent avoir des compteurs en string
     kept.forEach(e => {
       const cards = (e.record.endStats && e.record.endStats.me && e.record.endStats.me.cards) || [];
+      const seenThisGame = new Set();  // une carte ne compte qu'une fois par partie
       cards.forEach(c => {
         const key = norm(c.name);
         const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, games: 0 });
-        agg.played += c.played || 0; agg.blocked += c.blocked || 0; agg.pitched += c.pitched || 0;
-        agg.discarded += c.discarded || 0; agg.timesHit += c.timesHit || 0; agg.games++;
+        agg.played += num(c.played); agg.blocked += num(c.blocked); agg.pitched += num(c.pitched);
+        agg.discarded += num(c.discarded); agg.timesHit += num(c.timesHit);
+        if (!seenThisGame.has(key)) { agg.games++; seenThisGame.add(key); }
       });
     });
     const cardPerf = Object.values(cardMap).sort((a, b) => b.played - a.played);
