@@ -1,0 +1,116 @@
+/* ============================================================
+ * Harnais de tests Node — SANS dépendance externe.
+ * ------------------------------------------------------------
+ * Vérifie :
+ *   1. le parseur sur une fixture .txt fidèle au grabber ;
+ *   2. le cœur d'agrégation du dashboard sur des records forgés ;
+ *   3. la clé de déduplication de la couche DB.
+ *
+ * Lancement : `node tests/run.js` (ou `npm test`).
+ * ============================================================ */
+'use strict';
+const fs = require('fs');
+const path = require('path');
+
+let passed = 0, failed = 0;
+function assert(cond, msg) {
+  if (cond) { passed++; }
+  else { failed++; console.error('  ✗ ' + msg); }
+}
+function eq(a, b, msg) { assert(a === b, msg + ' (attendu ' + JSON.stringify(b) + ', obtenu ' + JSON.stringify(a) + ')'); }
+
+// ---------- 1. Parseur ----------
+const Parser = require('../talishar-parser.js');
+const raw = fs.readFileSync(path.join(__dirname, 'fixture-sample.txt'), 'utf8');
+const rec = Parser.parse(raw);
+
+console.log('Parseur —');
+eq(rec.myName, 'Ehecalt', 'identité: myName');
+eq(rec.oppName, 'Opponent', 'identité: oppName');
+eq(rec.matchup, 'Briar vs Briar', 'matchup (miroir)');
+eq(rec.format, 'blitz', 'format');
+eq(rec.vsAI, false, 'vsAI');
+eq(rec.source.gameId, '908070', 'gameId depuis en-tête');
+assert(rec.result && rec.result.iWon === true, 'result.iWon = true');
+assert(rec.result && rec.result.byConcession === true, 'result.byConcession = true (abandon)');
+eq(rec.warnings.length, 0, 'aucun warning (identité cohérente)');
+assert(rec.endStats && rec.endStats.me, 'endStats.me présent');
+eq(rec.endStats.me.firstPlayer, true, 'endStats.me.firstPlayer');
+eq(rec.endStats.me.won, true, 'endStats.me.won');
+eq(rec.endStats.me.cards.length, 3, 'endStats.me.cards (3 cartes)');
+assert(rec.endStats.opp && rec.endStats.opp.cards.length === 1, 'endStats.opp présent');
+eq(rec.timeline.durationSec, 180, 'durée globale (timestamps)');
+
+// Miroir : la main ne doit PAS avoir été filtrée par les cartes adverses.
+const t1 = rec.turns.find(t => t.player === 'Ehecalt' && t.turnNumber === 1);
+assert(t1 && Array.isArray(t1.hand) && t1.hand.indexOf('Bloodrush Bellow') >= 0, 'main tour 1 conservée (miroir)');
+// Arsenal d'ouverture forcé vide (règle FaB).
+eq(rec.turns[0].arsenal.length, 0, 'arsenal ouverture vide');
+
+// ---------- 2. Agrégation dashboard ----------
+const Dashboard = require('../js/dashboard.js');
+console.log('Dashboard —');
+
+function mkRec(o) {
+  return {
+    result: { iWon: o.iWon },
+    vsAI: !!o.ai,
+    format: o.format || 'blitz',
+    players: { me: { hero: 'Briar' }, opp: { hero: o.oppHero } },
+    source: { capturedAt: o.date },
+    endStats: o.first == null ? null : {
+      me: {
+        won: o.iWon, firstPlayer: o.first,
+        cards: o.cards || [],
+        averages: { dealtPerTurn: o.dpt || 5, threatenedPerTurn: 7, threatenedPerCard: 2.5, value: 3 },
+        totals: { dealt: o.dealt || 10, threatened: 14, blocked: 3 }
+      }, opp: null
+    }
+  };
+}
+const entries = [
+  { gameId: 'g1', record: mkRec({ iWon: true, oppHero: 'Dorinthea', first: true, date: '2026-07-01T10:00:00Z', cards: [{ name: 'Brutal Assault', played: 2, blocked: 0, pitched: 0, timesHit: 1 }] }) },
+  { gameId: 'g2', record: mkRec({ iWon: false, oppHero: 'Dorinthea', first: false, date: '2026-07-02T10:00:00Z', cards: [{ name: 'Brutal Assault', played: 1, blocked: 1, pitched: 0, timesHit: 0 }] }) },
+  { gameId: 'g3', record: mkRec({ iWon: true, oppHero: 'Briar', first: true, date: '2026-07-03T10:00:00Z' }) },
+  { gameId: 'g4', record: mkRec({ iWon: true, oppHero: 'Briar', first: false, date: '2026-07-04T10:00:00Z' }) },
+  { gameId: 'gAI', record: mkRec({ iWon: false, oppHero: 'Kano', first: false, date: '2026-07-05T10:00:00Z', ai: true }) }
+];
+
+// IA exclue par défaut : 4 parties, 3 victoires → 75 %.
+const agg = Dashboard.aggregate(entries, {});
+eq(agg.global.games, 4, 'IA exclue par défaut (4 parties)');
+eq(agg.global.wins, 3, 'victoires');
+eq(agg.global.winrate, 75, 'winrate global 75%');
+
+// IA incluse : 5 parties.
+eq(Dashboard.aggregate(entries, { includeAI: true }).global.games, 5, 'IA incluse (5 parties)');
+
+// Matchup Dorinthea : 2 parties, 1 victoire → 50 %.
+const dor = agg.byMatchup.find(m => m.hero === 'Dorinthea');
+assert(dor && dor.games === 2 && dor.winrate === 50, 'matchup Dorinthea 1-1 (50%)');
+const bri = agg.byMatchup.find(m => m.hero === 'Briar');
+assert(bri && bri.games === 2 && bri.winrate === 100, 'matchup Briar 2-0 (100%)');
+
+// 1er vs 2e joueur : 1er = g1(V) g3(V) → 100% ; 2e = g2(D) g4(V) → 50%.
+eq(agg.firstSecond.first.winrate, 100, 'winrate 1er joueur');
+eq(agg.firstSecond.second.winrate, 50, 'winrate 2e joueur');
+
+// Perf cartes agrégée : Brutal Assault joué 3 fois sur 2 parties.
+const ba = agg.cardPerf.find(c => c.name === 'Brutal Assault');
+assert(ba && ba.played === 3 && ba.games === 2, 'carte Brutal Assault agrégée (3 joués / 2 parties)');
+
+// Filtre héros adverse.
+eq(Dashboard.aggregate(entries, { oppHero: 'Briar' }).global.games, 2, 'filtre héros adverse');
+
+// Tendance : un point par partie décidée (4 hors IA).
+eq(agg.trend.length, 4, 'tendance : 4 points');
+
+// ---------- 3. Clé DB ----------
+const DB = require('../js/db.js').FabDB;
+console.log('DB —');
+eq(DB.keyFor(rec, raw), '908070', 'clé DB = gameId');
+eq(DB.keyFor({ source: {} }, 'abc'), DB.keyFor({ source: {} }, 'abc'), 'clé de repli déterministe');
+
+// ---------- Bilan ----------
+console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
+process.exit(failed ? 1 : 0);
