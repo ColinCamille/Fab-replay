@@ -20,11 +20,11 @@ const scripts = ['talishar-parser.js', 'js/images.js', 'js/db.js', 'js/sync.js',
   .map(f => '<script>\n' + read(f) + '\n</script>').join('\n');
 
 let html = read('index.html');
-// Remplace le <link> CSS par un <style> inliné.
-html = html.replace(/<link rel="stylesheet" href="css\/style\.css">/, '<style>\n' + css + '\n</style>');
-// Remplace le bloc des 5 <script src> par les scripts inlinés.
+// Remplace le <link> CSS par un <style> inliné (tolère un ?v=… de cache-bust).
+html = html.replace(/<link rel="stylesheet" href="css\/style\.css[^"]*">/, '<style>\n' + css + '\n</style>');
+// Remplace le bloc des <script src> par les scripts inlinés (tolère ?v=…).
 html = html.replace(
-  /<!-- Modules partagés[\s\S]*?<script src="js\/dashboard\.js"><\/script>/,
+  /<!-- Modules partagés[\s\S]*?<script src="js\/dashboard\.js[^"]*"><\/script>/,
   '<!-- Modules inlinés (build fichier-unique) -->\n' + scripts
 );
 
