@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=13">
 </head>
 <body>
 
@@ -114,13 +114,15 @@
 
 <footer>Images de cartes via <a href="https://api.goagain.dev" target="_blank" rel="noopener">goagain.dev</a> · données non affiliées à Legend Story Studios</footer>
 
-<!-- Modules partagés (ordre important : le parseur d'abord) -->
-<script src="talishar-parser.js"></script>
-<script src="js/images.js"></script>
-<script src="js/db.js"></script>
-<script src="js/sync.js"></script>
-<script src="js/replay.js"></script>
-<script src="js/dashboard.js"></script>
+<!-- Modules partagés (ordre important : le parseur d'abord).
+     ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
+     pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
+<script src="talishar-parser.js?v=13"></script>
+<script src="js/images.js?v=13"></script>
+<script src="js/db.js?v=13"></script>
+<script src="js/sync.js?v=13"></script>
+<script src="js/replay.js?v=13"></script>
+<script src="js/dashboard.js?v=13"></script>
 
 <script>
 // ============================================================
