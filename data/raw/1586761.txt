@@ -1,0 +1,73 @@
+=== Talishar game 1586761 — 07/07/2026 14:49:21 ===
+
+Ehecalt played Path of Same Ends
+🎯Practice Dummy was chosen as the target.
+Resolving play ability of Path of Same Ends.
+Path of Same Ends is dealing 1 arcane damage
+Ehecalt is dealing 1 arcane damage from Path of Same Ends
+Practice Dummy took 1 damage
+Practice Dummy auto-passed
+Ehecalt passed
+Practice Dummy auto-passed
+Practice Dummy is about to take 3 damage from Path of Same Ends
+Practice Dummy took 3 damage
+Combat resolved with a hit for 3 damage
+The chain link was resolved.
+Ehecalt passed
+The combat chain was closed.
+Ehecalt played Sprout Strength
+Resolving play ability of Sprout Strength.
+Ehecalt played Scar for a Scar
+🎯Practice Dummy was chosen as the target.
+Scar for a Scar gains Go Again!
+Resolving play ability of Scar for a Scar.
+Practice Dummy auto-passed
+Ehecalt passed
+Practice Dummy auto-passed
+Practice Dummy is about to take 7 damage from Scar for a Scar
+Practice Dummy took 7 damage
+Combat resolved with a hit for 7 damage
+The chain link was resolved.
+Ehecalt passed
+Ehecalt passed
+The combat chain was closed.
+Ehecalt passed
+Ehecalt passed priority. Attempting to end turn.
+═══════════════
+Practice Dummy's turn 1 has begun.
+Practice Dummy activated Wrench-tastic!
+🎯Briar was chosen as the target.
+Resolving activated ability of Wrench-tastic!.
+
+=== HAND SNAPSHOTS (ta main, captée depuis le DOM — jamais celle de l'adversaire) ===
+[OUVERTURE] Scar For A Scar, Lightning Surge, Sprout Strength
+[Practice Dummy #1] Weave Lightning, Snatch, Rush Of Power, Nimblism
+
+=== ARSENAL SNAPSHOTS (ton arsenal, capté depuis le DOM — jamais celui de l'adversaire) ===
+[OUVERTURE] (vide)
+[Practice Dummy #1] Lightning Surge
+
+=== LIFE SNAPSHOTS (vie et taille de deck : toi / adversaire) ===
+[OUVERTURE] me=20 opp=40 myDeck=36 oppDeck=36
+[Practice Dummy #1] me=20 opp=29 myDeck=32 oppDeck=36
+
+=== META ===
+schema: v1
+captured_with: TLG v1.10.2
+game_url: https://talishar.net/game/play/1586761
+captured_at: 2026-07-07T12:48:36.122Z
+format: sage
+vs_ai: oui
+me: Ehecalt
+opponent: Practice Dummy
+my_hero: Briar (briar)
+opp_hero: Dummy (DUMMY)
+my_start_life: 20
+opp_start_life: 40
+my_start_deck_size: 36
+opp_start_deck_size: 36
+my_equipment: head=Blade Beckoner Helm (blade_beckoner_helm) | chest=Blossom Of Spring (blossom_of_spring) | arms=Blade Beckoner Gauntlets (blade_beckoner_gauntlets) | legs=Blade Beckoner Boots (blade_beckoner_boots) | weaponL=Star Fall (star_fall)
+opp_equipment: head=Hyper X3 (hyper_x3) | chest=Teklo Foundry Heart (teklo_foundry_heart) | arms=Galvanic Bender (galvanic_bender) | legs=Achilles Accelerator (achilles_accelerator) | weaponL=Wrenchtastic (wrenchtastic)
+
+=== TIMESTAMPS ===
+0-2:1783428539,3-5:1783428541,6-6:1783428542,7-11:1783428544,12-12:1783428545,13-16:1783428549,17-21:1783428550,22-27:1783428552,28-30:1783428553,31-32:1783428555,33-37:1783428556
