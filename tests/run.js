@@ -99,6 +99,20 @@ eq(agg.firstSecond.second.winrate, 50, 'winrate 2e joueur');
 const ba = agg.cardPerf.find(c => c.name === 'Brutal Assault');
 assert(ba && ba.played === 3 && ba.games === 2, 'carte Brutal Assault agrégée (3 joués / 2 parties)');
 
+// Régression perf cartes : compteurs en string + doublon dans une même partie.
+// - played doit être SOMMÉ numériquement (3), pas concaténé ("0010000").
+// - games doit compter les PARTIES distinctes (2), pas les entrées de cartes (3).
+const cardBugEntries = [
+  { gameId: 'c1', record: mkRec({ iWon: true, oppHero: 'Kano', first: true, date: '2026-07-01T10:00:00Z',
+      cards: [ { name: 'Quick Succession', played: '0', pitched: '1' },
+               { name: 'Quick Succession', played: '1', pitched: '0' } ] }) },
+  { gameId: 'c2', record: mkRec({ iWon: true, oppHero: 'Kano', first: true, date: '2026-07-02T10:00:00Z',
+      cards: [ { name: 'Quick Succession', played: '2', pitched: '0' } ] }) }
+];
+const qs = Dashboard.aggregate(cardBugEntries, {}).cardPerf.find(c => c.name === 'Quick Succession');
+eq(qs && qs.played, 3, 'perf cartes : played sommé numériquement (pas de concaténation)');
+eq(qs && qs.games, 2, 'perf cartes : games = parties distinctes (pas entrées de cartes)');
+
 // Filtre héros adverse.
 eq(Dashboard.aggregate(entries, { oppHero: 'Briar' }).global.games, 2, 'filtre héros adverse');
 
