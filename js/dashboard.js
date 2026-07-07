@@ -174,6 +174,10 @@
   // ============================================================
   let _entries = [];
   let _onOpen = null, _onDelete = null;
+  // État UI de la table « performance des cartes » (persiste entre refresh).
+  let _cardSearch = '';
+  let _cardShowAll = false;
+  let _cardPerfAll = [];
 
   const $ = sel => document.querySelector(sel);
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -332,13 +336,49 @@
     });
   }
 
+  const CARDS_LIMIT = 20;   // top par défaut ; « Voir tout » lève le plafond
+
   function renderCardPerf(agg) {
     const host = $('#dashCards');
     if (!host) return;
-    const top = agg.cardPerf.filter(c => c.played || c.blocked || c.timesHit).slice(0, 20);
-    if (!top.length) { host.innerHTML = '<div class="board-empty" style="padding:10px 16px">Aucune stat de carte agrégée (nécessite les stats officielles Talishar).</div>'; return; }
-    host.innerHTML = '<table class="off-table"><tr><th>Carte</th><th>Parties</th><th>Jouée</th><th>Bloquée</th><th>Pitch</th><th>Touché</th></tr>'
-      + top.map(c => `<tr><td>${esc(c.name)}</td><td>${c.games}</td><td>${c.played || '<span class="muted">·</span>'}</td>`
+    _cardPerfAll = agg.cardPerf.filter(c => c.played || c.blocked || c.timesHit);
+    if (!_cardPerfAll.length) { host.innerHTML = '<div class="board-empty" style="padding:10px 16px">Aucune stat de carte agrégée (nécessite les stats officielles Talishar).</div>'; return; }
+    host.innerHTML =
+      '<div class="cards-controls">' +
+        `<input type="search" id="cardSearch" class="cards-search" placeholder="Rechercher une carte…" value="${esc(_cardSearch)}">` +
+        '<button type="button" id="cardToggle" class="lib-btn"></button>' +
+      '</div>' +
+      '<div id="cardTableWrap"></div>';
+    const search = $('#cardSearch'), toggle = $('#cardToggle');
+    // Taper ne re-render QUE la table (préserve le focus/curseur de la recherche).
+    if (search) search.addEventListener('input', () => { _cardSearch = search.value; renderCardTable(); });
+    if (toggle) toggle.addEventListener('click', () => { _cardShowAll = !_cardShowAll; renderCardTable(); });
+    renderCardTable();
+  }
+
+  function renderCardTable() {
+    const wrap = $('#cardTableWrap');
+    if (!wrap) return;
+    const q = norm(_cardSearch);
+    const filtered = q ? _cardPerfAll.filter(c => norm(c.name).indexOf(q) >= 0) : _cardPerfAll;
+    const rows = (!_cardShowAll && filtered.length > CARDS_LIMIT) ? filtered.slice(0, CARDS_LIMIT) : filtered;
+
+    const toggle = $('#cardToggle');
+    if (toggle) {
+      if (filtered.length > CARDS_LIMIT) {
+        toggle.style.display = '';
+        toggle.textContent = _cardShowAll ? 'Voir moins' : `Voir tout (${filtered.length})`;
+      } else {
+        toggle.style.display = 'none';
+      }
+    }
+
+    if (!rows.length) {
+      wrap.innerHTML = `<div class="board-empty" style="padding:10px 16px">Aucune carte ne correspond à « ${esc(_cardSearch)} ».</div>`;
+      return;
+    }
+    wrap.innerHTML = '<table class="off-table"><tr><th>Carte</th><th>Parties</th><th>Jouée</th><th>Bloquée</th><th>Pitch</th><th>Touché</th></tr>'
+      + rows.map(c => `<tr><td>${esc(c.name)}</td><td>${c.games}</td><td>${c.played || '<span class="muted">·</span>'}</td>`
         + `<td>${c.blocked || '<span class="muted">·</span>'}</td><td>${c.pitched || '<span class="muted">·</span>'}</td>`
         + `<td class="${c.timesHit ? 'hit' : 'muted'}">${c.timesHit || '·'}</td></tr>`).join('')
       + '</table>';
