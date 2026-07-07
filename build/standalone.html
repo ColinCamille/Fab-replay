@@ -103,6 +103,13 @@ header{
 }
 .cards-search::placeholder{color:var(--text-faint)}
 .cards-search:focus{outline:none;border-color:var(--gold-dim)}
+.cards-mini{
+  background:var(--panel);border:1px solid var(--line);color:var(--text);
+  padding:6px 8px;border-radius:8px;font-size:.8rem;font-family:'Inter',sans-serif;cursor:pointer;
+}
+.cards-count{color:var(--text-faint);font-size:.78rem;margin-left:auto;white-space:nowrap}
+.off-table th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+.off-table th.sortable:hover{color:var(--gold)}
 
 /* ---------- Scoreboard ---------- */
 #scoreboard{display:none}
@@ -2784,8 +2791,12 @@ footer a{color:var(--text-dim)}
   let _onOpen = null, _onDelete = null;
   // État UI de la table « performance des cartes » (persiste entre refresh).
   let _cardSearch = '';
-  let _cardShowAll = false;
   let _cardPerfAll = [];
+  let _cardSort = { key: 'played', dir: 'desc' };
+  let _cardMode = 'total';   // 'total' | 'pergame' | 'pct'
+  let _cardCap = 20;         // 0 = tout
+  let _colTotals = {};       // base des % (sur toutes les cartes actives)
+  let _cardTotalGames = 0;   // parties filtrées (dénominateur « par partie »)
 
   const $ = sel => document.querySelector(sel);
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -2944,23 +2955,59 @@ footer a{color:var(--text-dim)}
     });
   }
 
-  const CARDS_LIMIT = 20;   // top par défaut ; « Voir tout » lève le plafond
+  // Colonnes de la table (ordre = affichage). `count` = toujours en compte brut ;
+  // `hit` = colonne « Touché » (mise en évidence). Toutes triables.
+  const CARD_COLS = [
+    { key: 'name', label: 'Carte' },
+    { key: 'games', label: 'Parties', count: true },
+    { key: 'played', label: 'Jouée' },
+    { key: 'blocked', label: 'Bloquée' },
+    { key: 'pitched', label: 'Pitch' },
+    { key: 'timesHit', label: 'Touché', hit: true }
+  ];
+  const MUTED = '<span class="muted">·</span>';
+
+  // Formate une cellule numérique selon le mode d'affichage courant.
+  function fmtCardCell(col, c) {
+    const raw = c[col.key] || 0;
+    if (col.count || _cardMode === 'total') return raw ? String(raw) : MUTED;   // compte brut
+    if (_cardMode === 'pergame') {                                              // moyenne / partie
+      const v = _cardTotalGames ? raw / _cardTotalGames : 0;
+      return v ? String(Math.round(v * 100) / 100) : MUTED;
+    }
+    const tot = _colTotals[col.key] || 0;                                       // % de la colonne
+    const v = tot ? raw / tot * 100 : 0;
+    return v ? (Math.round(v * 10) / 10 + '%') : MUTED;
+  }
 
   function renderCardPerf(agg) {
     const host = $('#dashCards');
     if (!host) return;
     _cardPerfAll = agg.cardPerf.filter(c => c.played || c.blocked || c.timesHit);
+    _cardTotalGames = agg.global.games || 0;
+    _colTotals = { played: 0, blocked: 0, pitched: 0, timesHit: 0 };
+    _cardPerfAll.forEach(c => {
+      _colTotals.played += c.played; _colTotals.blocked += c.blocked;
+      _colTotals.pitched += c.pitched; _colTotals.timesHit += c.timesHit;
+    });
     if (!_cardPerfAll.length) { host.innerHTML = '<div class="board-empty" style="padding:10px 16px">Aucune stat de carte agrégée (nécessite les stats officielles Talishar).</div>'; return; }
     host.innerHTML =
       '<div class="cards-controls">' +
         `<input type="search" id="cardSearch" class="cards-search" placeholder="Rechercher une carte…" value="${esc(_cardSearch)}">` +
-        '<button type="button" id="cardToggle" class="lib-btn"></button>' +
+        '<select id="cardMode" class="cards-mini" title="Affichage des valeurs">' +
+          '<option value="total">Total</option><option value="pergame">Par partie</option><option value="pct">%</option></select>' +
+        '<select id="cardCap" class="cards-mini" title="Cartes affichées">' +
+          '<option value="20">Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="0">Tout</option></select>' +
+        '<span class="cards-count" id="cardCount"></span>' +
       '</div>' +
       '<div id="cardTableWrap"></div>';
-    const search = $('#cardSearch'), toggle = $('#cardToggle');
+    const search = $('#cardSearch'), modeSel = $('#cardMode'), capSel = $('#cardCap');
+    if (modeSel) modeSel.value = _cardMode;
+    if (capSel) capSel.value = String(_cardCap);
     // Taper ne re-render QUE la table (préserve le focus/curseur de la recherche).
     if (search) search.addEventListener('input', () => { _cardSearch = search.value; renderCardTable(); });
-    if (toggle) toggle.addEventListener('click', () => { _cardShowAll = !_cardShowAll; renderCardTable(); });
+    if (modeSel) modeSel.addEventListener('change', () => { _cardMode = modeSel.value; renderCardTable(); });
+    if (capSel) capSel.addEventListener('change', () => { _cardCap = Number(capSel.value) || 0; renderCardTable(); });
     renderCardTable();
   }
 
@@ -2969,27 +3016,40 @@ footer a{color:var(--text-dim)}
     if (!wrap) return;
     const q = norm(_cardSearch);
     const filtered = q ? _cardPerfAll.filter(c => norm(c.name).indexOf(q) >= 0) : _cardPerfAll;
-    const rows = (!_cardShowAll && filtered.length > CARDS_LIMIT) ? filtered.slice(0, CARDS_LIMIT) : filtered;
+    const sorted = filtered.slice().sort((a, b) => {
+      if (_cardSort.key === 'name') return String(a.name).localeCompare(String(b.name));
+      return (a[_cardSort.key] || 0) - (b[_cardSort.key] || 0);
+    });
+    if (_cardSort.dir === 'desc') sorted.reverse();
+    const shown = _cardCap > 0 ? sorted.slice(0, _cardCap) : sorted;
 
-    const toggle = $('#cardToggle');
-    if (toggle) {
-      if (filtered.length > CARDS_LIMIT) {
-        toggle.style.display = '';
-        toggle.textContent = _cardShowAll ? 'Voir moins' : `Voir tout (${filtered.length})`;
-      } else {
-        toggle.style.display = 'none';
-      }
-    }
+    const count = $('#cardCount');
+    if (count) count.textContent = filtered.length === _cardPerfAll.length
+      ? _cardPerfAll.length + ' cartes'
+      : filtered.length + ' / ' + _cardPerfAll.length + ' cartes';
 
-    if (!rows.length) {
+    if (!shown.length) {
       wrap.innerHTML = `<div class="board-empty" style="padding:10px 16px">Aucune carte ne correspond à « ${esc(_cardSearch)} ».</div>`;
       return;
     }
-    wrap.innerHTML = '<table class="off-table"><tr><th>Carte</th><th>Parties</th><th>Jouée</th><th>Bloquée</th><th>Pitch</th><th>Touché</th></tr>'
-      + rows.map(c => `<tr><td>${esc(c.name)}</td><td>${c.games}</td><td>${c.played || '<span class="muted">·</span>'}</td>`
-        + `<td>${c.blocked || '<span class="muted">·</span>'}</td><td>${c.pitched || '<span class="muted">·</span>'}</td>`
-        + `<td class="${c.timesHit ? 'hit' : 'muted'}">${c.timesHit || '·'}</td></tr>`).join('')
-      + '</table>';
+    const head = CARD_COLS.map(col => {
+      const arrow = _cardSort.key === col.key ? (_cardSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
+      return `<th class="sortable" data-key="${col.key}">${esc(col.label)}${arrow}</th>`;
+    }).join('');
+    const body = shown.map(c => '<tr>' + CARD_COLS.map(col => {
+      if (col.key === 'name') return `<td>${esc(c.name)}</td>`;
+      const cls = col.hit && c.timesHit ? ' class="hit"' : '';
+      return `<td${cls}>${fmtCardCell(col, c)}</td>`;
+    }).join('') + '</tr>').join('');
+    wrap.innerHTML = `<table class="off-table"><tr>${head}</tr>${body}</table>`;
+
+    // Tri au clic sur un en-tête (même colonne → inverse le sens).
+    wrap.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', () => {
+      const key = th.getAttribute('data-key');
+      if (_cardSort.key === key) _cardSort.dir = _cardSort.dir === 'desc' ? 'asc' : 'desc';
+      else { _cardSort.key = key; _cardSort.dir = key === 'name' ? 'asc' : 'desc'; }
+      renderCardTable();
+    }));
   }
 
   // Exports : cœur d'agrégation (Node + navigateur) + API de rendu (navigateur).
