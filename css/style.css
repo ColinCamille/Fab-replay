@@ -431,6 +431,26 @@ footer a{color:var(--text-dim)}
 .topbar .spacer{flex:1}
 .topbar .danger{color:var(--red);border-color:rgba(224,85,90,.4)}
 
+/* Onglets du tableau de bord (Statistiques / Historique) */
+.dash-tabs{display:flex;gap:8px;padding:10px 16px 4px}
+.dash-tab-btn{
+  flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
+  padding:10px 12px;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;
+  font-family:'Inter',sans-serif;
+}
+.dash-tab-btn:hover{border-color:var(--gold-dim)}
+.dash-tab-btn.active{border-color:var(--gold-dim);color:var(--gold);background:var(--panel-2)}
+.dtab-count{color:var(--text-faint);font-weight:400;font-size:.82em}
+.dash-tab{display:none}
+.dash-tab.active{display:block}
+.hist-controls{padding:14px 16px 0}
+.hist-search{
+  width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+  padding:9px 12px;border-radius:8px;font-size:.85rem;font-family:'Inter',sans-serif;
+}
+.hist-search::placeholder{color:var(--text-faint)}
+.hist-search:focus{outline:none;border-color:var(--gold-dim)}
+
 /* En-tête synthèse du dashboard */
 #dashboardView h2.section{
   font-size:.85rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;
