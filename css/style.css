@@ -96,6 +96,13 @@ header{
 }
 .cards-search::placeholder{color:var(--text-faint)}
 .cards-search:focus{outline:none;border-color:var(--gold-dim)}
+.cards-mini{
+  background:var(--panel);border:1px solid var(--line);color:var(--text);
+  padding:6px 8px;border-radius:8px;font-size:.8rem;font-family:'Inter',sans-serif;cursor:pointer;
+}
+.cards-count{color:var(--text-faint);font-size:.78rem;margin-left:auto;white-space:nowrap}
+.off-table th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+.off-table th.sortable:hover{color:var(--gold)}
 
 /* ---------- Scoreboard ---------- */
 #scoreboard{display:none}
