@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.10.2
+// @version      1.10.3
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). Export texte / téléchargement + localStorage.
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.10.2';
+  const VERSION = '1.10.3';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -453,11 +453,17 @@
   // ============================================================
   const TURN_HEADER_RE = /^(.+?)'s turn (\d+) has begun\.$/;
   function maybeSnapshotState() {
-    if (!openingSnapped && !lastTurnKey && captured.length > 0) {
-      const hand = extractMyHandCards(), arsenal = extractMyArsenal();
-      if (hand.length) {
+    // Snapshot d'OUVERTURE : tant qu'aucun tour n'a commencé, on garde la PLUS
+    // GRANDE main observée. La main met parfois un instant à être distribuée /
+    // rendue au tout début → figer la 1re main non vide capturait parfois une
+    // seule carte. En prenant le maximum avant le 1er en-tête de tour, on
+    // obtient la main d'ouverture complète.
+    if (!lastTurnKey && captured.length > 0) {
+      const hand = extractMyHandCards();
+      const prev = handSnapshots['__opening__'] || [];
+      if (hand.length > prev.length) {
         handSnapshots['__opening__'] = hand;
-        arsenalSnapshots['__opening__'] = arsenal;
+        arsenalSnapshots['__opening__'] = extractMyArsenal();
         lifeSnapshots['__opening__'] = extractLife();
         openingSnapped = true;
       }
