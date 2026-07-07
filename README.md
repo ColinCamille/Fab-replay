@@ -18,6 +18,7 @@ Hébergé sur **GitHub Pages** → l'origine stable rend la persistance
 | `js/db.js` | Couche **IndexedDB** (base `fab`, store `games`, clé = `gameId`) + export/import `.json`. |
 | `js/sync.js` | **Synchro GitHub** — dépôt = base : lecture de `data/library.json` sans token, écriture par token perso (auto-détection du dépôt). |
 | `data/library.json` | Bibliothèque **publiée** (servie en statique par Pages) — vierge dans le dépôt modèle. |
+| `data/raw/` | Logs **bruts** déposés par le grabber (`<id>.txt` + `index.json`) — ingérés/parsés par le viewer (Phase 3). |
 | `js/replay.js` | **Replay** d'une partie (extrait du standalone, comportement identique). |
 | `js/dashboard.js` | **Agrégations** multi-parties + rendu (cœur pur testable en Node). |
 | `css/style.css` | Styles (mobile-first). |
@@ -55,6 +56,22 @@ Le dépôt sert de base de données — **aucun service tiers**, données **publ
 > Recommandé : un token **fine-grained** limité à ce seul dépôt, permission
 > **Contents = Read and write**.
 
+### Envoi direct depuis le grabber (Phase 3)
+
+Le userscript peut publier la partie **sans passer par l'import manuel** :
+- **⚙** (widget) → configurer le dépôt (`owner`, `repo`) + coller le token
+  (fine-grained, **Contents = Read and write**), et choisir l'envoi manuel ou auto.
+- **☁ Dépôt** / **Alt+Shift+S** → envoi manuel ; ou **auto** à l'ouverture du
+  Game Summary de fin de partie.
+- Le `.txt` brut est déposé dans `data/raw/<id>.txt` (+ `data/raw/index.json`).
+  Le viewer l'ingère et le parse au chargement (le parseur reste **la seule
+  source de vérité**, côté viewer). L'API GitHub est appelée en **CORS** (`fetch`),
+  donc le userscript garde `@grant none`.
+
+> Le token est stocké dans le `localStorage` de talishar.net : utilise un token
+> **fine-grained limité à ce seul dépôt** (Contents R/W). Sa fuite éventuelle ne
+> permettrait d'écrire que dans ce dépôt public, rien d'autre.
+
 ### Partager l'app à d'autres joueurs — modèle « 2 dépôts »
 
 Ce dépôt est un **dépôt modèle** (Template repository) **vierge de parties**.
@@ -82,7 +99,7 @@ npm run build # régénère build/standalone.html
 
 - **Phase 1** (fait) : hébergement Pages, refactor dé-inliné, import multi + persistance, tableau de bord.
 - **Phase 2** (fait) : synchro auto entre appareils via le dépôt GitHub (lecture sans token, écriture par token), export/import `.json`, modèle « 2 dépôts » pour le partage.
-- **Phase 3** (à venir) : dépôt automatique des logs directement depuis le grabber.
+- **Phase 3** (fait, à tester en conditions réelles) : envoi direct de la partie dans le dépôt depuis le grabber (bouton `☁ Dépôt` / `Alt+Shift+S`, ou auto en fin de partie). Le `.txt` brut est déposé dans `data/raw/`, le viewer l'ingère et le parse au chargement. Voir `docs/PHASE3-grabber.md`.
 
 ---
 Données non affiliées à Legend Story Studios. Images via goagain.dev.

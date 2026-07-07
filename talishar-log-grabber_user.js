@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.9.3
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. Export texte / téléchargement + localStorage.
+// @version      1.10.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). Export texte / téléchargement + localStorage.
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
 // @run-at       document-idle
@@ -12,8 +12,8 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.9.3';
-  console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+X = réduire',
+  const VERSION = '1.10.0';
+  console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
   const POLL_MS = 500;
@@ -41,6 +41,7 @@
   let endStatsLogged = false;
   let lastTurnKey = null;
   let openingSnapped = false;
+  let autoPushedFor = null;  // gameName déjà auto-envoyé au dépôt (évite les doublons)
 
   function now() { return Math.floor(Date.now() / 1000); }
 
@@ -136,6 +137,12 @@
       if (!endStatsLogged) {
         console.log('[TLG] stats de fin de partie captées ✔ (joueurs: ' + Object.keys(found.byPlayer).join(', ') + ')');
         endStatsLogged = true;
+      }
+      // Auto-envoi au dépôt (si activé) : la fin de partie est le bon moment,
+      // une seule fois par partie.
+      if (cfg(SYNC.auto) === '1' && syncConfigured() && autoPushedFor !== gameName) {
+        autoPushedFor = gameName;
+        pushGameToRepo(true);
       }
     }
   }
@@ -466,7 +473,7 @@
       const gn = currentGameName();
       if (gn !== gameName) {
         gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false;
-        meta = {}; endStats = null; endStatsLogged = false;
+        meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null;
         loadExisting(); updateUI();
       }
       const box = findLogBox();
@@ -552,6 +559,8 @@
     };
     btnRow.appendChild(mkBtn('Copier', copyLog));
     btnRow.appendChild(mkBtn('Télécharger', downloadLog));
+    btnRow.appendChild(mkBtn('☁ Dépôt', () => pushGameToRepo(false)));
+    btnRow.appendChild(mkBtn('⚙', configureSync));
     btnRow.appendChild(mkBtn('Effacer', clearLog));
     fullBox.appendChild(btnRow);
 
@@ -701,12 +710,118 @@
     save(); updateUI();
   }
 
+  // ============================================================
+  // SYNCHRO DÉPÔT GITHUB (Phase 3)
+  // ------------------------------------------------------------
+  // Dépose le .txt brut dans data/raw/<id>.txt et met à jour le
+  // manifeste data/raw/index.json. Le viewer l'ingère et le parse
+  // au chargement (source unique du parseur = talishar-parser.js).
+  // L'API GitHub est compatible CORS → simple fetch, aucun GM_*,
+  // le script reste en contexte page (capture Redux intacte).
+  // Config stockée en localStorage (token limité à ce dépôt).
+  // ============================================================
+  const SYNC = { owner: 'tlg_sync_owner', repo: 'tlg_sync_repo', branch: 'tlg_sync_branch', token: 'tlg_sync_token', auto: 'tlg_sync_auto' };
+  function cfg(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function syncConfigured() { return !!(cfg(SYNC.owner) && cfg(SYNC.repo) && cfg(SYNC.token)); }
+
+  function utf8ToBase64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+  function base64ToUtf8(b64) {
+    const bin = atob(String(b64).replace(/\s/g, ''));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  function ghHeaders() {
+    return { 'Authorization': 'Bearer ' + cfg(SYNC.token), 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+  }
+  function ghUrl(path) { return 'https://api.github.com/repos/' + cfg(SYNC.owner) + '/' + cfg(SYNC.repo) + path; }
+
+  async function ghDefaultBranch() {
+    if (cfg(SYNC.branch)) return cfg(SYNC.branch);
+    try { const r = await fetch(ghUrl(''), { headers: ghHeaders() }); if (r.ok) { const j = await r.json(); return j.default_branch || 'main'; } } catch (e) {}
+    return 'main';
+  }
+  // Lit {sha, json} d'un fichier du dépôt ; {sha:null} si absent (404).
+  async function ghReadContents(filePath, branch) {
+    const r = await fetch(ghUrl('/contents/' + filePath + '?ref=' + encodeURIComponent(branch)), { headers: ghHeaders() });
+    if (r.status === 404) return { sha: null, json: null };
+    if (!r.ok) throw new Error('lecture ' + filePath + ': HTTP ' + r.status);
+    const j = await r.json();
+    let json = null;
+    try { json = JSON.parse(base64ToUtf8(j.content)); } catch (e) {}
+    return { sha: j.sha || null, json: json };
+  }
+  async function ghPut(filePath, contentText, message, sha, branch) {
+    const body = { message: message, content: utf8ToBase64(contentText), branch: branch };
+    if (sha) body.sha = sha;
+    return fetch(ghUrl('/contents/' + filePath), { method: 'PUT', headers: ghHeaders(), body: JSON.stringify(body) });
+  }
+
+  // Envoie la partie courante dans le dépôt. silent = pas d'ouverture auto
+  // de la config si non configuré (utilisé par l'auto-envoi).
+  async function pushGameToRepo(silent) {
+    if (!syncConfigured()) { if (!silent) configureSync(); return; }
+    if (!captured.length) { flash('Rien à envoyer'); return; }
+    const id = gameName;
+    const text = logText();
+    flash('Envoi au dépôt…');
+    try {
+      const branch = await ghDefaultBranch();
+
+      // 1. Dépose (ou écrase) le .txt brut.
+      const rawPath = 'data/raw/' + id + '.txt';
+      const existing = await ghReadContents(rawPath, branch);
+      const rawRes = await ghPut(rawPath, text, 'grabber: log ' + id, existing.sha, branch);
+      if (!rawRes.ok) throw new Error('dépôt du log: HTTP ' + rawRes.status);
+
+      // 2. Met à jour le manifeste (read-modify-write, retry sur conflit 409).
+      const idxPath = 'data/raw/index.json';
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const cur = await ghReadContents(idxPath, branch);
+        const arr = Array.isArray(cur.json) ? cur.json : ((cur.json && cur.json.raw) || []);
+        const rest = arr.filter(e => String((e && (e.gameId || e.id)) || e) !== String(id));
+        rest.push({ gameId: id, uploadedAt: new Date().toISOString(), me: meta.myName || null, opponent: meta.oppName || null, oppHero: meta.oppHero || null, format: meta.format || null });
+        const idxRes = await ghPut(idxPath, JSON.stringify(rest), 'grabber: index +' + id, cur.sha, branch);
+        if (idxRes.ok) { flash('Envoyé au dépôt ✔'); console.log('[TLG] partie ' + id + ' envoyée au dépôt'); return; }
+        if (idxRes.status === 409 && attempt < 2) continue;
+        throw new Error('mise à jour index: HTTP ' + idxRes.status);
+      }
+    } catch (e) {
+      console.error('[TLG] envoi dépôt échoué:', e);
+      flash('Envoi échoué (voir console)');
+      if (!silent) alert('Envoi au dépôt échoué : ' + e.message);
+    }
+  }
+
+  function configureSync() {
+    const owner = prompt('Propriétaire du dépôt GitHub (ex : colincamille) :', cfg(SYNC.owner));
+    if (owner == null) return;
+    const repo = prompt('Nom du dépôt (ex : fab-replay) :', cfg(SYNC.repo) || 'fab-replay');
+    if (repo == null) return;
+    const token = prompt('Token GitHub « fine-grained » (Contents = Read and write, limité à ce dépôt).\nLaisse vide pour conserver le token déjà enregistré :', '');
+    try {
+      localStorage.setItem(SYNC.owner, owner.trim());
+      localStorage.setItem(SYNC.repo, repo.trim());
+      if (token && token.trim()) localStorage.setItem(SYNC.token, token.trim());
+    } catch (e) {}
+    const auto = confirm('Envoyer AUTOMATIQUEMENT la partie au dépôt à l’ouverture du Game Summary de fin ?\n\nOK = auto · Annuler = manuel (bouton ☁ ou Alt+Shift+S)');
+    try { localStorage.setItem(SYNC.auto, auto ? '1' : '0'); } catch (e) {}
+    flash(syncConfigured() ? 'Synchro configurée ✔' : 'Config incomplète');
+    updateUI();
+  }
+
   // ============ Raccourcis clavier ============
   window.addEventListener('keydown', (e) => {
     if (!e.altKey || !e.shiftKey) return;
     const k = e.key.toLowerCase();
     if (k === 'd') { e.preventDefault(); downloadLog(); }
     else if (k === 'c') { e.preventDefault(); copyLog(); }
+    else if (k === 's') { e.preventDefault(); pushGameToRepo(false); }
     else if (k === 'x') { e.preventDefault(); setCollapsed(!collapsed); }
   }, true);
 
