@@ -313,6 +313,8 @@ header{
 #statsWrap h3{font-size:.85rem;color:var(--text-dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em}
 .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .stat-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.stat-card[title]{cursor:help}
+.off-table th[title]{cursor:help;text-decoration:underline dotted var(--text-faint)}
 .stat-card .v{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:700;color:var(--gold)}
 .stat-card .k{font-size:.68rem;color:var(--text-dim);margin-top:2px}
 .stat-card .v.violet{color:var(--violet)} .stat-card .v.green{color:var(--green)} .stat-card .v.red{color:var(--red)}
@@ -2607,13 +2609,36 @@ footer a{color:var(--text-dim)}
   }
   function cardTableHtml(cards) {
     const top = cards.filter(c => c.played || c.blocked || c.pitched || c.timesHit).sort((a, b) => b.played - a.played).slice(0, 14);
-    return '<table class="off-table"><tr><th>Carte</th><th>Jouée</th><th>Bloquée</th><th>Pitch</th><th>Touché</th></tr>'
+    return '<table class="off-table"><tr><th>Carte</th><th>Jouée</th>'
+      + '<th title="Fois où la carte a été utilisée pour bloquer (défense)">En défense</th>'
+      + '<th>Pitch</th>'
+      + '<th title="Fois où la carte a porté un coup (attaque non bloquée)">Coups portés</th></tr>'
       + top.map(c => '<tr><td>' + c.name + '</td>'
         + '<td>' + (c.played || '<span class="muted">·</span>') + '</td>'
         + '<td>' + (c.blocked || '<span class="muted">·</span>') + '</td>'
         + '<td>' + (c.pitched || '<span class="muted">·</span>') + '</td>'
         + '<td class="' + (c.timesHit ? 'hit' : 'muted') + '">' + (c.timesHit || '·') + '</td></tr>').join('')
       + '</table>';
+  }
+
+  // Dégâts RÉELS depuis la courbe de vie (fiable, contrairement au
+  // totalDamageDealt de Talishar qui sous-compte l'arcanique). Pour une
+  // partie perdue/gagnée par mort, la vie finale du perdant vaut 0 ; pour un
+  // abandon, on garde la vie réelle au moment de l'abandon.
+  function realDamage() {
+    const ls = GAME.lifeSeries || { me: [], opp: [] };
+    const meStart = (GAME.players.me && GAME.players.me.startLife) || ls.me[0] || 0;
+    const oppStart = (GAME.players.opp && GAME.players.opp.startLife) || ls.opp[0] || 0;
+    let meEnd = ls.me.length ? ls.me[ls.me.length - 1] : meStart;
+    let oppEnd = ls.opp.length ? ls.opp[ls.opp.length - 1] : oppStart;
+    if (GAME.result && !GAME.result.byConcession) {
+      if (GAME.result.iWon === true) oppEnd = 0;
+      else if (GAME.result.iWon === false) meEnd = 0;
+    }
+    return {
+      dealt: Math.max(0, oppStart - Math.max(0, oppEnd)),
+      taken: Math.max(0, meStart - Math.max(0, meEnd))
+    };
   }
 
   function renderStats() {
@@ -2625,30 +2650,42 @@ footer a{color:var(--text-dim)}
     if (extra) extra.remove();
 
     if (off) {
-      wrap.querySelector('h3').textContent = 'Stats de la partie — officielles Talishar';
+      wrap.querySelector('h3').textContent = 'Stats de la partie';
       const num = v => (v == null ? '—' : v);
-      // efficacité offensive : part de la menace réellement infligée
-      const eff = (off.totals.threatened && off.totals.dealt != null)
-        ? Math.round(off.totals.dealt / off.totals.threatened * 100) + '%' : '—';
+      const rd = realDamage();
+
+      // Efficacité hors tour létal : part de la menace réellement infligée, en
+      // excluant le dernier tour (souvent la charge létale qui gonfle la menace).
+      let eff = '—';
+      if (off.turns && off.turns.length) {
+        const maxT = Math.max.apply(null, off.turns.map(t => t.turn));
+        const dec = off.turns.filter(t => t.turn < maxT);
+        const dSum = dec.reduce((a, t) => a + (t.dealt || 0), 0);
+        const tSum = dec.reduce((a, t) => a + (t.threatened || 0), 0);
+        if (tSum) eff = Math.round(dSum / tSum * 100) + '%';
+      }
+
       const cards = [
-        [num(off.totals.dealt), 'Dégâts infligés', 'gold'],
-        [num(off.totals.threatened), 'Menace totale', 'violet'],
-        [eff, 'Efficacité (infligé/menacé)', 'gold'],
-        [num(off.totals.blocked), 'Dégâts bloqués', 'green'],
-        [num(off.averages.dealtPerTurn), 'Dégâts infligés / tour', 'gold'],
+        [rd.dealt, 'Dégâts infligés (réel)', 'gold', 'Vie perdue par l’adversaire — source fiable (courbe de vie).'],
+        [rd.taken, 'Dégâts subis (réel)', 'red', 'Ta vie perdue — source fiable (courbe de vie).'],
+        [num(off.totals.dealt), 'Dégâts infligés (combat)', '', 'Stat de combat de Talishar : ne compte pas tout (ex. dégâts arcaniques).'],
+        [num(off.totals.threatened), 'Menace totale', 'violet', 'Dégâts POTENTIELS de tes attaques, avant blocage.'],
+        [eff, 'Efficacité (hors tour létal)', 'gold', 'Part de ta menace réellement infligée, dernier tour exclu.'],
+        [num(off.totals.blocked), 'Dégâts bloqués', 'green', 'Dégâts que tu as bloqués (défense au combat).'],
+        [num(off.totals.prevented), 'Dégâts prévenus', 'green', 'Dégâts annulés par prévention (ex. arcanique), hors blocage.'],
+        [num(off.totals.lifeGained), 'Vie gagnée', 'green'],
+        [num(off.averages.dealtPerTurn), 'Combat infligé / tour', ''],
         [num(off.averages.threatenedPerTurn), 'Menace / tour', 'violet'],
         [num(off.averages.threatenedPerCard), 'Menace / carte', 'violet'],
-        [num(off.averages.value), 'Valeur / tour', ''],
-        [num(off.averages.combatPerTurn), 'Valeur combat / tour', ''],
-        [num(off.averages.resourcesPerTurn), 'Ressources / tour', ''],
-        [num(off.totals.prevented), 'Dégâts prévenus', 'green'],
-        [num(off.totals.lifeGained), 'Vie gagnée', 'green'],
+        [num(off.averages.value), 'Valeur / tour', '', 'Indice composite de Talishar (menace + défense + tempo…).'],
+        [num(off.averages.combatPerTurn), 'Valeur combat / tour', '', 'Indice de combat composite de Talishar.'],
+        [num(off.averages.resourcesPerTurn), 'Ressources / tour', '', 'Pitch moyen utilisé par tour.'],
       ];
-      grid.innerHTML = cards.map(([v, k, c]) => `<div class="stat-card"><div class="v mono ${c}">${v}</div><div class="k">${k}</div></div>`).join('');
+      grid.innerHTML = cards.map(([v, k, c, t]) => `<div class="stat-card"${t ? ` title="${escapeHtml(t)}"` : ''}><div class="v mono ${c}">${v}</div><div class="k">${k}</div></div>`).join('');
 
       const box = document.createElement('div');
       box.id = 'offExtra';
-      let html = '<div class="off-note">Chiffres calculés par Talishar (fiables), intégrés à ton log par le grabber.</div>';
+      let html = '<div class="off-note">Les chiffres <b>« (réel) »</b> viennent de la courbe de vie. Les autres sont ceux de <b>Talishar</b> — « Dégâts infligés (combat) » = combat seul, hors arcanique. Survole une carte pour le détail.</div>';
 
       // POINT 1 — déroulé tour par tour officiel
       if (off.turns && off.turns.length) {
@@ -2694,12 +2731,15 @@ footer a{color:var(--text-dim)}
         let oh = '<h3 style="margin-top:20px">Adversaire — stats officielles</h3>'
           + '<div class="off-note">Capturées grâce à « Switch Player Stats ».</div>';
         const num2 = v => (v == null ? '—' : v);
+        const rd2 = realDamage();   // du point de vue adverse : infligé = ta vie perdue
         const ocards = [
-          [num2(opp.totals.dealt), 'Dégâts infligés', 'gold'],
+          [rd2.taken, 'Dégâts infligés (réel)', 'gold', 'Ta vie perdue — source fiable (courbe de vie).'],
+          [rd2.dealt, 'Dégâts subis (réel)', 'red', 'Vie perdue par l’adversaire — source fiable (courbe de vie).'],
+          [num2(opp.totals.dealt), 'Dégâts infligés (combat)', '', 'Stat de combat de Talishar : hors arcanique.'],
           [num2(opp.totals.threatened), 'Menace totale', 'violet'],
           [num2(opp.totals.blocked), 'Dégâts bloqués', 'green'],
         ];
-        oh += '<div class="stat-grid">' + ocards.map(([v, k, c]) => `<div class="stat-card"><div class="v mono ${c}">${v}</div><div class="k">${k}</div></div>`).join('') + '</div>';
+        oh += '<div class="stat-grid">' + ocards.map(([v, k, c, t]) => `<div class="stat-card"${t ? ` title="${escapeHtml(t)}"` : ''}><div class="v mono ${c}">${v}</div><div class="k">${k}</div></div>`).join('') + '</div>';
         if (opp.cards && opp.cards.length) oh += cardTableHtml(opp.cards);
         const holder = document.createElement('div');
         holder.innerHTML = oh;
@@ -3181,9 +3221,9 @@ footer a{color:var(--text-dim)}
     { key: 'name', label: 'Carte' },
     { key: 'games', label: 'Parties', count: true },
     { key: 'played', label: 'Jouée' },
-    { key: 'blocked', label: 'Bloquée' },
+    { key: 'blocked', label: 'Défense', tip: 'Fois utilisée pour bloquer' },
     { key: 'pitched', label: 'Pitch' },
-    { key: 'timesHit', label: 'Touché', hit: true }
+    { key: 'timesHit', label: 'Coups', hit: true, tip: 'Coups portés (attaque non bloquée)' }
   ];
   const MUTED = '<span class="muted">·</span>';
 
@@ -3254,7 +3294,8 @@ footer a{color:var(--text-dim)}
     }
     const head = CARD_COLS.map(col => {
       const arrow = _cardSort.key === col.key ? (_cardSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
-      return `<th class="sortable" data-key="${col.key}">${esc(col.label)}${arrow}</th>`;
+      const tip = col.tip ? ` title="${esc(col.tip)}"` : '';
+      return `<th class="sortable" data-key="${col.key}"${tip}>${esc(col.label)}${arrow}</th>`;
     }).join('');
     const body = shown.map(c => '<tr>' + CARD_COLS.map(col => {
       if (col.key === 'name') return `<td>${esc(c.name)}</td>`;
