@@ -306,6 +306,8 @@ header{
 #statsWrap h3{font-size:.85rem;color:var(--text-dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em}
 .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .stat-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.stat-card[title]{cursor:help}
+.off-table th[title]{cursor:help;text-decoration:underline dotted var(--text-faint)}
 .stat-card .v{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:700;color:var(--gold)}
 .stat-card .k{font-size:.68rem;color:var(--text-dim);margin-top:2px}
 .stat-card .v.violet{color:var(--violet)} .stat-card .v.green{color:var(--green)} .stat-card .v.red{color:var(--red)}
