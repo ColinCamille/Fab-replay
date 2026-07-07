@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.10.0
+// @version      1.10.1
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). Export texte / téléchargement + localStorage.
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.10.0';
+  const VERSION = '1.10.1';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -765,19 +765,27 @@
   // Envoie la partie courante dans le dépôt. silent = pas d'ouverture auto
   // de la config si non configuré (utilisé par l'auto-envoi).
   async function pushGameToRepo(silent) {
-    if (!syncConfigured()) { if (!silent) configureSync(); return; }
-    if (!captured.length) { flash('Rien à envoyer'); return; }
+    if (!syncConfigured()) {
+      if (silent) return;
+      configureSync();
+      if (!syncConfigured()) { alert('Synchro non configurée : owner, repo ET token sont requis (le token n’a pas été enregistré ?).'); return; }
+      // Configuré à l'instant → on enchaîne directement sur l'envoi (pas besoin de recliquer).
+    }
+    if (!captured.length) { flash('Rien à envoyer'); if (!silent) alert('Aucune ligne de log capturée pour cette partie.'); return; }
     const id = gameName;
     const text = logText();
     flash('Envoi au dépôt…');
+    console.log('[TLG] envoi: début — partie ' + id + ', dépôt ' + cfg(SYNC.owner) + '/' + cfg(SYNC.repo));
     try {
       const branch = await ghDefaultBranch();
+      console.log('[TLG] envoi: branche = ' + branch);
 
       // 1. Dépose (ou écrase) le .txt brut.
       const rawPath = 'data/raw/' + id + '.txt';
       const existing = await ghReadContents(rawPath, branch);
       const rawRes = await ghPut(rawPath, text, 'grabber: log ' + id, existing.sha, branch);
-      if (!rawRes.ok) throw new Error('dépôt du log: HTTP ' + rawRes.status);
+      if (!rawRes.ok) throw new Error('dépôt du log: HTTP ' + rawRes.status + ' ' + (await rawRes.text().catch(() => '')).slice(0, 160));
+      console.log('[TLG] envoi: log brut déposé (HTTP ' + rawRes.status + ')');
 
       // 2. Met à jour le manifeste (read-modify-write, retry sur conflit 409).
       const idxPath = 'data/raw/index.json';
@@ -794,7 +802,8 @@
     } catch (e) {
       console.error('[TLG] envoi dépôt échoué:', e);
       flash('Envoi échoué (voir console)');
-      if (!silent) alert('Envoi au dépôt échoué : ' + e.message);
+      if (!silent) alert('Envoi au dépôt échoué : ' + e.message
+        + '\n\n(Si « Failed to fetch », c’est probablement la CSP de Talishar qui bloque l’appel — dis-le-moi, je passe le grabber en GM_xmlhttpRequest.)');
     }
   }
 
@@ -803,15 +812,20 @@
     if (owner == null) return;
     const repo = prompt('Nom du dépôt (ex : fab-replay) :', cfg(SYNC.repo) || 'fab-replay');
     if (repo == null) return;
-    const token = prompt('Token GitHub « fine-grained » (Contents = Read and write, limité à ce dépôt).\nLaisse vide pour conserver le token déjà enregistré :', '');
+    const hasTok = !!cfg(SYNC.token);
+    const token = prompt('Token GitHub « fine-grained » (Contents = Read and write, limité à ce dépôt).'
+      + (hasTok ? '\n(Un token est déjà enregistré — laisse vide pour le conserver.)' : ''), '');
+    if (token == null) return;   // Annuler = ne rien changer
     try {
       localStorage.setItem(SYNC.owner, owner.trim());
       localStorage.setItem(SYNC.repo, repo.trim());
-      if (token && token.trim()) localStorage.setItem(SYNC.token, token.trim());
+      if (token.trim()) localStorage.setItem(SYNC.token, token.trim());
     } catch (e) {}
-    const auto = confirm('Envoyer AUTOMATIQUEMENT la partie au dépôt à l’ouverture du Game Summary de fin ?\n\nOK = auto · Annuler = manuel (bouton ☁ ou Alt+Shift+S)');
+    const auto = confirm('Envoyer AUTOMATIQUEMENT la partie à l’ouverture du Game Summary de fin ?\n\nOK = auto · Annuler = manuel (bouton ☁ ou Alt+Shift+S)');
     try { localStorage.setItem(SYNC.auto, auto ? '1' : '0'); } catch (e) {}
-    flash(syncConfigured() ? 'Synchro configurée ✔' : 'Config incomplète');
+    console.log('[TLG] config synchro:', { owner: cfg(SYNC.owner), repo: cfg(SYNC.repo), tokenPresent: !!cfg(SYNC.token), auto: cfg(SYNC.auto) });
+    if (!syncConfigured()) alert('Config incomplète : le token n’a pas été enregistré. Reclique ⚙ et colle bien le token.');
+    flash(syncConfigured() ? 'Synchro configurée ✔' : 'Config incomplète (token ?)');
     updateUI();
   }
 
