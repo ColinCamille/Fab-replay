@@ -22,11 +22,15 @@
   const TOKEN_KEY = 'fabSyncToken';
   const BRANCH_KEY = 'fabSyncBranch';
   const DATA_PATH = 'data/library.json';
+  const RAW_DIR = 'data/raw/';                 // dépôts bruts du grabber (Phase 3)
+  const RAW_INDEX = 'data/raw/index.json';     // manifeste des .txt déposés
   const API = 'https://api.github.com';
 
   // URL du fichier de données, relative au site déployé (marche sur
   // github.io, domaine custom, ou serveur local — pas seulement Pages).
   function dataUrl() { return new URL(DATA_PATH, document.baseURI).href; }
+  function rawIndexUrl() { return new URL(RAW_INDEX, document.baseURI).href; }
+  function rawFileUrl(id) { return new URL(RAW_DIR + encodeURIComponent(id) + '.txt', document.baseURI).href; }
 
   // Devine {owner, repo} depuis l'URL Pages (`<owner>.github.io/<repo>/`).
   // Retourne null hors github.io → l'écriture est alors désactivée, mais
@@ -66,18 +70,70 @@
     try { return await res.json(); } catch (e) { return { games: [] }; }
   }
 
-  // Descend le nuage → n'INSÈRE que les parties absentes en local
-  // (on ne réécrit jamais une entrée locale : elle garde son `raw`).
+  // Manifeste des logs bruts déposés par le grabber (Phase 3). Tolère un
+  // tableau nu, ou une enveloppe {raw:[…]} / {games:[…]}. Absent = [].
+  async function fetchRawIndex() {
+    let res;
+    try { res = await fetch(rawIndexUrl(), { cache: 'no-store' }); }
+    catch (e) { return []; }
+    if (!res.ok) return [];
+    try {
+      const j = await res.json();
+      if (Array.isArray(j)) return j;
+      return (j && (j.raw || j.games)) || [];
+    } catch (e) { return []; }
+  }
+
+  // Descend le nuage → n'INSÈRE que les parties absentes en local.
+  // Deux sources fusionnées, dédupliquées par gameId :
+  //   1. data/library.json  : entrées déjà parsées (imports viewer).
+  //   2. data/raw/*.txt      : logs bruts déposés par le grabber, parsés ici
+  //      (chaque brut n'est récupéré qu'une fois par appareil).
   async function pull() {
+    let added = 0, sawData = false;
+
+    // --- 1. Bibliothèque parsée ---
     const lib = await fetchLibrary();
-    if (!lib) return { added: 0, offline: true };
-    const cloud = root.FabDB.normalizeImport(lib);
-    if (!cloud.length) return { added: 0 };
-    const local = await root.FabDB.getAllEntries();
-    const have = new Set(local.map(e => String(e.gameId)));
-    const missing = cloud.filter(e => !have.has(String(e.gameId)));
-    for (const e of missing) { try { await root.FabDB.putEntry(e); } catch (err) { console.error(err); } }
-    return { added: missing.length };
+    if (lib) {
+      sawData = true;
+      const cloud = root.FabDB.normalizeImport(lib);
+      if (cloud.length) {
+        const local = await root.FabDB.getAllEntries();
+        const have = new Set(local.map(e => String(e.gameId)));
+        for (const e of cloud) {
+          if (have.has(String(e.gameId))) continue;
+          try { await root.FabDB.putEntry(e); added++; } catch (err) { console.error(err); }
+        }
+      }
+    }
+
+    // --- 2. Logs bruts du grabber (nécessite le parseur chargé) ---
+    const parser = root.TalisharParser;
+    if (parser) {
+      const idx = await fetchRawIndex();
+      if (idx.length) {
+        sawData = true;
+        const local = await root.FabDB.getAllEntries();
+        const have = new Set(local.map(e => String(e.gameId)));
+        for (const it of idx) {
+          const id = String((it && (it.gameId || it.id)) || it || '');
+          if (!id || have.has(id)) continue;
+          try {
+            const r = await fetch(rawFileUrl(id), { cache: 'no-store' });
+            if (!r.ok) continue;
+            const txt = await r.text();
+            const rec = parser.parse(txt);
+            if (!rec || (!rec.myName && (!rec.playersList || rec.playersList.length < 2))) continue;
+            await root.FabDB.putGame(rec, txt);   // stocke avec le raw en local
+            have.add(String((rec.source && rec.source.gameId) || id));
+            added++;
+          } catch (err) { console.error(err); }
+        }
+      }
+    }
+
+    if (!sawData) return { added: 0, offline: true };
+    return { added: added };
   }
 
   // ---------- Écriture (avec token) ----------
