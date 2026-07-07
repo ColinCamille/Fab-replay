@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.10.1
+// @version      1.10.2
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). Export texte / téléchargement + localStorage.
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.10.1';
+  const VERSION = '1.10.2';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -42,6 +42,7 @@
   let lastTurnKey = null;
   let openingSnapped = false;
   let autoPushedFor = null;  // gameName déjà auto-envoyé au dépôt (évite les doublons)
+  let autoPushedCount = 0;   // nb de camps de stats déjà auto-envoyés (re-envoi si ↑)
 
   function now() { return Math.floor(Date.now() / 1000); }
 
@@ -138,11 +139,19 @@
         console.log('[TLG] stats de fin de partie captées ✔ (joueurs: ' + Object.keys(found.byPlayer).join(', ') + ')');
         endStatsLogged = true;
       }
-      // Auto-envoi au dépôt (si activé) : la fin de partie est le bon moment,
-      // une seule fois par partie.
-      if (cfg(SYNC.auto) === '1' && syncConfigured() && autoPushedFor !== gameName) {
-        autoPushedFor = gameName;
-        pushGameToRepo(true);
+      // Auto-envoi au dépôt (si activé). Se déclenche à l'apparition des stats
+      // (tes stats à l'ouverture du Game Summary), puis se RE-déclenche si les
+      // stats de l'adversaire arrivent ensuite (après le swap) → le dépôt reçoit
+      // la version complète, sans clic. Le garde est posé AVANT l'appel async
+      // pour éviter les doublons entre deux ticks.
+      if (cfg(SYNC.auto) === '1' && syncConfigured()) {
+        const nPlayers = Object.keys(found.byPlayer).length;
+        if (autoPushedFor !== gameName || nPlayers > autoPushedCount) {
+          autoPushedFor = gameName;
+          autoPushedCount = nPlayers;
+          console.log('[TLG] auto-envoi (' + nPlayers + ' camp(s) de stats)');
+          pushGameToRepo(true);
+        }
       }
     }
   }
@@ -473,7 +482,7 @@
       const gn = currentGameName();
       if (gn !== gameName) {
         gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false;
-        meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null;
+        meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null; autoPushedCount = 0;
         loadExisting(); updateUI();
       }
       const box = findLogBox();
