@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.10.3
+// @version      1.10.4
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). Export texte / téléchargement + localStorage.
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.10.3';
+  const VERSION = '1.10.4';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -453,19 +453,25 @@
   // ============================================================
   const TURN_HEADER_RE = /^(.+?)'s turn (\d+) has begun\.$/;
   function maybeSnapshotState() {
-    // Snapshot d'OUVERTURE : tant qu'aucun tour n'a commencé, on garde la PLUS
-    // GRANDE main observée. La main met parfois un instant à être distribuée /
-    // rendue au tout début → figer la 1re main non vide capturait parfois une
-    // seule carte. En prenant le maximum avant le 1er en-tête de tour, on
-    // obtient la main d'ouverture complète.
-    if (!lastTurnKey && captured.length > 0) {
+    // Snapshot d'OUVERTURE : on garde la PLUS GRANDE main observée AVANT toute
+    // action, puis on FIGE dès la 1re baisse de main (1er play/pitch/bloc) ou la
+    // 1re fin de tour. Sinon, quand TU commences (pas d'en-tête « ton tour 1 »
+    // avant ton tour 0), la fenêtre s'étendait jusqu'à ta re-pioche de fin de
+    // tour et capturait la main du tour 1 (cartes en trop). On fige donc avant
+    // la re-pioche. `openingSnapped` sert de verrou (réinitialisé au changement
+    // de partie).
+    if (!openingSnapped && captured.length > 0) {
+      const endedTurn = captured.some(l => /Attempting to end turn/.test(l));
       const hand = extractMyHandCards();
       const prev = handSnapshots['__opening__'] || [];
-      if (hand.length > prev.length) {
-        handSnapshots['__opening__'] = hand;
+      if (endedTurn) {
+        openingSnapped = true;                              // fin de tour → fige (avant la re-pioche)
+      } else if (hand.length > prev.length) {
+        handSnapshots['__opening__'] = hand;                // la main grandit encore (rendu / pioche d'ouverture)
         arsenalSnapshots['__opening__'] = extractMyArsenal();
         lifeSnapshots['__opening__'] = extractLife();
-        openingSnapped = true;
+      } else if (prev.length && hand.length < prev.length) {
+        openingSnapped = true;                              // 1re baisse → main d'ouverture figée
       }
     }
     let key = null;
