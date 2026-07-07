@@ -81,6 +81,20 @@ header{
 .analyze-btn:active{transform:translateY(1px)}
 .analyze-btn:disabled{opacity:.4}
 
+/* ---------- Barre bibliothèque (export / import) ---------- */
+.lib-toolbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:12px 16px 0;
+}
+.lib-btn{
+  background:var(--panel);border:1px solid var(--line);color:var(--text);
+  padding:8px 12px;border-radius:8px;font-size:.82rem;cursor:pointer;
+  font-family:'Inter',sans-serif;
+}
+.lib-btn:hover{border-color:var(--gold-dim)}
+.lib-btn:active{transform:translateY(1px)}
+.lib-hint{color:var(--text-faint);font-size:.78rem;flex:1 1 100%}
+
 /* ---------- Scoreboard ---------- */
 #scoreboard{display:none}
 .scorebar{
@@ -475,6 +489,13 @@ footer a{color:var(--text-dim)}
 
   <!-- ====================== MODE DASHBOARD ====================== -->
   <section id="dashboardView" class="view active">
+    <div class="lib-toolbar" id="libToolbar">
+      <button class="lib-btn" id="exportBtn">⤓ Exporter la bibliothèque</button>
+      <button class="lib-btn" id="importBtn">⤒ Importer une sauvegarde</button>
+      <input type="file" id="importInput" accept=".json,application/json" hidden>
+      <span class="lib-hint" id="libHint">Transfère tes parties d'un appareil à l'autre via un fichier <strong>.json</strong>.</span>
+    </div>
+
     <div class="dash-empty" id="dashEmpty" style="display:none">
       Aucune partie en mémoire pour l'instant.<br>
       Importe un ou plusieurs fichiers <strong>.txt</strong> ci-dessus pour construire ta bibliothèque.<br>
@@ -1470,7 +1491,75 @@ footer a{color:var(--text-dim)}
     return wrap(store.clear());
   }
 
-  root.FabDB = { open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll };
+  // Écrit une entrée complète telle quelle (pour la restauration d'une
+  // sauvegarde : on préserve gameId, capturedAt, savedAt… d'origine).
+  async function putEntry(entry) {
+    const store = await tx('readwrite');
+    return wrap(store.put(entry));
+  }
+
+  // ---------- Export / Import (sauvegarde multi-appareils) ----------
+  // La persistance est locale à un appareil : ces helpers permettent de
+  // transporter sa bibliothèque d'un PC vers un téléphone via un simple
+  // fichier .json (aucun serveur requis, cohérent avec « chacun ses données »).
+
+  // Enveloppe versionnée et sérialisable (pure — testable sans IndexedDB).
+  function buildExport(entries) {
+    return {
+      app: 'fab',
+      kind: 'library',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      count: (entries || []).length,
+      games: entries || []
+    };
+  }
+
+  // Normalise une sauvegarde importée en un tableau d'entrées prêtes au put.
+  // Tolère : enveloppe {games:[…]}, tableau brut, ou entrée unique. Ignore
+  // ce qui n'a pas de `record` exploitable ; reconstruit l'entrée si le
+  // gameId manque (ancien export ou objet {record, raw} nu). Pure/testable.
+  function normalizeImport(data) {
+    let games;
+    if (Array.isArray(data)) games = data;
+    else if (data && Array.isArray(data.games)) games = data.games;
+    else if (data && (data.gameId || data.record)) games = [data];
+    else games = [];
+    const out = [];
+    for (const g of games) {
+      if (!g || typeof g !== 'object') continue;
+      if (g.gameId && g.record) { out.push(g); continue; }   // entrée déjà formée
+      if (g.record) { out.push(toEntry(g.record, g.raw)); continue; } // à reconstruire
+      // sinon : pas de record → inexploitable, on ignore
+    }
+    return out;
+  }
+
+  async function exportAll() {
+    const entries = await getAllEntries();
+    return buildExport(entries);
+  }
+
+  // Fusionne (upsert par gameId) une sauvegarde dans la bibliothèque locale.
+  // opts.replace = true → vide d'abord la bibliothèque. Retourne un bilan.
+  async function importEntries(data, opts) {
+    opts = opts || {};
+    const rawList = Array.isArray(data) ? data
+      : (data && Array.isArray(data.games)) ? data.games
+      : (data ? [data] : []);
+    const entries = normalizeImport(data);
+    if (opts.replace) await clearAll();
+    let imported = 0;
+    for (const e of entries) {
+      try { await putEntry(e); imported++; } catch (err) { console.error(err); }
+    }
+    return { imported, skipped: Math.max(0, rawList.length - imported) };
+  }
+
+  root.FabDB = {
+    open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
+    putEntry, buildExport, normalizeImport, exportAll, importEntries
+  };
 })(typeof self !== 'undefined' ? self : this);
 
 </script>
@@ -2662,6 +2751,48 @@ footer a{color:var(--text-dim)}
   $('#backToDash').addEventListener('click', () => {
     if (history.replaceState) history.replaceState(null, '', location.pathname + location.search);
     showView('dashboard');
+  });
+
+  // ---------- Export / Import de la bibliothèque (sauvegarde multi-appareils) ----------
+  const exportBtn = $('#exportBtn'), importBtn = $('#importBtn'), importInput = $('#importInput'), libHint = $('#libHint');
+
+  function downloadJson(filename, obj) {
+    const blob = new Blob([JSON.stringify(obj)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  exportBtn.addEventListener('click', async () => {
+    const backup = await window.FabDB.exportAll();
+    if (!backup.count) { alert('Aucune partie à exporter pour l’instant.'); return; }
+    const stamp = (backup.exportedAt || new Date().toISOString()).slice(0, 10);
+    downloadJson('fab-library-' + stamp + '.json', backup);
+    libHint.textContent = backup.count + ' partie(s) exportée(s) → fab-library-' + stamp + '.json';
+  });
+
+  importBtn.addEventListener('click', () => importInput.click());
+
+  importInput.addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const res = await window.FabDB.importEntries(data);
+      await reloadDashboard();
+      libHint.textContent = res.imported + ' partie(s) importée(s)'
+        + (res.skipped ? ', ' + res.skipped + ' ignorée(s)' : '')
+        + ' (les doublons sont fusionnés).';
+      if (!res.imported) alert('Aucune partie valide trouvée dans ce fichier.');
+    } catch (err) {
+      console.error(err);
+      alert('Import impossible : fichier .json illisible ou invalide.');
+    } finally {
+      importInput.value = '';
+    }
   });
 
   // ---------- Identité (log ancien sans META) ----------
