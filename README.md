@@ -15,7 +15,9 @@ Hébergé sur **GitHub Pages** → l'origine stable rend la persistance
 | `index.html` | Point d'entrée : routeur **2 modes** (tableau de bord / replay). |
 | `talishar-parser.js` | **Parser** — source de vérité : `.txt` → record normalisé versionné. |
 | `js/images.js` | Résolution des visuels de cartes ([goagain.dev](https://api.goagain.dev)), avec cache. |
-| `js/db.js` | Couche **IndexedDB** (base `fab`, store `games`, clé = `gameId`). |
+| `js/db.js` | Couche **IndexedDB** (base `fab`, store `games`, clé = `gameId`) + export/import `.json`. |
+| `js/sync.js` | **Synchro GitHub** — dépôt = base : lecture de `data/library.json` sans token, écriture par token perso (auto-détection du dépôt). |
+| `data/library.json` | Bibliothèque **publiée** (servie en statique par Pages) — vierge dans le dépôt modèle. |
 | `js/replay.js` | **Replay** d'une partie (extrait du standalone, comportement identique). |
 | `js/dashboard.js` | **Agrégations** multi-parties + rendu (cœur pur testable en Node). |
 | `css/style.css` | Styles (mobile-first). |
@@ -32,10 +34,37 @@ Hébergé sur **GitHub Pages** → l'origine stable rend la persistance
    - N fichiers → alimente le **tableau de bord**.
 3. Les parties sont **mémorisées** entre les sessions (IndexedDB) ; ré-importer
    la même partie ne crée pas de doublon (upsert par `gameId`).
-4. **Sauvegarder / transférer** : le stockage est **local à un appareil**. Pour
-   retrouver ses parties sur un autre appareil (ex. PC → téléphone), utiliser
-   **Exporter la bibliothèque** (fichier `.json`) puis **Importer une sauvegarde**
-   sur l'autre appareil. L'import **fusionne** (dédup par `gameId`), sans doublon.
+4. **Sauvegarder / transférer** (hors-ligne) : le stockage IndexedDB est **local
+   à un appareil**. **Exporter la bibliothèque** (`.json`) puis **Importer une
+   sauvegarde** sur un autre appareil. L'import **fusionne** (dédup `gameId`).
+
+## Synchro automatique entre appareils (GitHub comme base)
+
+Le dépôt sert de base de données — **aucun service tiers**, données **publiques**.
+
+- **Lecture** : `data/library.json` est servi en statique par Pages → chargé
+  au démarrage **sans token**. Tes parties publiées apparaissent sur tous tes
+  appareils, et se partagent par simple **URL**.
+- **Écriture** : à l'import d'un log, la partie est poussée dans le dépôt via
+  l'API GitHub avec **ton token** (bouton *☁ Connecter la synchro*, collé une
+  fois par appareil ; stocké en local, **jamais commité**). Après l'import, Pages
+  se redéploie (quelques dizaines de secondes) et les autres appareils voient la
+  partie au prochain chargement.
+
+> Le token donne un accès **en écriture** à ton dépôt : ne le partage jamais.
+> Recommandé : un token **fine-grained** limité à ce seul dépôt, permission
+> **Contents = Read and write**.
+
+### Partager l'app à d'autres joueurs — modèle « 2 dépôts »
+
+Ce dépôt est un **dépôt modèle** (Template repository) **vierge de parties**.
+Chaque joueur crée sa **propre instance indépendante** (ses données, son URL) :
+
+1. **Use this template** → dépôt neuf sous son compte (zéro partie).
+2. **Settings → Pages** : activer Pages (choisir la branche par défaut).
+3. Ouvrir son site → **☁ Connecter la synchro** → coller son token.
+4. Importer ses logs → **son URL** (`https://<son-pseudo>.github.io/<repo>/`),
+   qu'il peut partager. L'app **auto-détecte** son dépôt : rien à configurer.
 
 ## Développement
 
@@ -52,7 +81,8 @@ npm run build # régénère build/standalone.html
 ## Feuille de route
 
 - **Phase 1** (fait) : hébergement Pages, refactor dé-inliné, import multi + persistance, tableau de bord.
-- **Phase 2** (à venir) : dépôt automatique des logs depuis le grabber (API GitHub) + synchro auto du viewer.
+- **Phase 2** (fait) : synchro auto entre appareils via le dépôt GitHub (lecture sans token, écriture par token), export/import `.json`, modèle « 2 dépôts » pour le partage.
+- **Phase 3** (à venir) : dépôt automatique des logs directement depuis le grabber.
 
 ---
 Données non affiliées à Legend Story Studios. Images via goagain.dev.

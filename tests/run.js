@@ -132,6 +132,12 @@ eq(nu[0].gameId, '908070', 'normalize: gameId dérivé du record');
 eq(DB.normalizeImport({ games: [{}, { foo: 1 }, null] }).length, 0, 'normalize: entrées sans record ignorées');
 eq(DB.normalizeImport(null).length, 0, 'normalize: entrée nulle → []');
 
+// ---------- 5. Couche de synchro (chargement + API) ----------
+console.log('Sync —');
+const Sync = require('../js/sync.js').FabSync;
+['detectRepo', 'pull', 'push', 'getToken', 'setToken', 'clearToken', 'hasToken', 'canWrite', 'verifyToken']
+  .forEach(fn => assert(typeof Sync[fn] === 'function', 'FabSync.' + fn + ' exposé'));
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);
