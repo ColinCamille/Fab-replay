@@ -187,6 +187,8 @@
   // ============================================================
   let _entries = [];
   let _onOpen = null, _onDelete = null;
+  let _histSearch = '';   // recherche de l'onglet Historique
+  let _wired = false;     // écouteurs onglets/recherche posés une seule fois
   // État UI de la table « performance des cartes » (persiste entre refresh).
   let _cardSearch = '';
   let _cardPerfAll = [];
@@ -203,8 +205,10 @@
     _entries = opts.entries || [];
     _onOpen = opts.onOpen || null;
     _onDelete = opts.onDelete || null;
+    wireDashOnce();
     buildFilters();
     refresh();
+    renderHistory();
   }
 
   function currentFilters() {
@@ -249,8 +253,24 @@
     renderMyHeroes(agg);
     renderMatchups(agg);
     renderTrend(agg);
-    renderGames(agg);
     renderCardPerf(agg);
+    // La liste des parties (onglet Historique) est indépendante des filtres de
+    // stats : elle montre TOUTES les parties, avec sa propre recherche texte.
+  }
+
+  // ---------- Onglets du tableau de bord (Statistiques / Historique) ----------
+  function setDashTab(name) {
+    document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.dtab === name));
+    const st = $('#dtab-stats'), hi = $('#dtab-history');
+    if (st) st.classList.toggle('active', name === 'stats');
+    if (hi) hi.classList.toggle('active', name === 'history');
+    window.scrollTo(0, 0);
+  }
+  function wireDashOnce() {
+    if (_wired) return; _wired = true;
+    const s = $('#histSearch');
+    if (s) s.addEventListener('input', () => { _histSearch = s.value; renderHistory(); });
+    document.querySelectorAll('.dash-tab-btn').forEach(b => b.addEventListener('click', () => setDashTab(b.dataset.dtab)));
   }
 
   function renderKpis(agg) {
@@ -346,42 +366,65 @@
     if (legend) legend.textContent = `Winrate cumulé au fil de ${n} partie${n > 1 ? 's' : ''} décidée${n > 1 ? 's' : ''} (ancien → récent).`;
   }
 
-  function renderGames(agg) {
+  // Construit une ligne de partie (cliquable → ouvre le replay).
+  function gameRowEl(e) {
+    const rec = e.record;
+    const o = outcome(rec);
+    const cls = o == null ? '' : (o ? 'win' : 'loss');
+    const verdict = o == null ? 'En cours' : (o ? 'Victoire' : 'Défaite');
+    const subBits = [];
+    if (rec.format) subBits.push(esc(rec.format));
+    const d = dateOf(rec);
+    if (d) { const dt = new Date(d); if (!isNaN(dt)) subBits.push(dt.toLocaleDateString('fr-FR')); }
+    if (rec.turns) subBits.push(rec.turns.length + ' tours');
+    if (isVsAI(rec)) subBits.push('<span class="tag-ai">🤖 IA</span>');
+    const row = document.createElement('div');
+    row.className = 'game-row';
+    row.innerHTML =
+      `<div class="gr-result ${cls}"></div>` +
+      `<div class="gr-main"><div class="gr-matchup"><b>${esc((rec.players && rec.players.me && rec.players.me.hero) || '?')}</b> vs ${esc(oppHeroOf(rec) || '?')}</div>` +
+      `<div class="gr-sub">${subBits.join(' · ')}</div></div>` +
+      `<div class="gr-verdict ${cls}">${verdict}</div>` +
+      `<button class="gr-del" title="Supprimer cette partie">✕</button>`;
+    row.querySelector('.gr-main').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
+    row.querySelector('.gr-result').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
+    row.querySelector('.gr-verdict').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
+    row.querySelector('.gr-del').addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (_onDelete) _onDelete(e.gameId);
+    });
+    return row;
+  }
+
+  // Texte indexé pour la recherche d'une partie (héros, adversaire, format…).
+  function histText(rec) {
+    return norm([
+      (rec.players && rec.players.me && rec.players.me.hero), oppHeroOf(rec),
+      rec.oppName, rec.myName, rec.format
+    ].filter(Boolean).join(' '));
+  }
+
+  // Onglet Historique : TOUTES les parties (récent → ancien) + recherche texte.
+  function renderHistory() {
     const host = $('#dashGames');
     if (!host) return;
-    // Affichage du plus récent au plus ancien.
-    const rows = agg.kept.slice().reverse();
-    if (!rows.length) { host.innerHTML = '<div class="board-empty" style="padding:12px 16px">Aucune partie pour ces filtres.</div>'; return; }
+    const all = _entries.slice().sort((a, b) =>
+      (Date.parse(dateOf(b.record) || '') || 0) - (Date.parse(dateOf(a.record) || '') || 0));
+    const q = norm(_histSearch);
+    const list = q ? all.filter(e => histText(e.record).indexOf(q) >= 0) : all;
+
+    const gc = $('#gamesCount');
+    if (gc) gc.textContent = q ? '(' + list.length + ' / ' + all.length + ')' : '(' + all.length + ')';
+    const hc = $('#histCount');
+    if (hc) hc.textContent = '(' + all.length + ')';
+
     host.innerHTML = '';
-    rows.forEach(e => {
-      const rec = e.record;
-      const o = outcome(rec);
-      const cls = o == null ? '' : (o ? 'win' : 'loss');
-      const verdict = o == null ? 'En cours' : (o ? 'Victoire' : 'Défaite');
-      const matchup = rec.matchup || ((rec.players && rec.players.me && rec.players.me.hero) + ' vs ' + (oppHeroOf(rec) || '?'));
-      const subBits = [];
-      if (rec.format) subBits.push(esc(rec.format));
-      const d = dateOf(rec);
-      if (d) { const dt = new Date(d); if (!isNaN(dt)) subBits.push(dt.toLocaleDateString('fr-FR')); }
-      if (rec.turns) subBits.push(rec.turns.length + ' tours');
-      if (isVsAI(rec)) subBits.push('<span class="tag-ai">🤖 IA</span>');
-      const row = document.createElement('div');
-      row.className = 'game-row';
-      row.innerHTML =
-        `<div class="gr-result ${cls}"></div>` +
-        `<div class="gr-main"><div class="gr-matchup"><b>${esc((rec.players && rec.players.me && rec.players.me.hero) || '?')}</b> vs ${esc(oppHeroOf(rec) || '?')}</div>` +
-        `<div class="gr-sub">${subBits.join(' · ')}</div></div>` +
-        `<div class="gr-verdict ${cls}">${verdict}</div>` +
-        `<button class="gr-del" title="Supprimer cette partie">✕</button>`;
-      row.querySelector('.gr-main').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
-      row.querySelector('.gr-result').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
-      row.querySelector('.gr-verdict').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
-      row.querySelector('.gr-del').addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        if (_onDelete) _onDelete(e.gameId);
-      });
-      host.appendChild(row);
-    });
+    if (!list.length) {
+      host.innerHTML = '<div class="board-empty" style="padding:12px 16px">' +
+        (q ? 'Aucune partie ne correspond à la recherche.' : 'Aucune partie.') + '</div>';
+      return;
+    }
+    list.forEach(e => host.appendChild(gameRowEl(e)));
   }
 
   // Colonnes de la table (ordre = affichage). `count` = toujours en compte brut ;
