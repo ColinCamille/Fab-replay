@@ -8,6 +8,99 @@ performance des cartes…).
 Hébergé sur **GitHub Pages** → l'origine stable rend la persistance
 **IndexedDB** fiable (y compris sur mobile), contrairement à un fichier `file://`.
 
+---
+
+## 🎮 Guide d'installation pas à pas (aucune compétence technique requise)
+
+De zéro à « je joue et mes parties s'enregistrent toutes seules, consultables
+partout ». Compte ~15 min la première fois. Il te faut seulement un **compte
+GitHub** (gratuit) et le navigateur **Chrome**, **Edge** ou **Firefox**.
+
+### 1) Créer un compte GitHub (si tu n'en as pas)
+Va sur **https://github.com/signup** et suis les étapes (email, mot de passe,
+pseudo). C'est gratuit.
+
+### 2) Créer ta propre copie de l'appli
+1. Ouvre la page du modèle : **https://github.com/ColinCamille/Fab-replay**
+2. Clique le bouton vert **« Use this template »** (en haut à droite) →
+   **« Create a new repository »**.
+3. Donne un nom (ex. `fab-replay`), laisse **Public**, clique
+   **« Create repository »**.
+
+✅ Tu as maintenant **ta** copie, à `github.com/<ton-pseudo>/fab-replay`.
+
+### 3) Allumer ton site (GitHub Pages)
+1. Dans **ton** dépôt : onglet **Settings** (en haut) → menu de gauche **Pages**.
+2. **Source** : choisis **« Deploy from a branch »**.
+3. **Branch** : choisis **`main`** puis **`/ (root)`**, et clique **Save**.
+4. Attends ~1 minute. Ton site est en ligne à :
+   **`https://<ton-pseudo>.github.io/fab-replay/`**
+5. Ouvre cette adresse et **mets-la en favori** (sur PC **et** téléphone) — c'est **ton** appli.
+
+> À ce stade l'appli marche déjà (tu peux importer des `.txt` à la main). Les
+> étapes suivantes **automatisent** l'envoi des parties depuis Talishar.
+
+### 4) Installer l'extension de capture (Tampermonkey)
+Un petit script (« grabber ») lit tes parties sur Talishar. Il lui faut d'abord
+un gestionnaire de scripts :
+- **PC (Chrome / Edge / Firefox)** : installe **Tampermonkey** →
+  **https://www.tampermonkey.net** (clique le bouton de ton navigateur).
+- **Android** : installe l'appli **Firefox**, puis **Tampermonkey** dedans (ou le
+  navigateur **Kiwi**).
+- *iPhone : l'automatique n'est pas garanti ; tu peux quand même utiliser l'appli
+  en important les `.txt` à la main.*
+
+### 5) Installer le script de capture (en un clic)
+1. Sur GitHub, ouvre **ton** dépôt → clique le fichier
+   **`talishar-log-grabber.user.js`**.
+2. Clique le bouton **« Raw »** (en haut à droite du fichier).
+3. Tampermonkey ouvre une page **« Installer »** → clique **Installer**. ✅
+
+### 6) Créer ta clé d'accès (token) — pour publier tes parties
+Cette clé autorise le script à écrire **dans ton dépôt, et seulement lui**.
+1. Va sur **https://github.com/settings/tokens?type=beta** →
+   **« Generate new token »**.
+2. **Token name** : ce que tu veux (ex. `fab-replay`).
+3. **Expiration** : une durée (ex. **1 an**).
+4. **Repository access** : coche **« Only select repositories »** → choisis **ton
+   dépôt** `fab-replay`.
+5. **Permissions** → **Repository permissions** → trouve **« Contents »** → mets
+   **« Read and write »**.
+6. Clique **« Generate token »**, puis **copie le token tout de suite**
+   (⚠️ il ne s'affiche **qu'une seule fois**).
+
+### 7) Connecter la capture à ton dépôt
+1. Ouvre une **partie sur Talishar** (n'importe laquelle). En bas à gauche
+   apparaît un widget **📜 Log Grabber**.
+2. Clique **⚙** et renseigne :
+   - **owner** = ton pseudo GitHub,
+   - **repo** = `fab-replay` (le nom de ton dépôt),
+   - **token** = colle celui de l'étape 6,
+   - puis choisis **« auto »** (envoi automatique en fin de partie).
+
+### 8) Jouer et consulter
+1. **Joue** normalement.
+2. À la fin, **ouvre le « Game Summary »** (le récap de fin). 💡 Clique aussi le
+   bouton pour voir **les stats de l'adversaire** → ça capte les deux camps.
+3. Ta partie **s'envoie toute seule** dans ton dépôt.
+4. Ouvre **ton site** (`https://<ton-pseudo>.github.io/fab-replay/`) sur PC ou
+   téléphone → onglet **🗒 Historique** → clique une partie pour la revivre. 🎉
+
+### En cas de pépin
+- **« Token refusé »** → ton token a expiré : régénère-en un (étape 6) et
+  recolle-le via **⚙**.
+- **Une partie ne remonte pas** → tu n'as pas ouvert le **Game Summary** à la fin
+  (c'est ce qui déclenche l'envoi). Tu peux forcer avec le bouton **☁ Dépôt** du widget.
+- **Je ne vois pas mes parties tout de suite** → attends ~1 min (le site se met à
+  jour) puis recharge la page.
+
+### Partager tes parties
+Ton site est **public** : donne simplement ton adresse
+`https://<ton-pseudo>.github.io/fab-replay/` à qui tu veux — **aucun compte requis
+pour consulter**.
+
+---
+
 ## Composants
 
 | Fichier | Rôle |
@@ -22,14 +115,14 @@ Hébergé sur **GitHub Pages** → l'origine stable rend la persistance
 | `js/replay.js` | **Replay** d'une partie (extrait du standalone, comportement identique). |
 | `js/dashboard.js` | **Agrégations** multi-parties + rendu (cœur pur testable en Node). |
 | `css/style.css` | Styles (mobile-first). |
-| `talishar-log-grabber_user.js` | **Grabber** (userscript Tampermonkey/Violentmonkey), v1.9.3. |
+| `talishar-log-grabber.user.js` | **Grabber** (userscript Tampermonkey/Violentmonkey) — installe la partie dans le dépôt. |
 | `build/standalone.html` | Version fichier-unique régénérée (usage hors-ligne). |
 
 ## Utilisation
 
-1. **Capturer** : installer le userscript `talishar-log-grabber_user.js`, jouer,
-   puis exporter le `.txt` (Alt+Shift+D) en fin de partie (ouvrir le Game Summary
-   pour capter les stats officielles).
+1. **Capturer** : installer le userscript `talishar-log-grabber.user.js`, jouer,
+   puis (auto en fin de partie, ou export `.txt` via Alt+Shift+D) — ouvrir le Game
+   Summary pour capter les stats officielles.
 2. **Importer** : ouvrir le site, déposer **un ou plusieurs** `.txt`.
    - 1 fichier → ouvre directement le **replay**.
    - N fichiers → alimente le **tableau de bord**.
@@ -99,7 +192,7 @@ npm run build # régénère build/standalone.html
 
 - **Phase 1** (fait) : hébergement Pages, refactor dé-inliné, import multi + persistance, tableau de bord.
 - **Phase 2** (fait) : synchro auto entre appareils via le dépôt GitHub (lecture sans token, écriture par token), export/import `.json`, modèle « 2 dépôts » pour le partage.
-- **Phase 3** (fait, à tester en conditions réelles) : envoi direct de la partie dans le dépôt depuis le grabber (bouton `☁ Dépôt` / `Alt+Shift+S`, ou auto en fin de partie). Le `.txt` brut est déposé dans `data/raw/`, le viewer l'ingère et le parse au chargement. Voir `docs/PHASE3-grabber.md`.
+- **Phase 3** (fait, validé en conditions réelles) : envoi direct de la partie dans le dépôt depuis le grabber (bouton `☁ Dépôt` / `Alt+Shift+S`, ou auto en fin de partie, avec re-envoi après le swap pour les stats adverses). Le `.txt` brut est déposé dans `data/raw/`, le viewer l'ingère et le parse au chargement. Voir `docs/PHASE3-grabber.md`.
 
 ---
 Données non affiliées à Legend Story Studios. Images via goagain.dev.

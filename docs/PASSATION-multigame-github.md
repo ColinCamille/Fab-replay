@@ -37,7 +37,7 @@ L'utilisateur fournira ces 3 fichiers (issus de la session précédente) :
 |---|---|
 | `fab-replay-viewer-standalone.html` | LE viewer (parser inliné). C'est ce que l'utilisateur ouvre. |
 | `talishar-parser.js` | Le parser, **source de vérité**. |
-| `talishar-log-grabber_user.js` | Le grabber (userscript), v1.9.3. |
+| `talishar-log-grabber.user.js` | Le grabber (userscript), v1.9.3. |
 
 **Convention critique** : le parser existe en **double** — la source `talishar-parser.js`
 ET une copie **inlinée** dans le HTML du viewer. Toute modif de logique parser doit être
