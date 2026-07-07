@@ -262,38 +262,42 @@
 
   const PRIMARY_TYPES = new Set(['played', 'pitched', 'activated', 'blocked', 'discarded', 'damageTaken', 'lifeGained', 'targeted', 'revealed', 'modeSelected', 'goAgain', 'undo', 'conceded', 'gameWon', 'combatResult']);
 
+  // Chaque événement → { icon, cards[], text, secondary }. L'icône remplace
+  // l'ancien badge texte, et `cards` porte TOUTES les cartes (un blocage à
+  // plusieurs cartes montre donc toutes les miniatures). Texte volontairement
+  // court (inspiration Talishar : lecture visuelle plutôt que verbeuse).
   function eventLine(e) {
     switch (e.type) {
-      case 'played': return { badge: ['JOUE', 'b-played'], html: `<b>${e.player}</b> joue <b>${e.card}</b>${e.fromArsenal ? ' <span style="color:var(--text-faint)">(arsenal)</span>' : ''}`, card: e.card };
-      case 'pitched': return { badge: ['PITCH', 'b-pitch'], html: `<b>${e.player}</b> pitch ${e.card}`, card: e.card };
-      case 'activated': return { badge: ['ACTIVE', 'b-played'], html: `<b>${e.player}</b> active ${e.card}`, card: e.card };
-      case 'blocked': return { badge: ['BLOQUE', 'b-block'], html: `<b>${e.player}</b> bloque avec ${e.cards.join(', ')}`, card: e.cards[0] };
-      case 'discarded': return { badge: ['DÉFAUSSE', 'b-warn'], html: `${e.card} défaussée`, card: e.card };
-      case 'damageTaken': return e.amount > 0 ? { badge: ['DÉGÂTS', 'b-dmg'], html: `<b>${e.player}</b> encaisse <b>${e.amount}</b> dégâts` } : { badge: ['0 DMG', 'b-info'], html: `${e.player} — 0 dégât (entièrement bloqué)`, secondary: true };
-      case 'lifeGained': return { badge: ['SOIN', 'b-life'], html: `<b>${e.player}</b> regagne ${e.amount} pv` };
-      case 'combatResult': return e.hit ? { badge: ['TOUCHÉ', 'b-dmg'], html: `Combat résolu — touché pour ${e.amount}` } : { badge: ['BLOQUÉ', 'b-block'], html: `Combat résolu — aucun dégât` };
-      case 'targeted': return { badge: ['CIBLE', 'b-info'], html: `Cible : ${e.target}`, secondary: true };
-      case 'revealed': return { badge: ['RÉVÈLE', 'b-info'], html: `<b>${e.player}</b> révèle ${e.card}`, card: e.card };
-      case 'modeSelected': return { badge: ['MODE', 'b-info'], html: `Mode de ${e.card} : ${e.mode}` };
-      case 'goAgain': return { badge: ['GO AGAIN', 'b-life'], html: `${e.card} — rejoue` };
-      case 'undo': return { badge: ['ANNULE', 'b-warn'], html: `<b>${e.player}</b> annule sa dernière action` };
-      case 'conceded': return { badge: ['ABANDON', 'b-warn'], html: `<b>${e.player}</b> abandonne` };
-      case 'gameWon': return { badge: ['VICTOIRE', 'b-win'], html: `<b>${e.player}</b> remporte la partie` };
-      case 'passed': return { badge: ['PASSE', 'b-info'], html: `${e.player} passe`, secondary: true };
-      case 'autoPassed': return { badge: ['AUTO', 'b-info'], html: `${e.player} passe (auto)`, secondary: true };
-      case 'endTurn': return { badge: ['FIN', 'b-info'], html: `${e.player} termine son tour`, secondary: true };
-      case 'resolving': return { badge: ['RÉSOUT', 'b-info'], html: e.card ? `Résolution de ${e.card}` : e.text, secondary: true };
-      case 'chainLinkResolved': return { badge: ['CHAÎNE', 'b-info'], html: `Maillon résolu`, secondary: true };
-      case 'chainClosed': return { badge: ['CHAÎNE', 'b-info'], html: `Chaîne fermée`, secondary: true };
-      case 'hitEffect': return { badge: ['EFFET', 'b-info'], html: `Effet de coup : ${e.card}`, secondary: true };
-      case 'deckManipulation': return { badge: ['DECK', 'b-info'], html: e.card ? `${e.card} renvoyée dans le deck` : `Carte renvoyée dans le deck`, secondary: true };
-      case 'deckShuffled': return { badge: ['DECK', 'b-info'], html: `Deck mélangé`, secondary: true };
-      case 'targetedSecondary': return { badge: ['CIBLE', 'b-info'], html: `${e.owner}'s ${e.card} ciblée`, secondary: true };
-      case 'damageAnnounced': return { badge: ['ANNONCE', 'b-info'], html: `${e.player} va prendre ${e.amount} dégâts`, secondary: true };
+      case 'played': return { icon: '⚔️', cards: [e.card], text: `<b>${e.player}</b> joue${e.fromArsenal ? ' <span class="ev-dim">(arsenal)</span>' : ''}` };
+      case 'pitched': return { icon: '🔷', cards: [e.card], text: `<b>${e.player}</b> pitch` };
+      case 'activated': return { icon: '✨', cards: [e.card], text: `<b>${e.player}</b> active` };
+      case 'blocked': return { icon: '🛡️', cards: e.cards, text: `<b>${e.player}</b> bloque` };
+      case 'discarded': return { icon: '🗑️', cards: [e.card], text: `<b>${e.player || ''}</b> défausse` };
+      case 'damageTaken': return e.amount > 0 ? { icon: '💥', text: `<b>${e.player}</b> encaisse <b>${e.amount}</b> dégâts` } : { icon: '🛡️', text: `${e.player} — 0 dégât (bloqué)`, secondary: true };
+      case 'lifeGained': return { icon: '❤️', text: `<b>${e.player}</b> +${e.amount} pv` };
+      case 'combatResult': return e.hit ? { icon: '💥', text: `Touché pour <b>${e.amount}</b>` } : { icon: '🛡️', text: `Aucun dégât` };
+      case 'targeted': return { icon: '🎯', text: `Cible : ${e.target}`, secondary: true };
+      case 'revealed': return { icon: '👁️', cards: [e.card], text: `<b>${e.player}</b> révèle` };
+      case 'modeSelected': return { icon: '🔀', text: `Mode de ${e.card} : ${e.mode}` };
+      case 'goAgain': return { icon: '🔁', text: `${e.card} — rejoue` };
+      case 'undo': return { icon: '↩️', text: `<b>${e.player}</b> annule` };
+      case 'conceded': return { icon: '🏳️', text: `<b>${e.player}</b> abandonne` };
+      case 'gameWon': return { icon: '🏆', text: `<b>${e.player}</b> remporte la partie` };
+      case 'passed': return { icon: '⏭️', text: `${e.player} passe`, secondary: true };
+      case 'autoPassed': return { icon: '⏭️', text: `${e.player} passe (auto)`, secondary: true };
+      case 'endTurn': return { icon: '⏹️', text: `${e.player} termine son tour`, secondary: true };
+      case 'resolving': return { icon: '⚙️', cards: e.card ? [e.card] : [], text: e.card ? `Résolution` : e.text, secondary: true };
+      case 'chainLinkResolved': return { icon: '🔗', text: `Maillon résolu`, secondary: true };
+      case 'chainClosed': return { icon: '🔗', text: `Chaîne fermée`, secondary: true };
+      case 'hitEffect': return { icon: '✴️', cards: e.card ? [e.card] : [], text: `Effet de coup`, secondary: true };
+      case 'deckManipulation': return { icon: '🎴', text: e.card ? `${e.card} renvoyée au deck` : `Carte renvoyée au deck`, secondary: true };
+      case 'deckShuffled': return { icon: '🎴', text: `Deck mélangé`, secondary: true };
+      case 'targetedSecondary': return { icon: '🎯', text: `${e.owner} — ${e.card} ciblée`, secondary: true };
+      case 'damageAnnounced': return { icon: '⚠️', text: `${e.player} va prendre ${e.amount} dégâts`, secondary: true };
       case 'arcaneDamage': case 'info': case 'diceRoll': case 'firstPlayer':
-        return { badge: ['INFO', 'b-info'], html: e.text, secondary: true };
-      case 'unknown': return { badge: ['?', 'b-warn'], html: e.text, secondary: true };
-      default: return { badge: ['·', 'b-info'], html: e.text || '', secondary: true };
+        return { icon: 'ℹ️', text: e.text, secondary: true };
+      case 'unknown': return { icon: '❓', text: e.text, secondary: true };
+      default: return { icon: '•', text: e.text || '', secondary: true };
     }
   }
 
@@ -536,24 +540,16 @@
     if (requestToken !== renderKnownCards._token) return;
 
     body.innerHTML = '';
+    // L'équipement en jeu est déjà affiché dans la bannière du match → on ne
+    // garde ici que les AUTRES cartes vues (non-équipement), pour chaque joueur.
     [[myName, 'me'], [oppName, 'opp']].forEach(([player, side]) => {
       const list = cumulative[player];
-      const equip = list.filter(c => metaFor[c.card] && metaFor[c.card].isEquipment);
       const other = list.filter(c => !(metaFor[c.card] && metaFor[c.card].isEquipment));
       const color = side === 'me' ? 'var(--gold)' : 'var(--violet)';
 
-      const equipBlock = document.createElement('div');
-      equipBlock.className = 'known-block';
-      equipBlock.innerHTML = `<div class="who" style="color:${color}">🛡 ${player}${side === 'me' ? ' (toi)' : ''} — équipement en jeu (${equip.length})</div>`;
-      const equipGrid = document.createElement('div'); equipGrid.className = 'known-grid';
-      if (!equip.length) equipGrid.innerHTML = '<div class="board-empty">Aucun équipement identifié pour l\'instant</div>';
-      else equip.forEach(({ card, action }) => equipGrid.appendChild(makeCardChip(card, action, true)));
-      equipBlock.appendChild(equipGrid);
-      body.appendChild(equipBlock);
-
       const otherBlock = document.createElement('div');
       otherBlock.className = 'known-block';
-      otherBlock.innerHTML = `<div class="who" style="color:${color}">${player}${side === 'me' ? ' (toi)' : ''} — autres cartes vues (${other.length})</div>`;
+      otherBlock.innerHTML = `<div class="who" style="color:${color}">${player}${side === 'me' ? ' (toi)' : ''} — cartes vues (${other.length})</div>`;
       const otherGrid = document.createElement('div'); otherGrid.className = 'known-grid';
       if (!other.length) otherGrid.innerHTML = '<div class="board-empty">Aucune carte vue pour l\'instant</div>';
       else other.forEach(({ card, action }) => otherGrid.appendChild(makeCardChip(card, action, true)));
@@ -567,21 +563,38 @@
     const info = eventLine(e);
     const row = document.createElement('div');
     row.className = 'event' + (info.secondary ? ' secondary' : '');
-    const thumb = document.createElement('div');
-    thumb.className = 'thumb';
-    row.appendChild(thumb);
+
+    const ic = document.createElement('div');
+    ic.className = 'ev-icon';
+    ic.textContent = info.icon || '•';
+    row.appendChild(ic);
+
+    const body = document.createElement('div');
+    body.className = 'ev-body';
     const txt = document.createElement('div');
-    txt.className = 'txt';
-    txt.innerHTML = `<span class="badge ${info.badge[1]}">${info.badge[0]}</span>${info.html}`;
-    row.appendChild(txt);
-    if (info.card) {
-      resolveCardImage(info.card).then(url => {
-        if (url) thumb.innerHTML = `<img src="${url}" alt="${info.card}" loading="lazy">`;
-        else thumb.textContent = '—';
+    txt.className = 'ev-txt';
+    txt.innerHTML = info.text || '';
+    body.appendChild(txt);
+
+    // Miniatures de TOUTES les cartes de l'événement (ex. blocage multi-cartes).
+    const cards = (info.cards || []).filter(Boolean);
+    if (cards.length) {
+      const thumbs = document.createElement('div');
+      thumbs.className = 'ev-thumbs';
+      cards.forEach(name => {
+        const th = document.createElement('div');
+        th.className = 'ev-thumb';
+        th.title = name;
+        const fb = document.createElement('span');
+        fb.className = 'ev-thumb-fb';
+        fb.textContent = name;
+        th.appendChild(fb);
+        thumbs.appendChild(th);
+        resolveCardImage(name).then(url => { if (url) th.innerHTML = `<img src="${url}" alt="${name}" loading="lazy">`; });
       });
-    } else {
-      thumb.style.display = 'none';
+      body.appendChild(thumbs);
     }
+    row.appendChild(body);
     return row;
   }
 
