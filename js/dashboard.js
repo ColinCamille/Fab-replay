@@ -452,9 +452,9 @@
     { key: 'name', label: 'Carte' },
     { key: 'games', label: 'Parties', count: true },
     { key: 'played', label: 'Jouée' },
-    { key: 'blocked', label: 'Bloquée' },
+    { key: 'blocked', label: 'Défense', tip: 'Fois utilisée pour bloquer' },
     { key: 'pitched', label: 'Pitch' },
-    { key: 'timesHit', label: 'Touché', hit: true }
+    { key: 'timesHit', label: 'Coups', hit: true, tip: 'Coups portés (attaque non bloquée)' }
   ];
   const MUTED = '<span class="muted">·</span>';
 
@@ -525,7 +525,8 @@
     }
     const head = CARD_COLS.map(col => {
       const arrow = _cardSort.key === col.key ? (_cardSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
-      return `<th class="sortable" data-key="${col.key}">${esc(col.label)}${arrow}</th>`;
+      const tip = col.tip ? ` title="${esc(col.tip)}"` : '';
+      return `<th class="sortable" data-key="${col.key}"${tip}>${esc(col.label)}${arrow}</th>`;
     }).join('');
     const body = shown.map(c => '<tr>' + CARD_COLS.map(col => {
       if (col.key === 'name') return `<td>${esc(c.name)}</td>`;
