@@ -264,25 +264,25 @@ header{
 .known-grid .card-chip{width:4.6rem}
 .known-grid .card-chip .art{width:4.6rem;height:6.45rem}
 
-/* Ligne d'événement : [icône]  [texte court]  [miniatures de cartes] */
+/* Ligne d'événement : [icône] → [cartes] → [texte], tout centré verticalement. */
 .event{
-  display:flex; gap:8px; align-items:flex-start;
-  padding:7px 0; border-bottom:1px solid rgba(255,255,255,.04);
+  display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center;
+  padding:8px 0; border-bottom:1px solid rgba(255,255,255,.04);
 }
 .event.secondary{opacity:.5}
-.ev-icon{font-size:1.05rem;line-height:1.4;width:1.6rem;text-align:center;flex-shrink:0}
-.ev-body{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:5px 10px}
-.ev-txt{font-size:.9rem;line-height:1.35}
+.ev-icon{font-size:1.2rem;width:1.7rem;text-align:center;flex-shrink:0}
+.ev-txt{font-size:.92rem;line-height:1.35}
 .ev-txt b{color:var(--text);font-weight:600}
 .ev-dim{color:var(--text-faint)}
 .ev-thumbs{display:flex;flex-wrap:wrap;gap:5px}
+/* Même taille que les cartes de la main/plateau (.card-chip .art) → cohérence. */
 .ev-thumb{
-  width:3rem;height:4.2rem;border-radius:5px;background:var(--panel-2);
+  width:5.6rem;height:7.85rem;border-radius:6px;background:var(--panel-2);
   border:1px solid var(--line); overflow:hidden; position:relative; flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
 }
 .ev-thumb img{width:100%;height:100%;object-fit:cover}
-.ev-thumb-fb{font-size:.5rem;color:var(--text-faint);text-align:center;padding:2px;line-height:1.1}
+.ev-thumb-fb{font-size:.62rem;color:var(--text-faint);text-align:center;padding:3px;line-height:1.15}
 /* Anciennes classes d'événement conservées (inutilisées) */
 .event .thumb{width:2.4rem;height:3.35rem;border-radius:4px;overflow:hidden;flex-shrink:0}
 .event .thumb img{width:100%;height:100%;object-fit:cover}

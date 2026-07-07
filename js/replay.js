@@ -564,17 +564,11 @@
     const row = document.createElement('div');
     row.className = 'event' + (info.secondary ? ' secondary' : '');
 
+    // Ordre : icône → cartes → texte (tout centré verticalement, cf. CSS).
     const ic = document.createElement('div');
     ic.className = 'ev-icon';
     ic.textContent = info.icon || '•';
     row.appendChild(ic);
-
-    const body = document.createElement('div');
-    body.className = 'ev-body';
-    const txt = document.createElement('div');
-    txt.className = 'ev-txt';
-    txt.innerHTML = info.text || '';
-    body.appendChild(txt);
 
     // Miniatures de TOUTES les cartes de l'événement (ex. blocage multi-cartes).
     const cards = (info.cards || []).filter(Boolean);
@@ -592,9 +586,13 @@
         thumbs.appendChild(th);
         resolveCardImage(name).then(url => { if (url) th.innerHTML = `<img src="${url}" alt="${name}" loading="lazy">`; });
       });
-      body.appendChild(thumbs);
+      row.appendChild(thumbs);
     }
-    row.appendChild(body);
+
+    const txt = document.createElement('div');
+    txt.className = 'ev-txt';
+    txt.innerHTML = info.text || '';
+    row.appendChild(txt);
     return row;
   }
 
