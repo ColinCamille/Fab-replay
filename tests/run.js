@@ -125,6 +125,12 @@ const aggMe = Dashboard.aggregate(meEntries, {});
 assert(aggMe.facets.myHeroes.length === 2 && aggMe.facets.myHeroes.indexOf('Dorinthea') >= 0, 'facette « mes héros » (2 valeurs)');
 eq(Dashboard.aggregate(meEntries, { myHero: 'Briar' }).global.games, 1, 'filtre « mon héros »');
 
+// Winrate par héros joué (« tes decks »).
+const briHero = aggMe.byMyHero.find(h => h.hero === 'Briar');
+const dorHero = aggMe.byMyHero.find(h => h.hero === 'Dorinthea');
+assert(briHero && briHero.games === 1 && briHero.winrate === 100, 'byMyHero Briar 1-0 (100%)');
+assert(dorHero && dorHero.games === 1 && dorHero.winrate === 0, 'byMyHero Dorinthea 0-1 (0%)');
+
 // Tendance : un point par partie décidée (4 hors IA).
 eq(agg.trend.length, 4, 'tendance : 4 points');
 
