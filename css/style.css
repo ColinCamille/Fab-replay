@@ -361,10 +361,10 @@ footer a{color:var(--text-dim)}
 .match-side{flex:1;display:flex;align-items:center;gap:10px;min-width:0}
 .match-side.opp{flex-direction:row-reverse;text-align:right}
 .hero-avatar{
-  width:54px;height:54px;border-radius:12px;flex-shrink:0;overflow:hidden;
+  width:5rem;height:6.95rem;border-radius:10px;flex-shrink:0;overflow:hidden;
   background:var(--panel-2); border:2px solid var(--line);
   display:flex;align-items:center;justify-content:center;
-  font-family:'Cinzel',serif;font-size:1.1rem;color:var(--text-faint);
+  font-family:'Cinzel',serif;font-size:1.5rem;color:var(--text-faint);
   position:relative;
 }
 .hero-avatar img{width:100%;height:100%;object-fit:cover;object-position:top center}
@@ -401,6 +401,7 @@ footer a{color:var(--text-dim)}
 }
 .eq-slot img{width:100%;height:100%;object-fit:cover}
 .eq-slot .eq-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.9rem;opacity:.5}
+.eq-slot .eq-ph.eq-name{font-size:.5rem;opacity:.85;color:var(--text-faint);text-align:center;padding:2px;line-height:1.1;font-family:'Inter',sans-serif;overflow:hidden}
 .eq-empty{font-size:.65rem;color:var(--text-faint);font-style:italic}
 
 /* ---------- Loading shimmer ---------- */
