@@ -111,6 +111,33 @@ console.log('DB —');
 eq(DB.keyFor(rec, raw), '908070', 'clé DB = gameId');
 eq(DB.keyFor({ source: {} }, 'abc'), DB.keyFor({ source: {} }, 'abc'), 'clé de repli déterministe');
 
+// ---------- 4. Export / Import (sauvegarde multi-appareils) ----------
+console.log('Export/Import —');
+const backup = DB.buildExport([{ gameId: '908070', record: rec, raw }]);
+eq(backup.kind, 'library', 'enveloppe: kind');
+eq(backup.version, 1, 'enveloppe: version');
+eq(backup.count, 1, 'enveloppe: count');
+assert(Array.isArray(backup.games) && backup.games.length === 1, 'enveloppe: games[]');
+
+// Réimport d'une enveloppe complète → entrée conservée telle quelle.
+const roundtrip = DB.normalizeImport(backup);
+eq(roundtrip.length, 1, 'normalize: enveloppe → 1 entrée');
+eq(roundtrip[0].gameId, '908070', 'normalize: gameId préservé');
+
+// Tolérance : tableau brut, entrée nue {record}, entrées invalides ignorées.
+eq(DB.normalizeImport([{ gameId: 'x', record: rec }]).length, 1, 'normalize: tableau brut');
+const nu = DB.normalizeImport({ record: rec, raw });
+eq(nu.length, 1, 'normalize: {record} nu reconstruit');
+eq(nu[0].gameId, '908070', 'normalize: gameId dérivé du record');
+eq(DB.normalizeImport({ games: [{}, { foo: 1 }, null] }).length, 0, 'normalize: entrées sans record ignorées');
+eq(DB.normalizeImport(null).length, 0, 'normalize: entrée nulle → []');
+
+// ---------- 5. Couche de synchro (chargement + API) ----------
+console.log('Sync —');
+const Sync = require('../js/sync.js').FabSync;
+['detectRepo', 'pull', 'push', 'getToken', 'setToken', 'clearToken', 'hasToken', 'canWrite', 'verifyToken']
+  .forEach(fn => assert(typeof Sync[fn] === 'function', 'FabSync.' + fn + ' exposé'));
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);
