@@ -2627,6 +2627,7 @@ footer a{color:var(--text-dim)}
   }
   function isVsAI(rec) { return rec.vsAI === true; }
   function oppHeroOf(rec) { return (rec.players && rec.players.opp && rec.players.opp.hero) || null; }
+  function myHeroOf(rec) { return (rec.players && rec.players.me && rec.players.me.hero) || null; }
   // Axe temporel : capturedAt (ISO, triable) prioritaire, sinon parsedAt.
   function dateOf(rec) {
     const src = rec.source || {};
@@ -2640,6 +2641,7 @@ footer a{color:var(--text-dim)}
   function passesFilters(rec, f) {
     if (!f.includeAI && isVsAI(rec)) return false;
     if (f.format && (rec.format || null) !== f.format) return false;
+    if (f.myHero && myHeroOf(rec) !== f.myHero) return false;
     if (f.oppHero && oppHeroOf(rec) !== f.oppHero) return false;
     if (f.period && f.period !== 'all') {
       const d = dateOf(rec);
@@ -2659,13 +2661,14 @@ footer a{color:var(--text-dim)}
   // ---------- Cœur d'agrégation ----------
   // entries : [{ gameId, record }] ; filters : { includeAI, format, oppHero, period }
   function aggregate(entries, filters) {
-    const f = Object.assign({ includeAI: false, format: null, oppHero: null, period: 'all' }, filters || {});
+    const f = Object.assign({ includeAI: false, format: null, myHero: null, oppHero: null, period: 'all' }, filters || {});
 
     // Facettes (listes de valeurs) calculées sur TOUT, pour peupler les filtres.
-    const formats = new Set(), oppHeroes = new Set();
+    const formats = new Set(), oppHeroes = new Set(), myHeroes = new Set();
     entries.forEach(e => {
       if (e.record.format) formats.add(e.record.format);
       const oh = oppHeroOf(e.record); if (oh) oppHeroes.add(oh);
+      const mh = myHeroOf(e.record); if (mh) myHeroes.add(mh);
     });
 
     const kept = entries.filter(e => passesFilters(e.record, f));
@@ -2753,7 +2756,7 @@ footer a{color:var(--text-dim)}
 
     return {
       filters: f,
-      facets: { formats: Array.from(formats).sort(), oppHeroes: Array.from(oppHeroes).sort() },
+      facets: { formats: Array.from(formats).sort(), myHeroes: Array.from(myHeroes).sort(), oppHeroes: Array.from(oppHeroes).sort() },
       kept,                                   // ordre chrono (ancien → récent)
       global: { games: kept.length, decided, wins, losses: decided - wins, winrate: winrate(wins, decided) },
       byMatchup, firstSecond, trend, cardPerf, offAverages
@@ -2781,6 +2784,7 @@ footer a{color:var(--text-dim)}
     return {
       includeAI: $('#fltAI') ? $('#fltAI').checked : false,
       format: $('#fltFormat') && $('#fltFormat').value ? $('#fltFormat').value : null,
+      myHero: $('#fltMyHero') && $('#fltMyHero').value ? $('#fltMyHero').value : null,
       oppHero: $('#fltHero') && $('#fltHero').value ? $('#fltHero').value : null,
       period: $('#fltPeriod') ? $('#fltPeriod').value : 'all'
     };
@@ -2795,8 +2799,11 @@ footer a{color:var(--text-dim)}
       .concat(agg.facets.formats.map(x => `<option value="${esc(x)}">${esc(x)}</option>`)).join('');
     const heroOpts = ['<option value="">Tous adversaires</option>']
       .concat(agg.facets.oppHeroes.map(x => `<option value="${esc(x)}">${esc(x)}</option>`)).join('');
+    const myHeroOpts = ['<option value="">Tous mes héros</option>']
+      .concat(agg.facets.myHeroes.map(x => `<option value="${esc(x)}">${esc(x)}</option>`)).join('');
     host.innerHTML =
       `<div class="field"><label>Format</label><select id="fltFormat">${fmtOpts}</select></div>` +
+      `<div class="field"><label>Mon héros</label><select id="fltMyHero">${myHeroOpts}</select></div>` +
       `<div class="field"><label>Héros adverse</label><select id="fltHero">${heroOpts}</select></div>` +
       `<div class="field"><label>Période</label><select id="fltPeriod">` +
         `<option value="all">Tout l'historique</option>` +
@@ -2804,7 +2811,7 @@ footer a{color:var(--text-dim)}
         `<option value="30d">30 derniers jours</option>` +
         `<option value="90d">90 derniers jours</option></select></div>` +
       `<div class="field chk"><input type="checkbox" id="fltAI"><label for="fltAI">Inclure les parties vs IA</label></div>`;
-    ['#fltFormat', '#fltHero', '#fltPeriod', '#fltAI'].forEach(sel => {
+    ['#fltFormat', '#fltMyHero', '#fltHero', '#fltPeriod', '#fltAI'].forEach(sel => {
       const el = $(sel); if (el) el.addEventListener('change', refresh);
     });
   }

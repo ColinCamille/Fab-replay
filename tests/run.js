@@ -56,7 +56,7 @@ function mkRec(o) {
     result: { iWon: o.iWon },
     vsAI: !!o.ai,
     format: o.format || 'blitz',
-    players: { me: { hero: 'Briar' }, opp: { hero: o.oppHero } },
+    players: { me: { hero: o.myHero || 'Briar' }, opp: { hero: o.oppHero } },
     source: { capturedAt: o.date },
     endStats: o.first == null ? null : {
       me: {
@@ -101,6 +101,15 @@ assert(ba && ba.played === 3 && ba.games === 2, 'carte Brutal Assault agrégée 
 
 // Filtre héros adverse.
 eq(Dashboard.aggregate(entries, { oppHero: 'Briar' }).global.games, 2, 'filtre héros adverse');
+
+// Filtre « mon héros » + facette myHeroes.
+const meEntries = [
+  { gameId: 'm1', record: mkRec({ iWon: true, myHero: 'Briar', oppHero: 'Kano', first: true, date: '2026-07-01T10:00:00Z' }) },
+  { gameId: 'm2', record: mkRec({ iWon: false, myHero: 'Dorinthea', oppHero: 'Kano', first: false, date: '2026-07-02T10:00:00Z' }) }
+];
+const aggMe = Dashboard.aggregate(meEntries, {});
+assert(aggMe.facets.myHeroes.length === 2 && aggMe.facets.myHeroes.indexOf('Dorinthea') >= 0, 'facette « mes héros » (2 valeurs)');
+eq(Dashboard.aggregate(meEntries, { myHero: 'Briar' }).global.games, 1, 'filtre « mon héros »');
 
 // Tendance : un point par partie décidée (4 hors IA).
 eq(agg.trend.length, 4, 'tendance : 4 points');
