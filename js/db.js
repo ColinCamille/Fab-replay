@@ -121,5 +121,73 @@
     return wrap(store.clear());
   }
 
-  root.FabDB = { open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll };
+  // Écrit une entrée complète telle quelle (pour la restauration d'une
+  // sauvegarde : on préserve gameId, capturedAt, savedAt… d'origine).
+  async function putEntry(entry) {
+    const store = await tx('readwrite');
+    return wrap(store.put(entry));
+  }
+
+  // ---------- Export / Import (sauvegarde multi-appareils) ----------
+  // La persistance est locale à un appareil : ces helpers permettent de
+  // transporter sa bibliothèque d'un PC vers un téléphone via un simple
+  // fichier .json (aucun serveur requis, cohérent avec « chacun ses données »).
+
+  // Enveloppe versionnée et sérialisable (pure — testable sans IndexedDB).
+  function buildExport(entries) {
+    return {
+      app: 'fab',
+      kind: 'library',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      count: (entries || []).length,
+      games: entries || []
+    };
+  }
+
+  // Normalise une sauvegarde importée en un tableau d'entrées prêtes au put.
+  // Tolère : enveloppe {games:[…]}, tableau brut, ou entrée unique. Ignore
+  // ce qui n'a pas de `record` exploitable ; reconstruit l'entrée si le
+  // gameId manque (ancien export ou objet {record, raw} nu). Pure/testable.
+  function normalizeImport(data) {
+    let games;
+    if (Array.isArray(data)) games = data;
+    else if (data && Array.isArray(data.games)) games = data.games;
+    else if (data && (data.gameId || data.record)) games = [data];
+    else games = [];
+    const out = [];
+    for (const g of games) {
+      if (!g || typeof g !== 'object') continue;
+      if (g.gameId && g.record) { out.push(g); continue; }   // entrée déjà formée
+      if (g.record) { out.push(toEntry(g.record, g.raw)); continue; } // à reconstruire
+      // sinon : pas de record → inexploitable, on ignore
+    }
+    return out;
+  }
+
+  async function exportAll() {
+    const entries = await getAllEntries();
+    return buildExport(entries);
+  }
+
+  // Fusionne (upsert par gameId) une sauvegarde dans la bibliothèque locale.
+  // opts.replace = true → vide d'abord la bibliothèque. Retourne un bilan.
+  async function importEntries(data, opts) {
+    opts = opts || {};
+    const rawList = Array.isArray(data) ? data
+      : (data && Array.isArray(data.games)) ? data.games
+      : (data ? [data] : []);
+    const entries = normalizeImport(data);
+    if (opts.replace) await clearAll();
+    let imported = 0;
+    for (const e of entries) {
+      try { await putEntry(e); imported++; } catch (err) { console.error(err); }
+    }
+    return { imported, skipped: Math.max(0, rawList.length - imported) };
+  }
+
+  root.FabDB = {
+    open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
+    putEntry, buildExport, normalizeImport, exportAll, importEntries
+  };
 })(typeof self !== 'undefined' ? self : this);

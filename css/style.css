@@ -74,6 +74,20 @@ header{
 .analyze-btn:active{transform:translateY(1px)}
 .analyze-btn:disabled{opacity:.4}
 
+/* ---------- Barre bibliothèque (export / import) ---------- */
+.lib-toolbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:12px 16px 0;
+}
+.lib-btn{
+  background:var(--panel);border:1px solid var(--line);color:var(--text);
+  padding:8px 12px;border-radius:8px;font-size:.82rem;cursor:pointer;
+  font-family:'Inter',sans-serif;
+}
+.lib-btn:hover{border-color:var(--gold-dim)}
+.lib-btn:active{transform:translateY(1px)}
+.lib-hint{color:var(--text-faint);font-size:.78rem;flex:1 1 100%}
+
 /* ---------- Scoreboard ---------- */
 #scoreboard{display:none}
 .scorebar{
