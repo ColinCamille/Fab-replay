@@ -144,10 +144,12 @@
         });
         turns.sort((a, b) => a.turn - b.turn);
       }
+      // Talishar renvoie certains compteurs en string ("0","1"…) → on coerce en
+      // nombre (comme pour turnResults), sinon les agrégations concatènent.
       const cards = (d.cardResults || []).map(c => ({
         name: c.cardName || c.cardId || c.name || '?',
-        played: c.played || 0, blocked: c.blocked || 0, pitched: c.pitched || 0,
-        discarded: c.discarded || 0, timesHit: c.hits || c.timesHit || 0
+        played: +c.played || 0, blocked: +c.blocked || 0, pitched: +c.pitched || 0,
+        discarded: +c.discarded || 0, timesHit: +(c.hits != null ? c.hits : c.timesHit) || 0
       }));
       return {
         won: won, firstPlayer: firstPlayer,
