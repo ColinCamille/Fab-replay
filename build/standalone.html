@@ -1910,6 +1910,15 @@ footer a{color:var(--text-dim)}
     $('#detailToggle').addEventListener('change', e => { showTechnical = e.target.checked; renderTurn(); });
   }
 
+  // Total de PV attendu selon le format (repli si les PV de départ ne sont pas
+  // captés) : 20 en limité/blitz, 40 en construit. Défaut prudent : 40.
+  function scaleForFormat(fmt) {
+    const f = String(fmt || '').toLowerCase();
+    if (/blitz|commoner|draft|sealed|clash|limit/.test(f)) return 20;
+    if (/cc|classic|constructed|living|legend|\bll\b/.test(f)) return 40;
+    return 40;
+  }
+
   // ============================================================
   // POINT D'ENTRÉE
   // ============================================================
@@ -1926,9 +1935,13 @@ footer a{color:var(--text-dim)}
     myEquipNamesNorm = new Set(
       Object.values((GAME.players.me && GAME.players.me.equipment) || {}).map(e => e && e.name).filter(Boolean).map(root.TalisharParser.normName)
     );
-    maxLife = Math.max(40,
-      GAME.players.me.startLife || 0, GAME.players.opp.startLife || 0,
-      ...GAME.lifeSeries.me, ...GAME.lifeSeries.opp);
+    // Échelle de la courbe selon le total de PV de la partie : 20 en limité /
+    // blitz, 40 en construit. On se base sur les PV de DÉPART captés (source
+    // fiable, quel que soit le nom de format), avec repli sur le format si non
+    // capté, et on étend si la vie dépasse le départ (soins au-dessus du max).
+    const startMax = Math.max(GAME.players.me.startLife || 0, GAME.players.opp.startLife || 0);
+    const baseLife = startMax > 0 ? (startMax > 20 ? 40 : 20) : scaleForFormat(GAME.format);
+    maxLife = Math.max(baseLife, 0, ...GAME.lifeSeries.me, ...GAME.lifeSeries.opp);
     currentTurnIndex = 0;
     showTechnical = $('#detailToggle') ? $('#detailToggle').checked : false;
     render();
