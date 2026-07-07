@@ -38,7 +38,9 @@ Pourquoi ce découpage :
 - Config via bouton **⚙** (`owner`, `repo`, token, mode auto/manuel), stockée en
   `localStorage`.
 - Envoi via bouton **☁ Dépôt**, raccourci **Alt+Shift+S**, ou **auto** quand les
-  stats de fin de partie apparaissent (Game Summary ouvert), une fois par partie.
+  stats de fin de partie apparaissent (Game Summary ouvert). L'auto se
+  **re-déclenche** si les stats de l'adversaire arrivent ensuite (après le swap)
+  → le dépôt reçoit la version complète, sans clic (v1.10.2).
 - `pushGameToRepo()` : `PUT data/raw/<id>.txt` puis met à jour
   `data/raw/index.json` (read-modify-write + retry sur `409`).
 
