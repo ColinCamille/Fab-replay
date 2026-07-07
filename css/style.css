@@ -88,6 +88,15 @@ header{
 .lib-btn:active{transform:translateY(1px)}
 .lib-hint{color:var(--text-faint);font-size:.78rem;flex:1 1 100%}
 
+/* ---------- Contrôles « performance des cartes » (recherche + voir tout) ---------- */
+.cards-controls{display:flex;gap:8px;align-items:center;padding-bottom:10px;flex-wrap:wrap}
+.cards-search{
+  flex:1 1 180px;min-width:140px;background:var(--panel);border:1px solid var(--line);
+  color:var(--text);padding:7px 10px;border-radius:8px;font-size:.82rem;font-family:'Inter',sans-serif;
+}
+.cards-search::placeholder{color:var(--text-faint)}
+.cards-search:focus{outline:none;border-color:var(--gold-dim)}
+
 /* ---------- Scoreboard ---------- */
 #scoreboard{display:none}
 .scorebar{
