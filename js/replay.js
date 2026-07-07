@@ -715,6 +715,100 @@
       + '</table>';
   }
 
+  // Courbe lissée (Catmull-Rom → Bézier) passant par les points.
+  let _lcSeq = 0;
+  function lcSmooth(pts) {
+    if (!pts.length) return '';
+    if (pts.length === 1) return 'M' + pts[0].x.toFixed(1) + ',' + pts[0].y.toFixed(1);
+    let d = 'M' + pts[0].x.toFixed(1) + ',' + pts[0].y.toFixed(1);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+      const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ' C' + c1x.toFixed(1) + ',' + c1y.toFixed(1) + ' ' + c2x.toFixed(1) + ',' + c2y.toFixed(1) + ' ' + p2.x.toFixed(1) + ',' + p2.y.toFixed(1);
+    }
+    return d;
+  }
+
+  // Graphe en courbe(s) lissée(s) avec infobulle au survol/tap (façon Talishar).
+  // cfg = { title, turns:[n], series:[{label,color,values:[n]}], showAvg }
+  function buildLineChart(cfg) {
+    const W = 400, H = 172, padL = 28, padR = 12, padTop = 16, padBot = 22;
+    const plotW = W - padL - padR, plotH = H - padTop - padBot, n = cfg.turns.length;
+    let max = 0;
+    cfg.series.forEach(s => s.values.forEach(v => { if (v > max) max = v; }));
+    max = Math.max(6, Math.ceil(max / 6) * 6);
+    const X = i => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+    const Y = v => padTop + plotH - (Math.max(0, v) / max) * plotH;
+    const uid = 'lc' + (++_lcSeq);
+
+    let grid = '';
+    [0, max / 2, max].forEach(v => {
+      grid += '<line x1="' + padL + '" y1="' + Y(v).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + Y(v).toFixed(1) + '" stroke="#262c3d" stroke-dasharray="2,4"/>'
+        + '<text x="' + (padL - 4) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end" font-family="\'JetBrains Mono\',monospace" font-size="8" fill="#565b6e">' + Math.round(v) + '</text>';
+    });
+    let xlabels = '';
+    cfg.turns.forEach((t, i) => { xlabels += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-family="\'JetBrains Mono\',monospace" font-size="8" fill="#565b6e">' + t + '</text>'; });
+
+    let defs = '', areas = '', lines = '', dots = '', his = '';
+    cfg.series.forEach((s, si) => {
+      const pts = s.values.map((v, i) => ({ x: X(i), y: Y(v) }));
+      const line = lcSmooth(pts);
+      const area = line + ' L' + X(n - 1).toFixed(1) + ',' + Y(0).toFixed(1) + ' L' + X(0).toFixed(1) + ',' + Y(0).toFixed(1) + ' Z';
+      defs += '<linearGradient id="' + uid + 'g' + si + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="' + s.color + '" stop-opacity=".28"/><stop offset="100%" stop-color="' + s.color + '" stop-opacity="0"/></linearGradient>';
+      areas += '<path d="' + area + '" fill="url(#' + uid + 'g' + si + ')"/>';
+      lines += '<path d="' + line + '" fill="none" stroke="' + s.color + '" stroke-width="2.2"/>';
+      dots += pts.map(p => '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="1.8" fill="' + s.color + '"/>').join('');
+      his += '<circle class="lc-hi" cx="0" cy="0" r="3.4" fill="' + s.color + '" stroke="#e9e6da" stroke-width="1" style="opacity:0"/>';
+    });
+
+    let avgEl = '';
+    if (cfg.showAvg) {
+      const vals = cfg.series[0].values;
+      const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      avgEl = '<line x1="' + padL + '" y1="' + Y(avg).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + Y(avg).toFixed(1) + '" stroke="rgba(233,230,218,.35)" stroke-dasharray="4,4"/>'
+        + '<text x="' + (padL + 3) + '" y="' + (Y(avg) - 3).toFixed(1) + '" font-family="\'JetBrains Mono\',monospace" font-size="8" fill="#8b8fa3">moy ' + Math.round(avg) + '</text>';
+    }
+
+    const legend = cfg.series.length > 1
+      ? '<div class="off-legend">' + cfg.series.map(s => '<span><span class="dot" style="background:' + s.color + '"></span>' + s.label + '</span>').join('') + '</div>' : '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'off-chart lc';
+    wrap.innerHTML = '<h4>' + escapeHtml(cfg.title) + '</h4><div class="lc-holder"><svg viewBox="0 0 ' + W + ' ' + H + '"><defs>' + defs + '</defs>'
+      + grid + avgEl + areas + lines + dots
+      + '<line class="lc-guide" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) + '" style="opacity:0"/>' + his + xlabels
+      + '</svg><div class="lc-tip"></div></div>' + legend;
+
+    const svg = wrap.querySelector('svg'), tip = wrap.querySelector('.lc-tip');
+    const guide = wrap.querySelector('.lc-guide'), hi = [].slice.call(wrap.querySelectorAll('.lc-hi'));
+    const show = idx => {
+      const gx = X(idx);
+      guide.setAttribute('x1', gx.toFixed(1)); guide.setAttribute('x2', gx.toFixed(1)); guide.style.opacity = 1;
+      let topY = plotH + padTop;
+      cfg.series.forEach((s, si) => { const y = Y(s.values[idx]); hi[si].setAttribute('cx', gx.toFixed(1)); hi[si].setAttribute('cy', y.toFixed(1)); hi[si].style.opacity = 1; if (y < topY) topY = y; });
+      tip.innerHTML = '<div class="lc-turn">Tour ' + cfg.turns[idx] + '</div>' + cfg.series.map(s => '<div class="lc-row" style="color:' + s.color + '">' + escapeHtml(s.label) + ' : <b>' + s.values[idx] + '</b></div>').join('');
+      const r = svg.getBoundingClientRect();
+      tip.style.left = (gx / W * r.width) + 'px';
+      tip.style.top = (topY / H * r.height) + 'px';
+      tip.classList.toggle('flip', gx > W * 0.62);
+      tip.style.opacity = 1;
+    };
+    const hide = () => { tip.style.opacity = 0; guide.style.opacity = 0; hi.forEach(h => h.style.opacity = 0); };
+    const move = e => {
+      const r = svg.getBoundingClientRect();
+      if (!r.width) return;
+      const cx = ((e.touches ? e.touches[0].clientX : e.clientX) - r.left) / r.width * W;
+      let idx = Math.round((cx - padL) / plotW * (n - 1));
+      show(Math.max(0, Math.min(n - 1, idx)));
+    };
+    const holder = wrap.querySelector('.lc-holder');
+    holder.addEventListener('pointermove', move);
+    holder.addEventListener('pointerdown', move);
+    holder.addEventListener('pointerleave', hide);
+    return wrap;
+  }
+
   // Dégâts RÉELS depuis la courbe de vie (fiable, contrairement au
   // totalDamageDealt de Talishar qui sous-compte l'arcanique). Pour une
   // partie perdue/gagnée par mort, la vie finale du perdant vaut 0 ; pour un
@@ -781,19 +875,9 @@
       box.id = 'offExtra';
       let html = '<div class="off-note">Les chiffres <b>« (réel) »</b> viennent de la courbe de vie. Les autres sont ceux de <b>Talishar</b> — « Dégâts infligés (combat) » = combat seul, hors arcanique. Survole une carte pour le détail.</div>';
 
-      // POINT 1 — déroulé tour par tour officiel
-      if (off.turns && off.turns.length) {
-        html += '<div class="off-chart"><h4>Déroulé tour par tour</h4>'
-          + svgGroupedBars(off.turns, [
-            { key: 'threatened', color: '#8b6bff' },
-            { key: 'dealt', color: '#c9a227' },
-            { key: 'taken', color: '#e0555a' }
-          ])
-          + '<div class="off-legend">'
-          + '<span><span class="dot" style="background:#8b6bff"></span>Menacé</span>'
-          + '<span><span class="dot" style="background:#c9a227"></span>Infligé</span>'
-          + '<span><span class="dot" style="background:#e0555a"></span>Subi</span></div></div>';
-      }
+      // Graphes par tour façon Talishar (montés ensuite car interactifs) :
+      // « Valeur par tour » et « Échange de pression » (Menacé vs Subi).
+      html += '<div id="offCharts"></div>';
 
       // POINT 3 — tempo : durée de chaque tour (depuis les timestamps du log)
       const tempo = svgTempoBars(GAME.turns);
@@ -819,6 +903,23 @@
       if (off.cards && off.cards.length) html += '<h4 style="font-family:\'Cinzel\',serif;font-size:.8rem;color:var(--text-dim);margin:16px 0 4px;font-weight:600">Tes cartes</h4>' + cardTableHtml(off.cards);
       box.innerHTML = html;
       wrap.appendChild(box);
+
+      // Montage des graphes interactifs par tour (façon Talishar).
+      const mount = box.querySelector('#offCharts');
+      if (mount && off.turns && off.turns.length) {
+        const turns = off.turns.map(t => t.turn);
+        mount.appendChild(buildLineChart({
+          title: 'Valeur par tour', turns, showAvg: true,
+          series: [{ label: 'Valeur', color: '#c9a227', values: off.turns.map(t => (t.threatened || 0) + (t.blocked || 0) + (t.prevented || 0) + (t.lifeGained || 0)) }]
+        }));
+        mount.appendChild(buildLineChart({
+          title: 'Échange de pression', turns, showAvg: false,
+          series: [
+            { label: 'Menacé', color: '#c9a227', values: off.turns.map(t => t.threatened || 0) },
+            { label: 'Subi', color: '#e0555a', values: off.turns.map(t => t.taken || 0) }
+          ]
+        }));
+      }
 
       // Bloc adverse détaillé (grille + cartes) si dispo
       if (opp) {
