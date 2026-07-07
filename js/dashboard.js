@@ -207,6 +207,7 @@
     _onDelete = opts.onDelete || null;
     wireDashOnce();
     buildFilters();
+    buildHistFilters();
     refresh();
     renderHistory();
   }
@@ -221,30 +222,45 @@
     };
   }
 
-  function buildFilters() {
-    const host = $('#dashFilters');
-    if (!host) return;
-    // Facettes calculées sur l'ensemble (indépendamment des filtres courants).
+  // HTML des champs de filtre (réutilisé par les onglets Statistiques ET
+  // Historique) — `ids` porte les identifiants distincts de chaque instance.
+  function filtersHtml(ids) {
     const agg = aggregate(_entries, { includeAI: true, period: 'all' });
-    const fmtOpts = ['<option value="">Tous formats</option>']
-      .concat(agg.facets.formats.map(x => `<option value="${esc(x)}">${esc(x)}</option>`)).join('');
-    const heroOpts = ['<option value="">Tous adversaires</option>']
-      .concat(agg.facets.oppHeroes.map(x => `<option value="${esc(x)}">${esc(x)}</option>`)).join('');
-    const myHeroOpts = ['<option value="">Tous mes héros</option>']
-      .concat(agg.facets.myHeroes.map(x => `<option value="${esc(x)}">${esc(x)}</option>`)).join('');
-    host.innerHTML =
-      `<div class="field"><label>Format</label><select id="fltFormat">${fmtOpts}</select></div>` +
-      `<div class="field"><label>Mon héros</label><select id="fltMyHero">${myHeroOpts}</select></div>` +
-      `<div class="field"><label>Héros adverse</label><select id="fltHero">${heroOpts}</select></div>` +
-      `<div class="field"><label>Période</label><select id="fltPeriod">` +
+    const opt = (arr, first) => ['<option value="">' + first + '</option>']
+      .concat(arr.map(x => `<option value="${esc(x)}">${esc(x)}</option>`)).join('');
+    return `<div class="field"><label>Format</label><select id="${ids.format}">${opt(agg.facets.formats, 'Tous formats')}</select></div>` +
+      `<div class="field"><label>Mon héros</label><select id="${ids.myHero}">${opt(agg.facets.myHeroes, 'Tous mes héros')}</select></div>` +
+      `<div class="field"><label>Héros adverse</label><select id="${ids.oppHero}">${opt(agg.facets.oppHeroes, 'Tous adversaires')}</select></div>` +
+      `<div class="field"><label>Période</label><select id="${ids.period}">` +
         `<option value="all">Tout l'historique</option>` +
         `<option value="7d">7 derniers jours</option>` +
         `<option value="30d">30 derniers jours</option>` +
         `<option value="90d">90 derniers jours</option></select></div>` +
-      `<div class="field chk"><input type="checkbox" id="fltAI"><label for="fltAI">Inclure les parties vs IA</label></div>`;
-    ['#fltFormat', '#fltMyHero', '#fltHero', '#fltPeriod', '#fltAI'].forEach(sel => {
-      const el = $(sel); if (el) el.addEventListener('change', refresh);
-    });
+      `<div class="field chk"><input type="checkbox" id="${ids.ai}"><label for="${ids.ai}">Inclure les parties vs IA</label></div>`;
+  }
+  function readFilters(ids) {
+    return {
+      includeAI: $('#' + ids.ai) ? $('#' + ids.ai).checked : false,
+      format: $('#' + ids.format) && $('#' + ids.format).value ? $('#' + ids.format).value : null,
+      myHero: $('#' + ids.myHero) && $('#' + ids.myHero).value ? $('#' + ids.myHero).value : null,
+      oppHero: $('#' + ids.oppHero) && $('#' + ids.oppHero).value ? $('#' + ids.oppHero).value : null,
+      period: $('#' + ids.period) ? $('#' + ids.period).value : 'all'
+    };
+  }
+  const STAT_IDS = { format: 'fltFormat', myHero: 'fltMyHero', oppHero: 'fltHero', period: 'fltPeriod', ai: 'fltAI' };
+  const HIST_IDS = { format: 'hFltFormat', myHero: 'hFltMyHero', oppHero: 'hFltHero', period: 'hFltPeriod', ai: 'hFltAI' };
+
+  function buildFilters() {
+    const host = $('#dashFilters');
+    if (!host) return;
+    host.innerHTML = filtersHtml(STAT_IDS);
+    Object.values(STAT_IDS).forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', refresh); });
+  }
+  function buildHistFilters() {
+    const host = $('#histFilters');
+    if (!host) return;
+    host.innerHTML = filtersHtml(HIST_IDS);
+    Object.values(HIST_IDS).forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', renderHistory); });
   }
 
   function refresh() {
@@ -410,18 +426,21 @@
     if (!host) return;
     const all = _entries.slice().sort((a, b) =>
       (Date.parse(dateOf(b.record) || '') || 0) - (Date.parse(dateOf(a.record) || '') || 0));
+    // Filtres rapides (format, héros, période, IA) + recherche texte.
+    const hf = readFilters(HIST_IDS);
     const q = norm(_histSearch);
-    const list = q ? all.filter(e => histText(e.record).indexOf(q) >= 0) : all;
+    const list = all.filter(e => passesFilters(e.record, hf) && (!q || histText(e.record).indexOf(q) >= 0));
 
+    const narrowed = list.length !== all.length;
     const gc = $('#gamesCount');
-    if (gc) gc.textContent = q ? '(' + list.length + ' / ' + all.length + ')' : '(' + all.length + ')';
+    if (gc) gc.textContent = narrowed ? '(' + list.length + ' / ' + all.length + ')' : '(' + all.length + ')';
     const hc = $('#histCount');
     if (hc) hc.textContent = '(' + all.length + ')';
 
     host.innerHTML = '';
     if (!list.length) {
       host.innerHTML = '<div class="board-empty" style="padding:12px 16px">' +
-        (q ? 'Aucune partie ne correspond à la recherche.' : 'Aucune partie.') + '</div>';
+        (narrowed ? 'Aucune partie ne correspond aux filtres / à la recherche.' : 'Aucune partie.') + '</div>';
       return;
     }
     list.forEach(e => host.appendChild(gameRowEl(e)));
