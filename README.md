@@ -32,6 +32,10 @@ Hébergé sur **GitHub Pages** → l'origine stable rend la persistance
    - N fichiers → alimente le **tableau de bord**.
 3. Les parties sont **mémorisées** entre les sessions (IndexedDB) ; ré-importer
    la même partie ne crée pas de doublon (upsert par `gameId`).
+4. **Sauvegarder / transférer** : le stockage est **local à un appareil**. Pour
+   retrouver ses parties sur un autre appareil (ex. PC → téléphone), utiliser
+   **Exporter la bibliothèque** (fichier `.json`) puis **Importer une sauvegarde**
+   sur l'autre appareil. L'import **fusionne** (dédup par `gameId`), sans doublon.
 
 ## Développement
 
