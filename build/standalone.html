@@ -26,8 +26,16 @@ html,body{margin:0;padding:0}
 
 /* L'app est pensée mobile-first. Sur desktop, on centre le contenu dans une
    colonne de largeur raisonnable : sinon la page s'étire sur toute la fenêtre
-   et les SVG (preserveAspectRatio="none") sont déformés horizontalement. */
-header, #app, footer{max-width:720px;margin-left:auto;margin-right:auto}
+   et les SVG (preserveAspectRatio="none") sont déformés horizontalement.
+   Largeur en rem (45rem = 720px à 16px) → elle grandit avec la taille de base,
+   qu'on augmente sur grand écran (voir @media plus bas) pour ne pas garder une
+   « vue téléphone » minuscule au centre d'un moniteur. */
+header, #app, footer{max-width:45rem;margin-left:auto;margin-right:auto}
+
+/* Desktop : on augmente la taille de base (tout est en rem → mise à l'échelle
+   homogène du texte, des espacements ET de la colonne). Le mobile ne bouge pas. */
+@media (min-width:1024px){ html{font-size:18px} }
+@media (min-width:1600px){ html{font-size:20px} }
 body{
   background:
     radial-gradient(ellipse 900px 500px at 50% -10%, rgba(139,107,255,.10), transparent 60%),
