@@ -120,6 +120,18 @@ header{
 .off-table th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
 .off-table th.sortable:hover{color:var(--gold)}
 
+/* ---------- Onglets du replay (Déroulé / Stats) ---------- */
+.replay-tabs{display:flex;gap:8px;padding:14px 16px 0}
+.replay-tab-btn{
+  flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
+  padding:9px 12px;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;
+  font-family:'Inter',sans-serif;
+}
+.replay-tab-btn:hover{border-color:var(--gold-dim)}
+.replay-tab-btn.active{border-color:var(--gold-dim);color:var(--gold);background:var(--panel-2)}
+.replay-tab{display:none}
+.replay-tab.active{display:block}
+
 /* ---------- Scoreboard ---------- */
 #scoreboard{display:none}
 .scorebar{
@@ -568,36 +580,47 @@ footer a{color:var(--text-dim)}
 
     <div id="scoreboard">
       <div id="matchBanner"></div>
-      <div id="curveWrap">
-        <svg id="curveSvg" viewBox="0 0 400 132" preserveAspectRatio="none"></svg>
-        <div class="curve-readout" id="curveReadout"></div>
-      </div>
-      <div id="chainWrap"><div class="chain" id="chain"></div></div>
 
-      <div id="turnDetail">
-        <div class="turn-title">
-          <h2 id="turnLabel"></h2>
-          <div class="nav-btns">
-            <button id="prevTurn">‹</button>
-            <button id="nextTurn">›</button>
+      <!-- Onglets : séparer le déroulé tour-par-tour des stats globales -->
+      <div class="replay-tabs" id="replayTabs">
+        <button class="replay-tab-btn active" data-tab="replay">⚔ Déroulé</button>
+        <button class="replay-tab-btn" data-tab="stats">📊 Stats</button>
+      </div>
+
+      <div class="replay-tab active" id="tab-replay">
+        <div id="curveWrap">
+          <svg id="curveSvg" viewBox="0 0 400 132" preserveAspectRatio="none"></svg>
+          <div class="curve-readout" id="curveReadout"></div>
+        </div>
+        <div id="chainWrap"><div class="chain" id="chain"></div></div>
+
+        <div id="turnDetail">
+          <div class="turn-title">
+            <h2 id="turnLabel"></h2>
+            <div class="nav-btns">
+              <button id="prevTurn">‹</button>
+              <button id="nextTurn">›</button>
+            </div>
           </div>
+          <div class="toggle-row">
+            <label><input type="checkbox" id="detailToggle"> Afficher le détail technique (passes, résolutions de chaîne…)</label>
+          </div>
+          <div id="turnBoard"></div>
         </div>
-        <div class="toggle-row">
-          <label><input type="checkbox" id="detailToggle"> Afficher le détail technique (passes, résolutions de chaîne…)</label>
+
+        <div id="knownCardsWrap">
+          <details open>
+            <summary>Cartes vues depuis le début de la partie</summary>
+            <div id="knownCardsBody"></div>
+          </details>
         </div>
-        <div id="turnBoard"></div>
       </div>
 
-      <div id="knownCardsWrap">
-        <details open>
-          <summary>Cartes vues depuis le début de la partie</summary>
-          <div id="knownCardsBody"></div>
-        </details>
-      </div>
-
-      <div id="statsWrap">
-        <h3>Stats de la partie</h3>
-        <div class="stat-grid" id="statGrid"></div>
+      <div class="replay-tab" id="tab-stats">
+        <div id="statsWrap">
+          <h3>Stats de la partie</h3>
+          <div class="stat-grid" id="statGrid"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -3151,8 +3174,19 @@ footer a{color:var(--text-dim)}
     return entries;
   }
 
+  // ---------- Onglets du replay (Déroulé / Stats) ----------
+  function setReplayTab(name) {
+    document.querySelectorAll('.replay-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    const r = $('#tab-replay'), s = $('#tab-stats');
+    if (r) r.classList.toggle('active', name === 'replay');
+    if (s) s.classList.toggle('active', name === 'stats');
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('.replay-tab-btn').forEach(b => b.addEventListener('click', () => setReplayTab(b.dataset.tab)));
+
   function openGame(entry) {
     window.Replay.show(entry.record);
+    setReplayTab('replay');   // toujours ouvrir sur le déroulé
     showView('replay');
     if (history.replaceState) history.replaceState(null, '', '#game=' + encodeURIComponent(entry.gameId));
     else location.hash = 'game=' + encodeURIComponent(entry.gameId);
