@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=19">
+<link rel="stylesheet" href="css/style.css?v=20">
 </head>
 <body>
 
@@ -72,6 +72,7 @@
         <div class="hist-controls">
           <input type="search" id="histSearch" class="hist-search" placeholder="Rechercher une partie (héros, adversaire, format…)">
         </div>
+        <div class="filters" id="histFilters"></div>
         <h2 class="section">Parties <span id="gamesCount" style="color:var(--text-faint)"></span></h2>
         <div class="games-list" id="dashGames"></div>
       </div>
@@ -141,12 +142,12 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=19"></script>
-<script src="js/images.js?v=19"></script>
-<script src="js/db.js?v=19"></script>
-<script src="js/sync.js?v=19"></script>
-<script src="js/replay.js?v=19"></script>
-<script src="js/dashboard.js?v=19"></script>
+<script src="talishar-parser.js?v=20"></script>
+<script src="js/images.js?v=20"></script>
+<script src="js/db.js?v=20"></script>
+<script src="js/sync.js?v=20"></script>
+<script src="js/replay.js?v=20"></script>
+<script src="js/dashboard.js?v=20"></script>
 
 <script>
 // ============================================================
