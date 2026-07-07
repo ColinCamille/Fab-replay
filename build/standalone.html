@@ -532,6 +532,11 @@ footer a{color:var(--text-dim)}
         <div class="trend-legend" id="trendLegend"></div>
       </div>
 
+      <div class="section-block" id="myHeroesBlock">
+        <h2 class="section">Winrate par héros joué</h2>
+        <div id="dashMyHeroes"></div>
+      </div>
+
       <h2 class="section">Winrate par matchup (héros adverse)</h2>
       <div id="dashMatchups"></div>
 
@@ -2716,6 +2721,19 @@ footer a{color:var(--text-dim)}
       .map(m => ({ hero: m.hero, games: m.games, wins: m.wins, losses: m.decided - m.wins, decided: m.decided, winrate: winrate(m.wins, m.decided) }))
       .sort((a, b) => b.games - a.games || (b.winrate || 0) - (a.winrate || 0));
 
+    // Par héros joué (« tes decks »)
+    const mhMap = {};
+    kept.forEach(e => {
+      const hero = myHeroOf(e.record) || '(inconnu)';
+      const o = outcome(e.record);
+      const m = mhMap[hero] || (mhMap[hero] = { hero, games: 0, wins: 0, decided: 0 });
+      m.games++;
+      if (o != null) { m.decided++; if (o) m.wins++; }
+    });
+    const byMyHero = Object.values(mhMap)
+      .map(m => ({ hero: m.hero, games: m.games, wins: m.wins, losses: m.decided - m.wins, decided: m.decided, winrate: winrate(m.wins, m.decided) }))
+      .sort((a, b) => b.games - a.games || (b.winrate || 0) - (a.winrate || 0));
+
     // 1er vs 2e joueur
     const fs = { first: { games: 0, wins: 0 }, second: { games: 0, wins: 0 } };
     kept.forEach(e => {
@@ -2780,7 +2798,7 @@ footer a{color:var(--text-dim)}
       facets: { formats: Array.from(formats).sort(), myHeroes: Array.from(myHeroes).sort(), oppHeroes: Array.from(oppHeroes).sort() },
       kept,                                   // ordre chrono (ancien → récent)
       global: { games: kept.length, decided, wins, losses: decided - wins, winrate: winrate(wins, decided) },
-      byMatchup, firstSecond, trend, cardPerf, offAverages
+      byMatchup, byMyHero, firstSecond, trend, cardPerf, offAverages
     };
   }
 
@@ -2848,6 +2866,7 @@ footer a{color:var(--text-dim)}
   function refresh() {
     const agg = aggregate(_entries, currentFilters());
     renderKpis(agg);
+    renderMyHeroes(agg);
     renderMatchups(agg);
     renderTrend(agg);
     renderGames(agg);
@@ -2867,6 +2886,36 @@ footer a{color:var(--text-dim)}
       cell(String(g.games), 'hero', 'Parties (filtrées)', agg.filters.includeAI ? 'IA incluse' : 'IA exclue') +
       cell(fs.first.winrate == null ? '—' : fs.first.winrate + '%', 'violet', 'Winrate 1er joueur', `${fs.first.wins}/${fs.first.games}`) +
       cell(fs.second.winrate == null ? '—' : fs.second.winrate + '%', 'violet', 'Winrate 2e joueur', `${fs.second.wins}/${fs.second.games}`);
+  }
+
+  // Winrate par héros joué (« tes decks ») — même présentation que les matchups.
+  function renderMyHeroes(agg) {
+    const host = $('#dashMyHeroes');
+    if (!host) return;
+    const rows = agg.byMyHero || [];
+    // On ne montre la section que si tu as joué au moins 2 héros différents
+    // (sinon c'est juste le winrate global, déjà affiché plus haut).
+    const wrap = host.closest ? host.closest('.section-block') : null;
+    if (rows.length < 2) { host.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
+    if (wrap) wrap.style.display = '';
+    host.innerHTML = rows.map(m => {
+      const pct = m.winrate == null ? 0 : m.winrate;
+      const pctTxt = m.winrate == null ? '—' : m.winrate + '%';
+      const initial = esc((m.hero || '?').charAt(0).toUpperCase());
+      return `<div class="matchup-row">` +
+        `<div class="mu-hero"><div class="mu-avatar" data-hero="${esc(m.hero)}">${initial}</div>` +
+        `<div class="mu-name">${esc(m.hero)}</div></div>` +
+        `<div class="mu-bar"><div style="width:${pct}%"></div></div>` +
+        `<div class="mu-pct">${pctTxt}</div>` +
+        `<div class="mu-vol">${m.wins}-${m.losses}</div></div>`;
+    }).join('');
+    if (root.CardImages) {
+      host.querySelectorAll('.mu-avatar[data-hero]').forEach(av => {
+        const hero = av.getAttribute('data-hero');
+        if (!hero || hero === '(inconnu)') return;
+        root.CardImages.resolveCardImage(hero).then(url => { if (url) av.innerHTML = `<img src="${url}" alt="${esc(hero)}" loading="lazy">`; });
+      });
+    }
   }
 
   function renderMatchups(agg) {
