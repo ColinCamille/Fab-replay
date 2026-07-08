@@ -246,7 +246,7 @@
   function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
   function hexRgb(hex) { const n = parseInt(hex.slice(1), 16); return (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255); }
   function avBg(color) { return 'radial-gradient(circle at 50% 22%,' + hexA(color, .95) + ',' + hexA(color, .3) + ' 68%,rgba(8,10,16,.95))'; }
-  const heroColor = name => (root.CardImages && root.CardImages.fallbackColor) ? root.CardImages.fallbackColor(name) : '#7a7f96';
+  const heroColor = name => (root.CardImages && root.CardImages.heroColorSync) ? root.CardImages.heroColorSync(name) : '#7a7f96';
   const fmtDate = d => { const t = new Date(d); return isNaN(t) ? '?' : t.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }); };
   const fmtDay = d => { const t = new Date(d); return isNaN(t) ? '?' : t.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); };
   const turnsOf = rec => (rec.turns && rec.turns.length) || 0;
