@@ -521,104 +521,285 @@
     return result;
   }
 
-  function renderTurnBoard(t, buckets) {
+  // ============================================================
+  // DÉROULÉ — rendu « fil-récit » (chaque attaque = une passe d'armes)
+  // Objectif : lire d'un coup d'œil ce que le joueur actif a fait et comment
+  // l'adversaire a répondu. Le regroupement s'appuie sur la structure fiable
+  // du log (played/activated → blocked → combatResult → chainLinkResolved).
+  // Les totaux du bandeau viennent des champs fiables du tour (damageToOpp/Me).
+  // ============================================================
+
+  // Joueur actif du tour (propriétaire), avec repli sur le 1er acteur capté.
+  function activePlayerOf(t) {
+    if (t.player) return t.player;
+    const p = t.events.find(e => (e.type === 'played' || e.type === 'activated') && e.player);
+    return (p && p.player) || myName;
+  }
+
+  // Regroupe les événements bruts en passes d'armes + réponses hors combat.
+  function groupTurn(t, active, defender) {
+    const exchanges = [], oppResponses = [];
+    const secondary = { pitch: 0, activate: 0, reveals: [], modes: [] };
+    let cur = null;
+    const close = () => { if (cur) { exchanges.push(cur); cur = null; } };
+    t.events.forEach(e => {
+      const byActive = e.player === active;
+      if ((e.type === 'played' || e.type === 'activated') && byActive) {
+        close();
+        cur = { card: e.card, isActivation: e.type === 'activated', fromArsenal: !!e.fromArsenal,
+                blocks: [], reveals: [], pitchCost: [], mode: null, result: null };
+        if (e.type === 'activated') secondary.activate++;
+      } else if (e.type === 'pitched' && byActive) {
+        secondary.pitch++;
+        if (cur) cur.pitchCost.push(e.card);
+      } else if (e.type === 'modeSelected') {
+        if (cur && (!e.card || e.card === cur.card)) cur.mode = e.mode;
+        if (e.mode) secondary.modes.push(e.mode);
+      } else if (e.type === 'revealed' && byActive) {
+        if (cur) cur.reveals.push(e.card);
+        if (e.card) secondary.reveals.push(e.card);
+      } else if (e.type === 'blocked') {
+        // blocage de l'attaque courante par le défenseur
+        if (cur && e.player === defender && e.cards) e.cards.forEach(c => cur.blocks.push(c));
+      } else if (e.type === 'combatResult') {
+        if (cur) cur.result = { hit: !!e.hit, amount: e.amount || 0 };
+      } else if (e.type === 'chainLinkResolved') {
+        close();
+      } else if (!cur) {
+        // hors passe d'armes : action non-combat de l'adversaire (soin, carte jouée…)
+        if (e.type === 'lifeGained' && e.player === defender && e.amount) oppResponses.push({ icon: '❤️', text: '+' + e.amount + ' pv' });
+        else if ((e.type === 'played' || e.type === 'activated') && e.player === defender) oppResponses.push({ icon: e.type === 'played' ? '▶️' : '✨', text: e.type === 'played' ? 'joue' : 'active', card: e.card });
+        else if (e.type === 'discarded' && e.player === defender) oppResponses.push({ icon: '🗑️', text: 'défausse', card: e.card });
+      }
+    });
+    close();
+    return { exchanges, oppResponses, secondary };
+  }
+
+  // Vignette de carte pour le fil (image résolue en async, repli sur le nom).
+  function makeMini(card, sideCls) {
+    const d = document.createElement('div');
+    d.className = 'rex-mini ' + sideCls;
+    d.innerHTML = '<div class="art shimmer"><span class="fb">' + escapeHtml(card) + '</span></div>';
+    const art = d.querySelector('.art');
+    resolveCardImage(card).then(url => { art.classList.remove('shimmer'); if (url) art.innerHTML = '<img src="' + url + '" alt="' + escapeHtml(card) + '" loading="lazy">'; });
+    return d;
+  }
+
+  // Une passe est « porteuse » si elle a un résultat de combat ou un blocage.
+  // Les autres (jouées sans effet de combat capté) sont des actions neutres.
+  function isMeaningful(ex) { return !!ex.result || ex.blocks.length > 0; }
+
+  // Classe le résultat d'une passe → badge + type visuel. On s'appuie
+  // uniquement sur les signaux fiables du log (combatResult + blocages) ; les
+  // dégâts arcaniques ne sont pas attribués par carte (source ambiguë), mais le
+  // total du tour reste exact dans le bandeau (damageToOpp/Me).
+  function exchangeVerdict(ex, defender) {
+    const dmgToMe = defender === myName;   // les dégâts vont-ils à moi ?
+    const r = ex.result, amount = r ? r.amount : 0;
+    if (r && r.hit && amount > 0) {
+      const label = ex.blocks.length ? (amount + ' ' + (amount > 1 ? 'passent' : 'passe')) : (amount + ' ' + (amount > 1 ? 'dégâts' : 'dégât'));
+      return { kind: 'hit', badge: '💥 ' + label, cls: dmgToMe ? 'taken' : 'hit', amount };
+    }
+    if (ex.blocks.length) return { kind: 'blocked', badge: '🛡 Bloqué · 0', cls: 'blk' };
+    if (r) return { kind: 'noeffect', badge: 'Aucun dégât', cls: 'blk' };
+    return { kind: 'action', badge: 'joué', cls: 'blk' };
+  }
+
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  function buildExchange(ex, active, defender) {
+    const v = exchangeVerdict(ex, defender);
+    const mine = active === myName;
+    const div = document.createElement('div');
+    div.className = 'rexch ' + v.kind + (mine ? ' side-me' : ' side-opp') + (v.kind === 'hit' && !ex.blocks.length ? ' big' : '');
+
+    let verb, vIcon;
+    if (v.kind === 'action') { verb = 'action'; vIcon = '▸'; }
+    else if (ex.isActivation) { verb = 'activation'; vIcon = '✨'; }
+    else { verb = 'attaque'; vIcon = '⚔'; }
+    const who = mine ? ('Ton ' + verb) : (cap(verb) + ' de ' + escapeHtml(active));
+
+    const head = document.createElement('div');
+    head.className = 'ehead';
+    head.innerHTML = '<div class="eside">' + vIcon + ' ' + who + '</div>'
+      + (v.badge ? '<div class="eres ' + v.cls + '">' + v.badge + '</div>' : '');
+    div.appendChild(head);
+
+    // Carte de l'attaquant + méta (arsenal / mode / pitch / révélations)
+    const cardrow = document.createElement('div');
+    cardrow.className = 'ecard';
+    cardrow.appendChild(makeMini(ex.card, mine ? 'me' : 'opp'));
+    const meta = document.createElement('div');
+    meta.className = 'emeta';
+    const subs = [];
+    if (ex.fromArsenal) subs.push('depuis l\'<b>arsenal</b>');
+    if (ex.mode) subs.push('🔀 mode : <b>' + escapeHtml(ex.mode) + '</b>');
+    if (ex.pitchCost.length) subs.push('🔥 pitch <b>' + ex.pitchCost.map(escapeHtml).join(', ') + '</b>');
+    ex.reveals.forEach(c => subs.push('👁 révèle <b>' + escapeHtml(c) + '</b>'));
+    meta.innerHTML = '<div class="ecn">' + escapeHtml(ex.card) + '</div>'
+      + (subs.length ? '<div class="esub">' + subs.join(' · ') + '</div>' : '');
+    cardrow.appendChild(meta);
+    div.appendChild(cardrow);
+
+    // Réponse : blocage adverse OU dégât direct
+    if (ex.blocks.length) {
+      const blockWho = defender === myName ? 'Tu bloques' : (escapeHtml(defender) + ' bloque');
+      const div2 = document.createElement('div');
+      div2.className = 'ediv blk';
+      div2.innerHTML = '<span>🛡 ' + blockWho + '</span>';
+      div.appendChild(div2);
+      const resp = document.createElement('div');
+      resp.className = 'eresp';
+      ex.blocks.forEach(c => resp.appendChild(makeMini(c, defender === myName ? 'me' : 'opp')));
+      const note = document.createElement('div');
+      note.className = 'ecn';
+      note.textContent = ex.blocks.length + (ex.blocks.length > 1 ? ' cartes en blocage' : ' carte en blocage');
+      resp.appendChild(note);
+      div.appendChild(resp);
+    } else if (v.kind === 'hit') {
+      const note = document.createElement('div');
+      note.className = 'enote';
+      note.innerHTML = '🚀 Non bloqué — ' + (v.amount > 1 ? 'les ' + v.amount + ' dégâts passent' : 'le dégât passe');
+      div.appendChild(note);
+    }
+    return div;
+  }
+
+  function buildTurnSummary(t, active) {
+    const mine = active === myName;
+    const nLabel = t.turnNumber === 0 ? 'Ouverture' : 'Tour ' + t.turnNumber;
+    const kind = mine ? '⚔ Ton tour' : (active ? '🛡 Tour adverse' : '⚑ Ouverture');
+    const dur = t.durationSec != null ? root.TalisharParser.formatDuration(t.durationSec) : null;
+    const dealt = t.damageToOpp || 0, taken = t.damageToMe || 0;
+    const div = document.createElement('div');
+    div.className = 'rturn-sum' + (mine ? '' : ' opp');
+    div.innerHTML =
+      '<div class="top">'
+        + '<div class="who"><span class="n">' + nLabel + '</span>'
+        + '<span class="kind ' + (mine ? 'me' : 'opp') + '">' + kind + '</span>'
+        + (active ? ' · <span class="pn">' + escapeHtml(active) + '</span>' : '') + '</div>'
+        + (dur ? '<div class="dur">⏱ ' + dur + '</div>' : '')
+      + '</div>'
+      + '<div class="pills">'
+        + '<div class="pill dealt">⚔ <span class="lbl">Infligé</span> <b>' + dealt + '</b></div>'
+        + '<div class="pill taken">🩸 <span class="lbl">Subi</span> <b>' + taken + '</b></div>'
+      + '</div>';
+    return div;
+  }
+
+  // Bande main/arsenal repliée (juste au-dessus du fil).
+  function buildHoldBar(t) {
+    const hand = reconcileCertain(t.hand, t, 'hand');
+    const arsenal = reconcileCertain(t.arsenal, t, 'arsenal');
+    const handN = t.hand === null ? '—' : hand.length;
+    const arsN = t.arsenal === null ? '—' : arsenal.length;
+    const det = document.createElement('details');
+    det.className = 'rhold';
+    const sum = document.createElement('summary');
+    sum.innerHTML = '<span class="chev">▸</span>'
+      + '<span class="lbl">✋ Ta main en début de tour <b>' + handN + '</b> · 🎴 Arsenal <b>' + arsN + '</b></span>'
+      + '<span class="hint">déplier</span>';
+    det.appendChild(sum);
+    const body = document.createElement('div');
+    body.className = 'rhold-body';
+    const section = (title, list, raw) => {
+      const h = document.createElement('div'); h.className = 'rhold-sec';
+      h.textContent = title + (raw === null ? ' — non capturé' : list.length ? ' (' + list.length + ')' : ' — vide');
+      body.appendChild(h);
+      if (list.length) {
+        const scroll = document.createElement('div'); scroll.className = 'board-scroll';
+        list.forEach(c => { const chip = makeCardChip(c, 'play', false); chip.classList.add('captured'); const tg = chip.querySelector('.tag'); if (tg) tg.remove(); scroll.appendChild(chip); });
+        body.appendChild(scroll);
+      }
+    };
+    section('✋ Main', hand, t.hand);
+    section('🎴 Arsenal', arsenal, t.arsenal);
+    det.appendChild(body);
+    return det;
+  }
+
+  function buildSecondary(sec) {
+    const parts = ['<span class="chip">🔥 Pitch <b>' + sec.pitch + '</b></span>'];
+    if (sec.activate) parts.push('<span class="chip">✨ Activé <b>' + sec.activate + '</b></span>');
+    const reveals = Array.from(new Set(sec.reveals));
+    if (reveals.length) parts.push('<span class="chip">👁 Révélé <b>' + reveals.map(escapeHtml).join(', ') + '</b></span>');
+    const modes = Array.from(new Set(sec.modes));
+    if (modes.length) parts.push('<span class="chip">🔀 Mode <b>' + modes.map(escapeHtml).join(', ') + '</b></span>');
+    const div = document.createElement('div');
+    div.className = 'rex-minor';
+    div.innerHTML = parts.join('');
+    return div;
+  }
+
+  function buildOppResponses(list, defender) {
+    if (!list.length) return null;
+    const div = document.createElement('div');
+    div.className = 'rex-oppresp';
+    const items = list.map(r => '<span class="orsp">' + r.icon + ' ' + escapeHtml(r.text) + (r.card ? ' <b>' + escapeHtml(r.card) + '</b>' : '') + '</span>').join('');
+    div.innerHTML = '<div class="orsp-h">🩹 ' + escapeHtml(defender) + (defender === myName ? ' (toi)' : '') + ' — hors combat</div>'
+      + '<div class="orsp-list">' + items + '</div>';
+    return div;
+  }
+
+  function renderTurnBoard(t) {
     const wrap = $('#turnBoard');
     wrap.innerHTML = '';
 
-    const meRow = document.createElement('div');
-    meRow.className = 'board-row';
-    const meTitle = document.createElement('div');
-    meTitle.className = 'who me';
-    meTitle.textContent = myName + ' (toi)';
-    meRow.appendChild(meTitle);
+    const active = activePlayerOf(t);
+    const defender = active === myName ? oppName : myName;
 
-    // Snapshots directement portés par le tour (résolus par le parseur),
-    // complétés par les certitudes déduites du log (voir reconcileCertain).
-    const rawHand = t.hand;   // tableau | null
-    const hand = reconcileCertain(rawHand, t, 'hand');
-    const handSub = document.createElement('div');
-    handSub.className = 'captured-note';
-    handSub.textContent = hand.length ? `✋ Main en début de tour (${hand.length})` : (rawHand === null ? '✋ Main — non capturée pour ce tour' : '✋ Main vide');
-    meRow.appendChild(handSub);
-    const handScroll = document.createElement('div');
-    handScroll.className = 'board-scroll';
-    handScroll.style.marginBottom = '10px';
-    if (hand.length) {
-      hand.forEach(c => { const chip = makeCardChip(c, 'play', false); chip.classList.add('captured'); chip.querySelector('.tag').remove(); handScroll.appendChild(chip); });
+    wrap.appendChild(buildTurnSummary(t, active));
+    wrap.appendChild(buildHoldBar(t));
+
+    const { exchanges, oppResponses, secondary } = groupTurn(t, active, defender);
+
+    // Dédoublonnage : une carte jouée puis activée (ex. Path of Same Ends) crée
+    // une passe « creuse » (sans résultat) suivie d'une passe porteuse. On retire
+    // la creuse dès qu'une autre passe de la même carte porte un vrai résultat.
+    const withEffect = new Set(exchanges.filter(isMeaningful).map(ex => ex.card));
+    const shown = exchanges.filter(ex => isMeaningful(ex) || !withEffect.has(ex.card));
+
+    if (shown.length) {
+      const lbl = document.createElement('div');
+      lbl.className = 'rex-grouplbl';
+      lbl.textContent = 'Déroulé de l’échange';
+      wrap.appendChild(lbl);
+      shown.forEach(ex => wrap.appendChild(buildExchange(ex, active, defender)));
     } else {
-      handScroll.innerHTML = '<div class="board-empty">' + (rawHand === null ? 'Non capturée pour ce tour' : 'Main vide') + '</div>';
+      const none = document.createElement('div');
+      none.className = 'rex-none';
+      none.textContent = 'Aucune action de combat captée pour ce tour.';
+      wrap.appendChild(none);
     }
-    meRow.appendChild(handScroll);
 
-    const rawArsenal = t.arsenal;
-    const arsenal = reconcileCertain(rawArsenal, t, 'arsenal');
-    const arsenalSub = document.createElement('div');
-    arsenalSub.className = 'captured-note';
-    arsenalSub.textContent = arsenal.length ? `🎴 Arsenal en début de tour (${arsenal.length})` : (rawArsenal === null ? '🎴 Arsenal — non capturé pour ce tour' : '🎴 Arsenal vide');
-    meRow.appendChild(arsenalSub);
-    const arsenalScroll = document.createElement('div');
-    arsenalScroll.className = 'board-scroll';
-    arsenalScroll.style.marginBottom = '10px';
-    if (arsenal.length) {
-      arsenal.forEach(c => { const chip = makeCardChip(c, 'play', false); chip.classList.add('captured'); chip.querySelector('.tag').remove(); arsenalScroll.appendChild(chip); });
-    } else {
-      arsenalScroll.innerHTML = '<div class="board-empty">' + (rawArsenal === null ? 'Non capturé' : 'Arsenal vide') + '</div>';
-    }
-    meRow.appendChild(arsenalScroll);
+    const opp = buildOppResponses(oppResponses, defender);
+    if (opp) wrap.appendChild(opp);
+    wrap.appendChild(buildSecondary(secondary));
 
-    // Déroulé chronologique du tour, à la suite immédiate de la main et de
-    // l'arsenal — on part de ce que tu avais, puis on déroule ce qui s'est
-    // passé, sans dupliquer les cartes dans un bloc séparé.
-    appendNarrative(meRow, 'me', buckets[myName] || []);
-    wrap.appendChild(meRow);
-
-    // ADVERSAIRE : déductions certaines (arsenal remonté depuis un tour futur)
-    // puis, à la suite, son propre déroulé chronologique.
-    const oppRow = document.createElement('div');
-    oppRow.className = 'board-row';
-    const oppTitle = document.createElement('div');
-    oppTitle.className = 'who opp';
-    oppTitle.textContent = oppName + ' — déductions certaines';
-    oppRow.appendChild(oppTitle);
-
+    // Déductions certaines : arsenal de l'adversaire remonté depuis un tour futur.
     const ghosts = (ARSENAL_BACKFILL[currentTurnIndex] && ARSENAL_BACKFILL[currentTurnIndex][oppName]) || [];
     if (ghosts.length) {
       const note = document.createElement('div');
-      note.className = 'ghost-note';
-      note.textContent = '🔮 Tenu en arsenal ce tour-là, révélé plus tard (certain)';
-      oppRow.appendChild(note);
-      const gScroll = document.createElement('div');
-      gScroll.className = 'board-scroll';
-      ghosts.forEach(g => gScroll.appendChild(makeGhostChip(g.card, g.revealedLabel)));
-      oppRow.appendChild(gScroll);
-    } else {
-      const empty = document.createElement('div');
-      empty.className = 'board-empty';
-      empty.textContent = 'Aucune déduction certaine pour ce tour';
-      oppRow.appendChild(empty);
+      note.className = 'rex-ghosts';
+      note.innerHTML = '<div class="orsp-h">🔮 ' + escapeHtml(oppName) + ' tenait en arsenal (révélé plus tard)</div>';
+      const scroll = document.createElement('div');
+      scroll.className = 'board-scroll';
+      ghosts.forEach(g => scroll.appendChild(makeGhostChip(g.card, g.revealedLabel)));
+      note.appendChild(scroll);
+      wrap.appendChild(note);
     }
 
-    appendNarrative(oppRow, 'opp', buckets[oppName] || []);
-    wrap.appendChild(oppRow);
-  }
-
-  // Ajoute le fil chronologique (événements filtrés) d'un côté donné, à la
-  // suite de ce qui a déjà été rendu pour ce côté (main+arsenal, ou
-  // déductions certaines).
-  function appendNarrative(container, side, events) {
-    const visible = events.filter(passesFilter);
-    const header = document.createElement('div');
-    header.className = 'who ' + side;
-    header.style.marginTop = '12px';
-    header.textContent = '▶ Déroulé du tour (' + visible.length + ')';
-    container.appendChild(header);
-    if (!visible.length) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'color:var(--text-faint);font-size:.8rem;padding:6px 0 4px';
-      empty.textContent = showTechnical ? 'Rien ce tour' : 'Rien de notable (active le détail technique pour tout voir)';
-      container.appendChild(empty);
-    } else {
-      visible.forEach(e => container.appendChild(buildEventRow(e)));
+    // Détail technique (toggle) : fil brut chronologique complet, non regroupé.
+    if (showTechnical) {
+      const head = document.createElement('div');
+      head.className = 'rex-grouplbl tech';
+      head.textContent = '🔧 Détail technique (chronologique)';
+      wrap.appendChild(head);
+      const box = document.createElement('div');
+      box.className = 'rex-tech';
+      t.events.filter(passesFilter).forEach(e => box.appendChild(buildEventRow(e)));
+      wrap.appendChild(box);
     }
   }
 
@@ -708,26 +889,15 @@
     return true;
   }
 
-  function computeBuckets(t) {
-    let lastKnownPlayer = t.player || myName;
-    const buckets = { [myName]: [], [oppName]: [] };
-    t.events.forEach(e => {
-      if (e.player) lastKnownPlayer = e.player;
-      let who = e.player || (e.type === 'targetedSecondary' ? e.owner : null) || lastKnownPlayer;
-      if (who !== myName && who !== oppName) who = lastKnownPlayer === myName ? myName : oppName;
-      (buckets[who] || buckets[myName]).push(e);
-    });
-    return buckets;
-  }
-
   function renderTurn() {
     const t = GAME.turns[currentTurnIndex];
-    $('#turnLabel').textContent = t.label + (t.durationSec != null ? ' · ' + root.TalisharParser.formatDuration(t.durationSec) : '');
+    // Le bandeau résumé porte désormais le libellé riche du tour ; ici on ne
+    // garde qu'un compteur de position discret à côté des flèches.
+    $('#turnLabel').textContent = (currentTurnIndex + 1) + ' / ' + GAME.turns.length;
     $('#prevTurn').disabled = currentTurnIndex === 0;
     $('#nextTurn').disabled = currentTurnIndex === GAME.turns.length - 1;
 
-    const buckets = computeBuckets(t);
-    renderTurnBoard(t, buckets);
+    renderTurnBoard(t);
 
     renderCurve();
     renderKnownCards();
