@@ -1686,8 +1686,9 @@ footer a{color:var(--text-dim)}
     return null;
   }
 
-  // Cherche l'image FULL ART : impression dont art_variations contient « FA »
-  // (c'est la face pleine-illustration des Marvel, ex. ROS254-MV_BACK.png).
+  // Cherche l'image FULL ART des Marvel : c'est la face « _BACK » d'une
+  // impression « -MV » (ex. ROS254-MV_BACK.png), la pleine illustration sans
+  // cadre. On accepte aussi le tag art_variations « FA » quand il est présent.
   function findFullArtImageUrl(obj, depth) {
     depth = depth || 0;
     if (!obj || depth > 6) return null;
@@ -1699,7 +1700,11 @@ footer a{color:var(--text-dim)}
       const av = obj.art_variations;
       const isFA = Array.isArray(av) && av.some(v => /^fa$|full/i.test(String(v)));
       const url = obj.image_url || obj.image || null;
-      if (isFA && typeof url === 'string') return url;
+      if (typeof url === 'string') {
+        const file = url.split('/').pop() || '';
+        const isMarvelBack = /-MV/i.test(file) && /_BACK/i.test(file);   // dos plein-art de la Marvel
+        if (isFA || isMarvelBack) return url;
+      }
       for (const k of Object.keys(obj)) { const r = findFullArtImageUrl(obj[k], depth + 1); if (r) return r; }
     }
     return null;
@@ -1777,7 +1782,7 @@ footer a{color:var(--text-dim)}
   // (full-art) si l'API en renvoie une, sinon l'illustration standard. Cache dédié.
   // Version de cache : à bumper quand la logique de choix d'image héros change,
   // pour invalider les entrées mémorisées dans le navigateur.
-  const HERO_IMG_CACHE_V = 'fa2';
+  const HERO_IMG_CACHE_V = 'fa3';
   async function resolveHeroCardImage(name) {
     if (!name) return null;
     const key = 'H:' + HERO_IMG_CACHE_V + ':' + name;
