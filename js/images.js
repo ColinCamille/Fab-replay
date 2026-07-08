@@ -36,9 +36,10 @@
     return null;
   }
 
-  // Cherche l'image d'une version « Marvel » (traitement full-art premium) :
-  // renvoie l'URL d'image d'un objet (impression/variante) dont une clé ou une
-  // valeur mentionne « marvel ». Balaye récursivement listes et objets imbriqués.
+  // Cherche l'image de la version « Marvel » (full-art premium). Sur le CDN
+  // fabmaster, ces impressions ont un nom de fichier suffixé « -MV » (ex.
+  // ROS254-MV.png) ; on écarte les dos de carte (« _BACK »). Renvoie la 1re
+  // face avant Marvel trouvée, sinon null.
   function findMarvelImageUrl(obj, depth) {
     depth = depth || 0;
     if (!obj || depth > 6) return null;
@@ -47,12 +48,11 @@
       return null;
     }
     if (typeof obj === 'object') {
-      const mentionsMarvel = Object.keys(obj).some(k => {
-        if (/marvel/i.test(k)) return true;
-        const v = obj[k];
-        return typeof v === 'string' && /marvel/i.test(v);
-      });
-      if (mentionsMarvel) { const img = findImageUrl(obj); if (img) return img; }
+      const url = obj.image_url || obj.image || null;
+      if (typeof url === 'string') {
+        const file = url.split('/').pop() || '';
+        if (/-MV(\.|_|$)/i.test(file) && !/_BACK/i.test(file)) return url;   // face avant Marvel
+      }
       for (const k of Object.keys(obj)) { const r = findMarvelImageUrl(obj[k], depth + 1); if (r) return r; }
     }
     return null;
@@ -116,7 +116,8 @@
       const json = await res.json();
       const list = json.data || json.cards || json.results || [];
       const best = list.find(c => (c.name || '').toLowerCase() === name.toLowerCase()) || list[0] || null;
-      const image = findMarvelImageUrl(list) || (best ? findImageUrl(best) : null);
+      // Marvel de la carte EXACTE (évite de piocher la Marvel d'un homonyme jeune/adulte).
+      const image = (best && findMarvelImageUrl(best)) || (best ? findImageUrl(best) : null);
       cardMetaCache[key] = { image: image || null };
       saveMetaCache();
       return image || null;
