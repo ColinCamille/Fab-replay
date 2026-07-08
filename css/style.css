@@ -620,16 +620,16 @@ footer a{color:var(--text-dim)}
 #dashboardBody .caro-head .cur{font-family:'Cinzel',serif;font-size:.82rem;color:var(--accent);font-weight:600;transition:color .35s;max-width:60%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #dashboardBody .caro{display:flex;gap:10px;overflow-x:auto;padding:10px 16px 14px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
 #dashboardBody .caro::-webkit-scrollbar{height:5px} #dashboardBody .caro::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
-#dashboardBody .hcard{scroll-snap-align:start;flex:0 0 auto;width:5.4rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:0;padding:0;font-family:'Inter',sans-serif}
-#dashboardBody .hcard .frame{position:relative;width:5.4rem;height:7.2rem;border-radius:12px;overflow:hidden;border:2px solid var(--line);transition:.18s;display:flex;align-items:flex-end;justify-content:center}
-#dashboardBody .hcard .frame .mono{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.5rem}
+#dashboardBody .hcard{scroll-snap-align:start;flex:0 0 auto;width:6.6rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:0;padding:0;font-family:'Inter',sans-serif}
+#dashboardBody .hcard .frame{position:relative;width:6.6rem;height:8.9rem;border-radius:13px;overflow:hidden;border:2px solid var(--line);transition:.18s;display:flex;align-items:flex-end;justify-content:center}
+#dashboardBody .hcard .frame .mono{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:3rem}
 #dashboardBody .hcard .frame.all{background:radial-gradient(120% 90% at 30% 15%,rgba(var(--accent-rgb),.4),transparent 60%),radial-gradient(120% 90% at 80% 90%,rgba(139,107,255,.32),transparent 60%),var(--panel-2)}
-#dashboardBody .hcard .frame.all .mono{font-size:1.9rem}
-#dashboardBody .hcard .rec{position:relative;z-index:2;width:100%;text-align:center;padding:4px 2px 5px;background:linear-gradient(0deg,rgba(6,8,13,.94),rgba(6,8,13,.5) 72%,transparent);font-family:'JetBrains Mono',monospace;font-size:.64rem;font-weight:700}
-#dashboardBody .hcard .rec .wr{font-size:.78rem}
+#dashboardBody .hcard .frame.all .mono{font-size:2.3rem}
+#dashboardBody .hcard .rec{position:relative;z-index:2;width:100%;text-align:center;padding:5px 2px 6px;background:linear-gradient(0deg,rgba(6,8,13,.94),rgba(6,8,13,.5) 72%,transparent);font-family:'JetBrains Mono',monospace;font-size:.68rem;font-weight:700}
+#dashboardBody .hcard .rec .wr{font-size:.84rem}
 #dashboardBody .hcard .rec .wr.good{color:var(--green)} #dashboardBody .hcard .rec .wr.bad{color:var(--red)} #dashboardBody .hcard .rec .wr.mid{color:#d8c06a}
 #dashboardBody .hcard .rec .wl{color:rgba(233,230,218,.75);font-weight:500}
-#dashboardBody .hcard .name{font-size:.7rem;color:var(--text-dim);text-align:center;line-height:1.15}
+#dashboardBody .hcard .name{font-size:.74rem;color:var(--text-dim);text-align:center;line-height:1.15}
 #dashboardBody .hcard:hover .frame{border-color:var(--accent-dim);transform:translateY(-2px)}
 #dashboardBody .hcard[aria-pressed="true"] .frame{border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.25),0 8px 22px rgba(0,0,0,.5);transform:translateY(-3px)}
 #dashboardBody .hcard[aria-pressed="true"] .name{color:var(--accent)}
