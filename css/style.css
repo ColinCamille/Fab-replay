@@ -63,6 +63,17 @@ header{
 
 .brand{margin-bottom:0}
 
+/* Fond de page : full-art Marvel du héros sélectionné, très transparent et fixe.
+   Remplit surtout les marges vides sur grand écran. Piloté par js/dashboard.js. */
+.hero-bg{
+  position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background-size:cover; background-position:center 15%; background-repeat:no-repeat;
+  opacity:0; transition:opacity .6s ease; filter:blur(2px);
+  -webkit-mask-image:radial-gradient(120% 100% at 50% 0%, #000 55%, transparent 100%);
+          mask-image:radial-gradient(120% 100% at 50% 0%, #000 55%, transparent 100%);
+}
+@media (prefers-reduced-motion: reduce){ .hero-bg{transition:none} }
+
 /* Barre d'outils en pied de page : import manuel + synchro + sauvegarde, même niveau */
 .tools{max-width:45rem;margin:28px auto 0;padding:16px;border-top:1px solid var(--line)}
 .tools-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

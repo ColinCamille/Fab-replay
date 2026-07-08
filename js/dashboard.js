@@ -273,12 +273,28 @@
     const s = D.documentElement.style;
     s.setProperty('--accent', color); s.setProperty('--accent-rgb', hexRgb(color)); s.setProperty('--accent-dim', color);
   }
+  // Fond de page : full-art Marvel du héros sélectionné, très transparent (fixe).
+  function ensureHeroBg() {
+    let el = D.getElementById('heroBg');
+    if (!el) { el = D.createElement('div'); el.id = 'heroBg'; el.className = 'hero-bg'; D.body.insertBefore(el, D.body.firstChild); }
+    return el;
+  }
   function themeHero() {
-    if (!state.hero) { applyAccent(DEFAULT_ACCENT); return; }
+    const bg = ensureHeroBg();
+    if (!state.hero) { applyAccent(DEFAULT_ACCENT); if (bg) bg.style.opacity = '0'; return; }
     applyAccent(heroColor(state.hero));                 // couleur déterministe instantanée
+    const target = state.hero;
     if (root.CardImages && root.CardImages.resolveHeroColor) {
-      const target = state.hero;
       root.CardImages.resolveHeroColor(target).then(col => { if (col && state.hero === target) { applyAccent(col); renderTrend(); } });
+    }
+    // Illustration full-art en fond
+    const setImg = root.CardImages && root.CardImages.resolveHeroCardImage;
+    if (bg && setImg) {
+      root.CardImages.resolveHeroCardImage(target).then(url => {
+        if (state.hero !== target) return;
+        if (url) { bg.style.backgroundImage = 'url("' + url + '")'; bg.style.opacity = '0.14'; }
+        else bg.style.opacity = '0';
+      });
     }
   }
 
