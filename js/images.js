@@ -127,6 +127,44 @@
   function clampAccent(h, s, l) {
     return hslToHex(h, Math.min(0.78, Math.max(0.42, s)), Math.min(0.64, Math.max(0.5, l)));
   }
+  // Table héros → couleur d'accent (fait AUTORITÉ). Choisie d'après l'identité
+  // visuelle de chaque héros/classe. Clé = fragment en minuscules cherché dans
+  // le nom du héros (« Briar, Warden of Thorns » → « briar »). Facile à ajuster :
+  // change simplement la valeur hex correspondante.
+  const HERO_COLORS = {
+    // Runeblade (terre / arcane)
+    briar: '#46b56a', verdance: '#57c06f', viserai: '#8b6bff', chane: '#7d5cc4',
+    // Draconic / élémentaire tempête
+    aurora: '#e6b33a', dromai: '#d76a34',
+    // Wizard
+    kano: '#4f9ede', iyslander: '#74cdeb',
+    // Illusionist
+    prism: '#e2cf7e', enigma: '#9b7bff', dana: '#e0b24a',
+    // Assassin
+    uzuri: '#a566cc', arakni: '#7a8098', nuu: '#c2415f',
+    // Ninja
+    fai: '#e65a34', katsu: '#dd5560', zen: '#45bcae', benji: '#e5843f', ira: '#e6546a',
+    // Brute
+    kayo: '#cf7a3a', rhinar: '#bf7a34',
+    // Guardian
+    oldhim: '#5fa6a8', bravo: '#8894ac',
+    // Warrior
+    dorinthea: '#d6b84f', boltyn: '#eccf5f', victor: '#d6c452',
+    // Ranger
+    azalea: '#cf6152', lexi: '#4fb6c9',
+    // Mechanologist
+    dash: '#cf9440', maxx: '#e6b13f', teklovossen: '#45ad93',
+    // Pugilist / autres
+    betsy: '#d6a03f', florian: '#5cbf6e', oscilio: '#63aede'
+  };
+  function lookupHeroColor(name) {
+    const n = String(name || '').toLowerCase();
+    for (const k in HERO_COLORS) { if (n.indexOf(k) >= 0) return HERO_COLORS[k]; }
+    return null;
+  }
+  // Couleur immédiate (synchrone) : table si connue, sinon repli déterministe.
+  function heroColorSync(name) { return lookupHeroColor(name) || fallbackColor(name); }
+
   // Repli déterministe : teinte dérivée du nom (stable, distincte par héros).
   function fallbackColor(name) {
     let hash = 0;
@@ -166,6 +204,8 @@
   }
   async function resolveHeroColor(name) {
     if (!name) return fallbackColor(name);
+    const tbl = lookupHeroColor(name);           // la table fait autorité
+    if (tbl) return tbl;
     if (heroColorCache[name]) return heroColorCache[name];
     let color;
     try {
@@ -179,5 +219,5 @@
     return color;
   }
 
-  root.CardImages = { resolveCardMeta, resolveCardImage, findImageUrl, findCardTypeInfo, resolveHeroColor, fallbackColor };
+  root.CardImages = { resolveCardMeta, resolveCardImage, findImageUrl, findCardTypeInfo, resolveHeroColor, heroColorSync, lookupHeroColor, fallbackColor };
 })(typeof self !== 'undefined' ? self : this);
