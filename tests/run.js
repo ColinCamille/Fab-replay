@@ -131,6 +131,23 @@ const dorHero = aggMe.byMyHero.find(h => h.hero === 'Dorinthea');
 assert(briHero && briHero.games === 1 && briHero.winrate === 100, 'byMyHero Briar 1-0 (100%)');
 assert(dorHero && dorHero.games === 1 && dorHero.winrate === 0, 'byMyHero Dorinthea 0-1 (0%)');
 
+// 1er/2e joueur détaillé par matchup : Dorinthea → g1 1er(V), g2 2e(D).
+const dorMu = agg.byMatchup.find(m => m.hero === 'Dorinthea');
+assert(dorMu && dorMu.first.games === 1 && dorMu.first.winrate === 100, 'byMatchup Dorinthea 1er : 1-0 (100%)');
+assert(dorMu && dorMu.second.games === 1 && dorMu.second.winrate === 0, 'byMatchup Dorinthea 2e : 0-1 (0%)');
+// 1er/2e par héros joué : Briar joué 4 fois → 1er g1,g3 (2-0), 2e g2,g4 (1-1 → 50%).
+const briMy = agg.byMyHero.find(h => h.hero === 'Briar');
+assert(briMy && briMy.first.winrate === 100 && briMy.second.winrate === 50, 'byMyHero Briar 1er 100% / 2e 50%');
+
+// Meilleurs / pires matchups : Briar (2-0, 100%) devant Dorinthea (1-1, 50%).
+assert(agg.bestMatchups[0].hero === 'Briar', 'meilleur matchup = Briar (100%)');
+assert(agg.worstMatchups[0].hero === 'Dorinthea', 'pire matchup = Dorinthea (50%)');
+assert(!agg.bestMatchups.some(m => agg.worstMatchups.includes(m)), 'meilleurs/pires disjoints');
+
+// Cartes en victoire vs défaite : Brutal Assault en V (g1) et en D (g2) → 50%.
+const baWL = agg.cardWinLoss.find(c => c.name === 'Brutal Assault');
+assert(baWL && baWL.gamesWon === 1 && baWL.gamesLost === 1 && baWL.winrate === 50, 'carte V/D Brutal Assault 1V/1D (50%)');
+
 // Tendance : un point par partie décidée (4 hors IA).
 eq(agg.trend.length, 4, 'tendance : 4 points');
 

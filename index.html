@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=22">
+<link rel="stylesheet" href="css/style.css?v=23">
 </head>
 <body>
 
@@ -61,8 +61,23 @@
           <div id="dashMyHeroes"></div>
         </div>
 
+        <div class="section-block" id="initBlock">
+          <h2 class="section">Avantage d'initiative (1er vs 2e joueur)</h2>
+          <div id="dashInit" style="padding:0 16px"></div>
+        </div>
+
+        <div class="section-block" id="bestWorstBlock">
+          <h2 class="section">Meilleurs / pires matchups</h2>
+          <div id="dashBestWorst" class="bw-grid"></div>
+        </div>
+
         <h2 class="section">Winrate par matchup (héros adverse)</h2>
         <div id="dashMatchups"></div>
+
+        <div class="section-block" id="cardWLBlock">
+          <h2 class="section">Cartes en victoire vs défaite</h2>
+          <div id="dashCardWL" style="padding:0 16px"></div>
+        </div>
 
         <h2 class="section">Performance des cartes (agrégée)</h2>
         <div id="dashCards" style="padding:0 16px"></div>
@@ -142,12 +157,12 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=22"></script>
-<script src="js/images.js?v=22"></script>
-<script src="js/db.js?v=22"></script>
-<script src="js/sync.js?v=22"></script>
-<script src="js/replay.js?v=22"></script>
-<script src="js/dashboard.js?v=22"></script>
+<script src="talishar-parser.js?v=23"></script>
+<script src="js/images.js?v=23"></script>
+<script src="js/db.js?v=23"></script>
+<script src="js/sync.js?v=23"></script>
+<script src="js/replay.js?v=23"></script>
+<script src="js/dashboard.js?v=23"></script>
 
 <script>
 // ============================================================
