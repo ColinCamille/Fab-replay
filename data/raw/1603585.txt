@@ -1,0 +1,26 @@
+=== Talishar game 1603585 — 08/07/2026 22:25:48 ===
+
+🎲 you rolled 8 and JainMor rolled 9.
+JainMor chooses who goes first.
+you will go first.
+
+=== META ===
+schema: v1
+captured_with: TLG v1.10.4
+game_url: https://talishar.net/game/lobby/1603585
+captured_at: 2026-07-08T20:25:13.344Z
+format: (non capté)
+vs_ai: (non capté)
+me: (non capté)
+opponent: JainMor
+my_hero: (non capté)
+opp_hero: (non capté)
+my_start_life: (non capté)
+opp_start_life: (non capté)
+my_start_deck_size: (non capté)
+opp_start_deck_size: (non capté)
+my_equipment: (non capté)
+opp_equipment: (non capté)
+
+=== TIMESTAMPS ===
+0-2:1783542335
