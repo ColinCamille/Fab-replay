@@ -1775,9 +1775,12 @@ footer a{color:var(--text-dim)}
 
   // Image de héros pour le carrousel/avatars : privilégie la version « Marvel »
   // (full-art) si l'API en renvoie une, sinon l'illustration standard. Cache dédié.
+  // Version de cache : à bumper quand la logique de choix d'image héros change,
+  // pour invalider les entrées mémorisées dans le navigateur.
+  const HERO_IMG_CACHE_V = 'fa2';
   async function resolveHeroCardImage(name) {
     if (!name) return null;
-    const key = 'M::' + name;
+    const key = 'H:' + HERO_IMG_CACHE_V + ':' + name;
     if (cardMetaCache[key]) return cardMetaCache[key].image;
     try {
       const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(name) + '&limit=8');
