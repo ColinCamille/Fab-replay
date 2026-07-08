@@ -325,6 +325,103 @@ header{
 .ev-txt{font-size:.92rem;line-height:1.35}
 .ev-txt b{color:var(--text);font-weight:600}
 .ev-dim{color:var(--text-faint)}
+
+/* ---------- Déroulé « fil-récit » (Option A) ---------- */
+/* Tout est scopé sous #turnBoard pour ne pas entrer en collision avec les
+   classes du dashboard (ex. .mini, .pill). */
+#turnBoard .rturn-sum{
+  background:radial-gradient(130% 150% at 0% 0%, rgba(var(--accent-rgb),.14), transparent 55%),var(--panel);
+  border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+#turnBoard .rturn-sum.opp{border-left-color:var(--violet);
+  background:radial-gradient(130% 150% at 0% 0%, rgba(139,107,255,.14), transparent 55%),var(--panel)}
+#turnBoard .rturn-sum .top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+#turnBoard .rturn-sum .who{font-family:'Cinzel',serif;font-size:1.02rem;font-weight:700;line-height:1.25}
+#turnBoard .rturn-sum .who .n{display:block;font-family:'Inter',sans-serif;font-weight:600;font-size:.68rem;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:3px}
+#turnBoard .rturn-sum .kind.me{color:var(--accent)} #turnBoard .rturn-sum .kind.opp{color:var(--violet)}
+#turnBoard .rturn-sum .pn{color:var(--text)}
+#turnBoard .rturn-sum .dur{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--text-faint);white-space:nowrap}
+#turnBoard .pills{display:flex;gap:8px;margin-top:10px}
+#turnBoard .pill{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;font-size:.78rem;
+  background:var(--panel-2);border:1px solid var(--line)}
+#turnBoard .pill .lbl{color:var(--text-dim);font-size:.68rem}
+#turnBoard .pill b{font-family:'JetBrains Mono',monospace;font-size:.95rem}
+#turnBoard .pill.dealt{border-color:rgba(var(--accent-rgb),.4)} #turnBoard .pill.dealt b{color:var(--accent)}
+#turnBoard .pill.taken b{color:var(--red)}
+
+/* Bande main/arsenal repliée */
+#turnBoard .rhold{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:14px}
+#turnBoard .rhold summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;
+  padding:10px 12px;font-size:.78rem;color:var(--text-dim)}
+#turnBoard .rhold summary::-webkit-details-marker{display:none}
+#turnBoard .rhold summary .lbl{flex:1}
+#turnBoard .rhold summary b{color:var(--text);font-family:'JetBrains Mono',monospace}
+#turnBoard .rhold summary .chev{color:var(--accent);transition:.15s;display:inline-block}
+#turnBoard .rhold[open] summary .chev{transform:rotate(90deg)}
+#turnBoard .rhold summary .hint{font-size:.68rem;color:var(--text-faint)}
+#turnBoard .rhold[open] summary .hint{visibility:hidden}
+#turnBoard .rhold-body{padding:0 12px 12px}
+#turnBoard .rhold-sec{font-size:.7rem;color:var(--text-dim);font-weight:600;margin:8px 0 6px}
+
+/* Libellé de groupe */
+#turnBoard .rex-grouplbl{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint);
+  margin:16px 2px 8px;font-weight:600}
+#turnBoard .rex-grouplbl.tech{margin-top:22px;color:var(--text-dim)}
+#turnBoard .rex-none{font-size:.82rem;color:var(--text-faint);padding:10px 0}
+
+/* Passe d'armes */
+#turnBoard .rexch{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;
+  margin-bottom:10px;position:relative;overflow:hidden}
+#turnBoard .rexch::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+#turnBoard .rexch.side-opp::before{background:var(--violet)}
+#turnBoard .rexch.blocked::before{background:var(--text-faint)}
+#turnBoard .rexch.arcane::before{background:var(--violet)}
+#turnBoard .rexch.big{border-color:rgba(var(--accent-rgb),.4);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.15)}
+#turnBoard .rexch.side-opp.big{border-color:rgba(139,107,255,.4);box-shadow:0 0 0 1px rgba(139,107,255,.15)}
+#turnBoard .ehead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+#turnBoard .eside{font-size:.74rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+#turnBoard .rexch.side-me .eside{color:var(--accent)} #turnBoard .rexch.side-opp .eside{color:var(--violet)}
+#turnBoard .eres{font-family:'JetBrains Mono',monospace;font-size:.8rem;font-weight:700;padding:3px 9px;
+  border-radius:20px;white-space:nowrap}
+#turnBoard .eres.hit{color:var(--accent);background:rgba(var(--accent-rgb),.13);border:1px solid rgba(var(--accent-rgb),.35)}
+#turnBoard .eres.taken{color:var(--red);background:rgba(224,85,90,.13);border:1px solid rgba(224,85,90,.35)}
+#turnBoard .eres.blk{color:var(--text-dim);background:var(--panel-2);border:1px solid var(--line)}
+#turnBoard .eres.arc{color:var(--violet);background:rgba(139,107,255,.13);border:1px solid rgba(139,107,255,.35)}
+#turnBoard .ecard{display:flex;gap:10px;align-items:flex-start}
+#turnBoard .emeta{padding-top:2px;min-width:0}
+#turnBoard .ecn{font-size:.94rem;font-weight:700;line-height:1.2}
+#turnBoard .esub{font-size:.72rem;color:var(--text-faint);margin-top:4px;line-height:1.45}
+#turnBoard .esub b{color:var(--text-dim)}
+#turnBoard .ediv{height:1px;background:var(--line);margin:11px -12px;position:relative}
+#turnBoard .ediv span{position:absolute;left:12px;top:-8px;background:var(--panel);padding:0 8px;
+  font-size:.72rem;font-weight:600;color:var(--violet)}
+#turnBoard .rexch.side-opp .ediv span{color:var(--accent)}
+#turnBoard .eresp{display:flex;gap:10px;align-items:center;margin-top:11px}
+#turnBoard .eresp .ecn{font-size:.84rem;font-weight:400;color:var(--text-dim)}
+#turnBoard .enote{margin-top:11px;font-size:.8rem;color:var(--green);display:flex;align-items:center;gap:6px}
+/* Vignette de carte du fil */
+#turnBoard .rex-mini{width:56px;flex-shrink:0}
+#turnBoard .rex-mini .art{width:56px;height:78px;border-radius:6px;border:1px solid var(--line);
+  background:linear-gradient(150deg,var(--panel-3),var(--panel-2));overflow:hidden;display:flex;align-items:flex-end;
+  padding:4px;font-size:.55rem;line-height:1.12;color:var(--text);font-weight:600;text-shadow:0 1px 2px #000}
+#turnBoard .rex-mini .art img{width:100%;height:100%;object-fit:cover;padding:0}
+#turnBoard .rex-mini.me .art{border-color:rgba(var(--accent-rgb),.55)}
+#turnBoard .rex-mini.opp .art{border-color:rgba(139,107,255,.5)}
+
+/* Réponses adverses hors combat + déductions certaines */
+#turnBoard .rex-oppresp,#turnBoard .rex-ghosts{margin-bottom:10px;padding:10px 12px;border-radius:10px;
+  background:rgba(139,107,255,.06);border:1px solid rgba(139,107,255,.22)}
+#turnBoard .orsp-h{font-size:.74rem;color:var(--violet);font-weight:600;margin-bottom:6px}
+#turnBoard .rex-oppresp .orsp-list{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.82rem;color:var(--text-dim)}
+#turnBoard .orsp b{color:var(--text)}
+
+/* Actions secondaires */
+#turnBoard .rex-minor{display:flex;gap:8px 14px;flex-wrap:wrap;padding:10px 12px;background:var(--panel);
+  border:1px dashed var(--line);border-radius:10px;font-size:.76rem;color:var(--text-dim);margin-bottom:10px}
+#turnBoard .rex-minor .chip{display:flex;align-items:center;gap:5px}
+#turnBoard .rex-minor .chip b{color:var(--text)}
+/* Détail technique */
+#turnBoard .rex-tech .event:last-child{border-bottom:none}
 .ev-thumbs{display:flex;flex-wrap:wrap;gap:5px}
 /* Même taille que les cartes de la main/plateau (.card-chip .art) → cohérence. */
 .ev-thumb{
