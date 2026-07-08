@@ -135,7 +135,7 @@
     // Runeblade (terre / arcane)
     briar: '#46b56a', verdance: '#57c06f', viserai: '#8b6bff', chane: '#7d5cc4',
     // Draconic / élémentaire tempête
-    aurora: '#e6b33a', dromai: '#d76a34',
+    aurora: '#57b6ef', dromai: '#c93b3b',
     // Wizard
     kano: '#d6483c', iyslander: '#74cdeb',
     // Illusionist
