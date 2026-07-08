@@ -134,19 +134,26 @@
   // (full-art) si l'API en renvoie une, sinon l'illustration standard. Cache dédié.
   // Version de cache : à bumper quand la logique de choix d'image héros change,
   // pour invalider les entrées mémorisées dans le navigateur.
-  const HERO_IMG_CACHE_V = 'fa4';
+  const HERO_IMG_CACHE_V = 'fa5';
+  const stripName = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');   // ignore ponctuation/espaces/casse
   async function resolveHeroCardImage(name) {
     if (!name) return null;
     const key = 'H:' + HERO_IMG_CACHE_V + ':' + name;
     if (cardMetaCache[key]) return cardMetaCache[key].image;
     try {
-      const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(name) + '&limit=8');
+      // On requête sur le NOM DE BASE (1er mot) : plus fiable que le nom complet
+      // qui peut différer (« Kayo Underhanded Cheat » vs « Kayo, Underhanded Cheat »).
+      const base = name.split(/[\s,]+/)[0] || name;
+      const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(base) + '&limit=20');
       if (!res.ok) throw new Error('http ' + res.status);
       const json = await res.json();
-      const list = json.data || json.cards || json.results || [];
-      const best = list.find(c => (c.name || '').toLowerCase() === name.toLowerCase()) || list[0] || null;
-      // Priorité (carte EXACTE) : full art (FA, la vraie pleine illustration) →
-      // face Marvel standard → illustration normale.
+      const list = (json.data || json.cards || json.results || []).filter(c => (c.types || []).indexOf('Hero') >= 0 || !c.types);
+      const target = stripName(name);
+      // Correspondance en ignorant la ponctuation ; sinon préfixe ; sinon 1re carte.
+      const best = list.find(c => stripName(c.name) === target)
+        || list.find(c => stripName(c.name).indexOf(target) === 0 || target.indexOf(stripName(c.name)) === 0)
+        || list[0] || null;
+      // Priorité : full art (face _BACK des Marvel) → face Marvel → illustration normale.
       const image = (best && (findFullArtImageUrl(best) || findMarvelImageUrl(best))) || (best ? findImageUrl(best) : null);
       cardMetaCache[key] = { image: image || null };
       saveMetaCache();
