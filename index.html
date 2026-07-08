@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=44">
+<link rel="stylesheet" href="css/style.css?v=45">
 </head>
 <body>
 
@@ -31,6 +31,7 @@
   <section id="replayView" class="view">
     <div class="topbar">
       <button class="back-btn" id="backToDash">← Tableau de bord</button>
+      <div class="topbar-title" id="replayMatchup"></div>
       <div class="spacer"></div>
     </div>
 
@@ -47,7 +48,13 @@
 
       <div class="replay-tab active" id="tab-replay">
         <div id="curveWrap">
-          <svg id="curveSvg" viewBox="0 0 400 132" preserveAspectRatio="none"></svg>
+          <div class="curve-holder" id="curveHolder">
+            <svg id="curveSvg" viewBox="0 0 400 132" preserveAspectRatio="none"></svg>
+            <div class="curve-guide" id="curveGuide"></div>
+            <div class="curve-dot opp" id="curveDotOpp"></div>
+            <div class="curve-dot me" id="curveDotMe"></div>
+            <div class="curve-tip" id="curveTip"></div>
+          </div>
           <div class="curve-readout" id="curveReadout"></div>
         </div>
         <div id="chainWrap"><div class="chain" id="chain"></div></div>
@@ -110,12 +117,12 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=44"></script>
-<script src="js/images.js?v=44"></script>
-<script src="js/db.js?v=44"></script>
-<script src="js/sync.js?v=44"></script>
-<script src="js/replay.js?v=44"></script>
-<script src="js/dashboard.js?v=44"></script>
+<script src="talishar-parser.js?v=45"></script>
+<script src="js/images.js?v=45"></script>
+<script src="js/db.js?v=45"></script>
+<script src="js/sync.js?v=45"></script>
+<script src="js/replay.js?v=45"></script>
+<script src="js/dashboard.js?v=45"></script>
 
 <script>
 // ============================================================
