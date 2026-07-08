@@ -18,6 +18,8 @@
 
   const resolveCardImage = (n) => root.CardImages.resolveCardImage(n);
   const resolveCardMeta = (n) => root.CardImages.resolveCardMeta(n);
+  // Portrait de héros : full-art Marvel si dispo (cohérent avec le carrousel du dashboard).
+  const resolveHeroImage = (n) => (root.CardImages.resolveHeroCardImage || root.CardImages.resolveCardImage)(n);
 
   // ============================================================
   // ÉTAT
@@ -74,6 +76,10 @@
     maxLife = Math.max(baseLife, 0, ...GAME.lifeSeries.me, ...GAME.lifeSeries.opp);
     currentTurnIndex = 0;
     showTechnical = $('#detailToggle') ? $('#detailToggle').checked : false;
+    // Harmonisation avec le dashboard : thème (accent + fond full-art) du héros joué.
+    if (root.Dashboard && root.Dashboard.applyHeroTheme) {
+      root.Dashboard.applyHeroTheme((GAME.players.me && GAME.players.me.hero) || myName);
+    }
     render();
   }
 
@@ -167,7 +173,7 @@
     el.querySelectorAll('.hero-avatar[data-hero]').forEach(av => {
       const hero = av.getAttribute('data-hero');
       if (!hero) return;
-      resolveCardImage(hero).then(url => { if (url) av.innerHTML = '<img src="' + url + '" alt="' + escapeHtml(hero) + '" loading="lazy">'; });
+      resolveHeroImage(hero).then(url => { if (url) av.innerHTML = '<img src="' + url + '" alt="' + escapeHtml(hero) + '" loading="lazy">'; });
     });
     // Charger les visuels d'équipement (async)
     el.querySelectorAll('.eq-slot[data-card]').forEach(slot => {
@@ -179,6 +185,8 @@
 
   function renderCurve() {
     const svg = $('#curveSvg');
+    // Couleur « moi » = accent du héros joué (posé sur :root), pour l'harmonie avec le dashboard.
+    const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '').trim() || '#c9a227';
     const seriesMe = GAME.lifeSeries.me, seriesOpp = GAME.lifeSeries.opp;
     const n = GAME.turns.length;
     const W = 400, H = 132;
@@ -214,8 +222,8 @@
     svg.innerHTML = `
       <defs>
         <linearGradient id="gradMe" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#c9a227" stop-opacity=".28"/>
-          <stop offset="100%" stop-color="#c9a227" stop-opacity="0"/>
+          <stop offset="0%" stop-color="${accent}" stop-opacity=".28"/>
+          <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
         </linearGradient>
         <linearGradient id="gradOpp" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#8b6bff" stop-opacity=".22"/>
@@ -228,12 +236,12 @@
       ${xAxis}
       <path d="${area(seriesOpp)}" fill="url(#gradOpp)"/>
       <path d="${area(seriesMe)}" fill="url(#gradMe)"/>
-      <path d="${line(seriesOpp)}" fill="none" stroke="#8b6bff" stroke-width="2" opacity=".9"/>
-      <path d="${line(seriesMe)}" fill="none" stroke="#c9a227" stroke-width="2.5"/>
+      <path d="${line(seriesOpp)}" fill="none" stroke="#8b6bff" stroke-width="2" opacity=".9" vector-effect="non-scaling-stroke"/>
+      <path d="${line(seriesMe)}" fill="none" stroke="${accent}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
       ${dots(seriesOpp, '#8b6bff')}
-      ${dots(seriesMe, '#c9a227')}
+      ${dots(seriesMe, accent)}
       <line x1="${x(currentTurnIndex).toFixed(1)}" y1="${padTop - 6}" x2="${x(currentTurnIndex).toFixed(1)}" y2="${padTop + plotH}" stroke="#e9e6da" stroke-width="1" stroke-dasharray="2,3" opacity=".4"/>
-      <text x="${(x(n - 1) - 2).toFixed(1)}" y="${(y(endMe) - 5).toFixed(1)}" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="10" font-weight="700" fill="#c9a227">${endMe}</text>
+      <text x="${(x(n - 1) - 2).toFixed(1)}" y="${(y(endMe) - 5).toFixed(1)}" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="10" font-weight="700" fill="${accent}">${endMe}</text>
       <text x="${(x(n - 1) - 2).toFixed(1)}" y="${(y(endOpp) + 12).toFixed(1)}" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="10" font-weight="700" fill="#8b6bff">${endOpp}</text>
     `;
 

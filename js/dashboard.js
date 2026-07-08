@@ -279,24 +279,26 @@
     if (!el) { el = D.createElement('div'); el.id = 'heroBg'; el.className = 'hero-bg'; D.body.insertBefore(el, D.body.firstChild); }
     return el;
   }
-  function themeHero() {
+  // Applique le thème (accent + fond full-art) pour un héros donné (ou neutre si null).
+  // Réutilisé par le replay via l'export, pour rester cohérent avec le dashboard.
+  let _themedHero = null;
+  function themeFor(hero) {
     const bg = ensureHeroBg();
-    if (!state.hero) { applyAccent(DEFAULT_ACCENT); if (bg) bg.style.opacity = '0'; return; }
-    applyAccent(heroColor(state.hero));                 // couleur déterministe instantanée
-    const target = state.hero;
+    _themedHero = hero || null;
+    if (!hero) { applyAccent(DEFAULT_ACCENT); if (bg) bg.style.opacity = '0'; return; }
+    applyAccent(heroColor(hero));                        // couleur déterministe instantanée
     if (root.CardImages && root.CardImages.resolveHeroColor) {
-      root.CardImages.resolveHeroColor(target).then(col => { if (col && state.hero === target) { applyAccent(col); renderTrend(); } });
+      root.CardImages.resolveHeroColor(hero).then(col => { if (col && _themedHero === hero) { applyAccent(col); if (_A) renderTrend(); } });
     }
-    // Illustration full-art en fond
-    const setImg = root.CardImages && root.CardImages.resolveHeroCardImage;
-    if (bg && setImg) {
-      root.CardImages.resolveHeroCardImage(target).then(url => {
-        if (state.hero !== target) return;
+    if (bg && root.CardImages && root.CardImages.resolveHeroCardImage) {
+      root.CardImages.resolveHeroCardImage(hero).then(url => {
+        if (_themedHero !== hero) return;
         if (url) { bg.style.backgroundImage = 'url("' + url + '")'; bg.style.opacity = '0.14'; }
         else bg.style.opacity = '0';
       });
     }
   }
+  function themeHero() { themeFor(state.hero); }
 
   // ---------- Agrégations ----------
   function statsAgg() { return aggregate(_entries, { includeAI: state.includeAI, format: state.format || null, myHero: state.hero || null, oppHero: state.opp || null, period: state.period }); }
@@ -689,6 +691,6 @@
   function refresh() { if (_built) renderAll(); }
 
   // Exports : cœur d'agrégation (Node + navigateur) + API de rendu (navigateur).
-  root.Dashboard = { aggregate, outcome, oppHeroOf, dateOf, mount, refresh };
+  root.Dashboard = { aggregate, outcome, oppHeroOf, dateOf, mount, refresh, applyHeroTheme: themeFor, restoreTheme: function () { themeFor(state.hero); } };
   if (typeof module === 'object' && module.exports) module.exports = root.Dashboard;
 })(typeof self !== 'undefined' ? self : this);
