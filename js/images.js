@@ -52,8 +52,10 @@
       const url = obj.image_url || obj.image || null;
       if (typeof url === 'string') {
         const file = url.split('/').pop() || '';
-        const isMarvelBack = /-MV/i.test(file) && /_BACK/i.test(file);   // dos plein-art de la Marvel
-        if (isFA || isMarvelBack) return url;
+        // La pleine illustration est la FACE ARRIÈRE (_BACK) d'une Marvel (-MV).
+        // NB : sur les sets récents (OMN), l'avant ET l'arrière sont tagués FA,
+        // et l'avant vient en premier — on exige donc explicitement « _BACK ».
+        if (/_BACK/i.test(file) && (/-MV/i.test(file) || isFA)) return url;
       }
       for (const k of Object.keys(obj)) { const r = findFullArtImageUrl(obj[k], depth + 1); if (r) return r; }
     }
@@ -132,7 +134,7 @@
   // (full-art) si l'API en renvoie une, sinon l'illustration standard. Cache dédié.
   // Version de cache : à bumper quand la logique de choix d'image héros change,
   // pour invalider les entrées mémorisées dans le navigateur.
-  const HERO_IMG_CACHE_V = 'fa3';
+  const HERO_IMG_CACHE_V = 'fa4';
   async function resolveHeroCardImage(name) {
     if (!name) return null;
     const key = 'H:' + HERO_IMG_CACHE_V + ':' + name;
