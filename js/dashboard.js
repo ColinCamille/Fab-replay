@@ -230,7 +230,6 @@
   let _cardSort = { key: 'played', dir: 'desc' };
   let _cardMode = 'total';   // 'total' | 'pergame' | 'pct'
   let _cardCap = 20;         // 0 = tout
-  let _colTotals = {};       // base des % (sur toutes les cartes actives)
   let _cardTotalGames = 0;   // parties filtrées (dénominateur « par partie »)
 
   const $ = sel => document.querySelector(sel);
@@ -574,6 +573,11 @@
   const MUTED = '<span class="muted">·</span>';
 
   // Formate une cellule numérique selon le mode d'affichage courant.
+  // Mode « % » = lecture PAR LIGNE (à quoi sert la carte) :
+  //   - Jouée / Défense / Pitch : part de l'usage de la carte → somme ≈ 100 %.
+  //   - Coups : cas à part, taux de coups portés = touché ÷ jouée × 100
+  //     (à quel point la carte connecte quand tu l'attaques).
+  const pct1 = v => Math.round(v * 10) / 10 + '%';
   function fmtCardCell(col, c) {
     const raw = c[col.key] || 0;
     if (col.count || _cardMode === 'total') return raw ? String(raw) : MUTED;   // compte brut
@@ -581,9 +585,13 @@
       const v = _cardTotalGames ? raw / _cardTotalGames : 0;
       return v ? String(Math.round(v * 100) / 100) : MUTED;
     }
-    const tot = _colTotals[col.key] || 0;                                       // % de la colonne
-    const v = tot ? raw / tot * 100 : 0;
-    return v ? (Math.round(v * 10) / 10 + '%') : MUTED;
+    // Mode % (les zéros restent « · » comme dans les autres modes).
+    if (col.key === 'timesHit') {                                               // taux de coups portés
+      const played = c.played || 0;
+      return (played && raw) ? pct1(raw / played * 100) : MUTED;
+    }
+    const usage = (c.played || 0) + (c.blocked || 0) + (c.pitched || 0);        // répartition d'usage
+    return (usage && raw) ? pct1(raw / usage * 100) : MUTED;
   }
 
   function renderCardPerf(agg) {
@@ -591,11 +599,6 @@
     if (!host) return;
     _cardPerfAll = agg.cardPerf.filter(c => c.played || c.blocked || c.timesHit);
     _cardTotalGames = agg.global.games || 0;
-    _colTotals = { played: 0, blocked: 0, pitched: 0, timesHit: 0 };
-    _cardPerfAll.forEach(c => {
-      _colTotals.played += c.played; _colTotals.blocked += c.blocked;
-      _colTotals.pitched += c.pitched; _colTotals.timesHit += c.timesHit;
-    });
     if (!_cardPerfAll.length) { host.innerHTML = '<div class="board-empty" style="padding:10px 16px">Aucune stat de carte agrégée (nécessite les stats officielles Talishar).</div>'; return; }
     host.innerHTML =
       '<div class="cards-controls">' +
@@ -648,7 +651,10 @@
       const cls = col.hit && c.timesHit ? ' class="hit"' : '';
       return `<td${cls}>${fmtCardCell(col, c)}</td>`;
     }).join('') + '</tr>').join('');
-    wrap.innerHTML = `<table class="off-table"><tr>${head}</tr>${body}</table>`;
+    const note = _cardMode === 'pct'
+      ? `<div class="cwl-note">Par ligne : <b>Jouée + Défense + Pitch = 100 %</b> (à quoi sert la carte). <b>Coups</b> = taux de coups portés (touché ÷ jouée).</div>`
+      : '';
+    wrap.innerHTML = `<div class="table-scroll"><table class="off-table"><tr>${head}</tr>${body}</table></div>` + note;
 
     // Tri au clic sur un en-tête (même colonne → inverse le sens).
     wrap.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', () => {
