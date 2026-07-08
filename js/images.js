@@ -82,5 +82,102 @@
   }
   async function resolveCardImage(name) { return (await resolveCardMeta(name)).image; }
 
-  root.CardImages = { resolveCardMeta, resolveCardImage, findImageUrl, findCardTypeInfo };
+  // ============================================================
+  // Couleur d'accent par héros (pour le theming du tableau de bord)
+  // ------------------------------------------------------------
+  // Stratégie : extraction de la teinte dominante de l'illustration
+  // via <canvas> (bornée en HSL pour rester lisible), avec repli
+  // déterministe sur une teinte dérivée du nom si l'extraction échoue
+  // (image absente ou canvas « tainted » faute de CORS). Mise en cache
+  // dans localStorage, comme les métadonnées de cartes.
+  // ============================================================
+  const heroColorCache = (function () {
+    try { return JSON.parse(localStorage.getItem('fabHeroColorV1') || '{}'); }
+    catch (e) { return {}; }
+  })();
+  function saveHeroColorCache() {
+    try { localStorage.setItem('fabHeroColorV1', JSON.stringify(heroColorCache)); } catch (e) {}
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0; const l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h /= 6;
+    }
+    return [h * 360, s, l];
+  }
+  function hslToHex(h, s, l) {
+    h /= 360;
+    const f = n => {
+      const k = (n + h * 12) % 12;
+      const a = s * Math.min(l, 1 - l);
+      const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+      return Math.round(255 * c).toString(16).padStart(2, '0');
+    };
+    return '#' + f(0) + f(8) + f(4);
+  }
+  // Borne saturation/luminosité pour garantir un accent lisible sur fond sombre.
+  function clampAccent(h, s, l) {
+    return hslToHex(h, Math.min(0.78, Math.max(0.42, s)), Math.min(0.64, Math.max(0.5, l)));
+  }
+  // Repli déterministe : teinte dérivée du nom (stable, distincte par héros).
+  function fallbackColor(name) {
+    let hash = 0;
+    const str = String(name || '');
+    for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    const hue = ((hash % 360) + 360) % 360;
+    return clampAccent(hue, 0.55, 0.56);
+  }
+  function extractDominant(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const S = 24;
+          const cv = document.createElement('canvas');
+          cv.width = S; cv.height = S;
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0, S, S);
+          const data = ctx.getImageData(0, 0, S, S).data;   // lève une erreur si canvas « tainted »
+          let r = 0, g = 0, b = 0, wsum = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            const a = data[i + 3]; if (a < 200) continue;
+            const [, sat, lum] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
+            if (lum < 0.12 || lum > 0.9) continue;           // ignore quasi-noir / quasi-blanc
+            const w = sat * sat + 0.05;                       // privilégie les pixels vifs
+            r += data[i] * w; g += data[i + 1] * w; b += data[i + 2] * w; wsum += w;
+          }
+          if (!wsum) return reject(new Error('no vivid pixels'));
+          const [h, s, l] = rgbToHsl(r / wsum, g / wsum, b / wsum);
+          resolve(clampAccent(h, s, l));
+        } catch (e) { reject(e); }
+      };
+      img.onerror = () => reject(new Error('image load error'));
+      img.src = url;
+    });
+  }
+  async function resolveHeroColor(name) {
+    if (!name) return fallbackColor(name);
+    if (heroColorCache[name]) return heroColorCache[name];
+    let color;
+    try {
+      const url = await resolveCardImage(name);
+      color = url ? await extractDominant(url) : fallbackColor(name);
+    } catch (e) {
+      color = fallbackColor(name);
+    }
+    heroColorCache[name] = color;
+    saveHeroColorCache();
+    return color;
+  }
+
+  root.CardImages = { resolveCardMeta, resolveCardImage, findImageUrl, findCardTypeInfo, resolveHeroColor, fallbackColor };
 })(typeof self !== 'undefined' ? self : this);

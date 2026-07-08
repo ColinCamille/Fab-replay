@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=25">
+<link rel="stylesheet" href="css/style.css?v=26">
 </head>
 <body>
 
@@ -36,62 +36,9 @@
       <span style="font-size:.8rem">Les parties sont mémorisées entre les sessions (IndexedDB).</span>
     </div>
 
-    <div id="dashboardBody">
-      <!-- Onglets : analyser ses stats / retrouver et rouvrir une partie -->
-      <div class="dash-tabs" id="dashTabs">
-        <button class="dash-tab-btn active" data-dtab="stats">📊 Statistiques</button>
-        <button class="dash-tab-btn" data-dtab="history">🗒 Historique <span id="histCount" class="dtab-count"></span></button>
-      </div>
-
-      <div class="dash-tab active" id="dtab-stats">
-        <h2 class="section">Vue d'ensemble</h2>
-        <div class="kpi-grid" id="dashKpis"></div>
-
-        <h2 class="section">Filtres</h2>
-        <div class="filters" id="dashFilters"></div>
-
-        <h2 class="section">Tendance dans le temps</h2>
-        <div id="trendWrap">
-          <svg id="trendSvg" viewBox="0 0 400 120" preserveAspectRatio="none"></svg>
-          <div class="trend-legend" id="trendLegend"></div>
-        </div>
-
-        <div class="section-block" id="myHeroesBlock">
-          <h2 class="section">Winrate par héros joué</h2>
-          <div id="dashMyHeroes"></div>
-        </div>
-
-        <div class="section-block" id="initBlock">
-          <h2 class="section">Avantage d'initiative (1er vs 2e joueur)</h2>
-          <div id="dashInit" style="padding:0 16px"></div>
-        </div>
-
-        <div class="section-block" id="bestWorstBlock">
-          <h2 class="section">Meilleurs / pires matchups</h2>
-          <div id="dashBestWorst" class="bw-grid"></div>
-        </div>
-
-        <h2 class="section">Winrate par matchup (héros adverse)</h2>
-        <div id="dashMatchups"></div>
-
-        <div class="section-block" id="cardWLBlock">
-          <h2 class="section">Cartes en victoire vs défaite</h2>
-          <div id="dashCardWL" style="padding:0 16px"></div>
-        </div>
-
-        <h2 class="section">Performance des cartes (agrégée)</h2>
-        <div id="dashCards" style="padding:0 16px"></div>
-      </div>
-
-      <div class="dash-tab" id="dtab-history">
-        <div class="hist-controls">
-          <input type="search" id="histSearch" class="hist-search" placeholder="Rechercher une partie (héros, adversaire, format…)">
-        </div>
-        <div class="filters" id="histFilters"></div>
-        <h2 class="section">Parties <span id="gamesCount" style="color:var(--text-faint)"></span></h2>
-        <div class="games-list" id="dashGames"></div>
-      </div>
-    </div>
+    <!-- Le tableau de bord (carrousel héros, filtres, onglets, sections) est
+         entièrement construit par js/dashboard.js dans ce conteneur. -->
+    <div id="dashboardBody"></div>
   </section>
 
   <!-- ====================== MODE REPLAY ====================== -->
@@ -157,12 +104,12 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=25"></script>
-<script src="js/images.js?v=25"></script>
-<script src="js/db.js?v=25"></script>
-<script src="js/sync.js?v=25"></script>
-<script src="js/replay.js?v=25"></script>
-<script src="js/dashboard.js?v=25"></script>
+<script src="talishar-parser.js?v=26"></script>
+<script src="js/images.js?v=26"></script>
+<script src="js/db.js?v=26"></script>
+<script src="js/sync.js?v=26"></script>
+<script src="js/replay.js?v=26"></script>
+<script src="js/dashboard.js?v=26"></script>
 
 <script>
 // ============================================================
@@ -191,7 +138,6 @@
     const hasGames = entries.length > 0;
     $('#dashEmpty').style.display = hasGames ? 'none' : 'block';
     $('#dashboardBody').style.display = hasGames ? 'block' : 'none';
-    $('#gamesCount').textContent = hasGames ? '(' + entries.length + ')' : '';
     if (hasGames) {
       window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame });
     }

@@ -218,354 +218,18 @@
   }
 
   // ============================================================
-  // RENDU (navigateur uniquement)
+  // RENDU (navigateur uniquement) — tableau de bord héros-centré.
+  // Tout le DOM est construit dans #dashboardBody ; le CSS est scopé
+  // sous #dashboardBody pour ne jamais entrer en collision avec le
+  // reste de l'app (replay, header…).
   // ============================================================
-  let _entries = [];
-  let _onOpen = null, _onDelete = null;
-  let _histSearch = '';   // recherche de l'onglet Historique
-  let _wired = false;     // écouteurs onglets/recherche posés une seule fois
-  // État UI de la table « performance des cartes » (persiste entre refresh).
-  let _cardSearch = '';
-  let _cardPerfAll = [];
-  let _cardSort = { key: 'played', dir: 'desc' };
-  let _cardMode = 'total';   // 'total' | 'pergame' | 'pct'
-  let _cardCap = 20;         // 0 = tout
-  let _cardTotalGames = 0;   // parties filtrées (dénominateur « par partie »)
-
-  const $ = sel => document.querySelector(sel);
-  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-
-  function mount(opts) {
-    _entries = opts.entries || [];
-    _onOpen = opts.onOpen || null;
-    _onDelete = opts.onDelete || null;
-    wireDashOnce();
-    buildFilters();
-    buildHistFilters();
-    refresh();
-    renderHistory();
-  }
-
-  function currentFilters() {
-    return {
-      includeAI: $('#fltAI') ? $('#fltAI').checked : false,
-      format: $('#fltFormat') && $('#fltFormat').value ? $('#fltFormat').value : null,
-      myHero: $('#fltMyHero') && $('#fltMyHero').value ? $('#fltMyHero').value : null,
-      oppHero: $('#fltHero') && $('#fltHero').value ? $('#fltHero').value : null,
-      period: $('#fltPeriod') ? $('#fltPeriod').value : 'all'
-    };
-  }
-
-  // HTML des champs de filtre (réutilisé par les onglets Statistiques ET
-  // Historique) — `ids` porte les identifiants distincts de chaque instance.
-  function filtersHtml(ids) {
-    const agg = aggregate(_entries, { includeAI: true, period: 'all' });
-    const opt = (arr, first) => ['<option value="">' + first + '</option>']
-      .concat(arr.map(x => `<option value="${esc(x)}">${esc(x)}</option>`)).join('');
-    return `<div class="field"><label>Format</label><select id="${ids.format}">${opt(agg.facets.formats, 'Tous formats')}</select></div>` +
-      `<div class="field"><label>Mon héros</label><select id="${ids.myHero}">${opt(agg.facets.myHeroes, 'Tous mes héros')}</select></div>` +
-      `<div class="field"><label>Héros adverse</label><select id="${ids.oppHero}">${opt(agg.facets.oppHeroes, 'Tous adversaires')}</select></div>` +
-      `<div class="field"><label>Période</label><select id="${ids.period}">` +
-        `<option value="all">Tout l'historique</option>` +
-        `<option value="7d">7 derniers jours</option>` +
-        `<option value="30d">30 derniers jours</option>` +
-        `<option value="90d">90 derniers jours</option></select></div>` +
-      `<div class="field chk"><input type="checkbox" id="${ids.ai}"><label for="${ids.ai}">Inclure les parties vs IA</label></div>`;
-  }
-  function readFilters(ids) {
-    return {
-      includeAI: $('#' + ids.ai) ? $('#' + ids.ai).checked : false,
-      format: $('#' + ids.format) && $('#' + ids.format).value ? $('#' + ids.format).value : null,
-      myHero: $('#' + ids.myHero) && $('#' + ids.myHero).value ? $('#' + ids.myHero).value : null,
-      oppHero: $('#' + ids.oppHero) && $('#' + ids.oppHero).value ? $('#' + ids.oppHero).value : null,
-      period: $('#' + ids.period) ? $('#' + ids.period).value : 'all'
-    };
-  }
-  const STAT_IDS = { format: 'fltFormat', myHero: 'fltMyHero', oppHero: 'fltHero', period: 'fltPeriod', ai: 'fltAI' };
-  const HIST_IDS = { format: 'hFltFormat', myHero: 'hFltMyHero', oppHero: 'hFltHero', period: 'hFltPeriod', ai: 'hFltAI' };
-
-  function buildFilters() {
-    const host = $('#dashFilters');
-    if (!host) return;
-    host.innerHTML = filtersHtml(STAT_IDS);
-    Object.values(STAT_IDS).forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', refresh); });
-  }
-  function buildHistFilters() {
-    const host = $('#histFilters');
-    if (!host) return;
-    host.innerHTML = filtersHtml(HIST_IDS);
-    Object.values(HIST_IDS).forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', renderHistory); });
-  }
-
-  function refresh() {
-    const agg = aggregate(_entries, currentFilters());
-    renderKpis(agg);
-    renderMyHeroes(agg);
-    renderInitiative(agg);
-    renderBestWorst(agg);
-    renderMatchups(agg);
-    renderTrend(agg);
-    renderCardWinLoss(agg);
-    renderCardPerf(agg);
-    // La liste des parties (onglet Historique) est indépendante des filtres de
-    // stats : elle montre TOUTES les parties, avec sa propre recherche texte.
-  }
-
-  // ---------- Onglets du tableau de bord (Statistiques / Historique) ----------
-  function setDashTab(name) {
-    document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.dtab === name));
-    const st = $('#dtab-stats'), hi = $('#dtab-history');
-    if (st) st.classList.toggle('active', name === 'stats');
-    if (hi) hi.classList.toggle('active', name === 'history');
-    window.scrollTo(0, 0);
-  }
-  function wireDashOnce() {
-    if (_wired) return; _wired = true;
-    const s = $('#histSearch');
-    if (s) s.addEventListener('input', () => { _histSearch = s.value; renderHistory(); });
-    document.querySelectorAll('.dash-tab-btn').forEach(b => b.addEventListener('click', () => setDashTab(b.dataset.dtab)));
-  }
-
-  function renderKpis(agg) {
-    const host = $('#dashKpis');
-    if (!host) return;
-    const g = agg.global, fs = agg.firstSecond;
-    const wr = g.winrate == null ? '—' : g.winrate + '%';
-    const wrCls = g.winrate == null ? '' : (g.winrate >= 50 ? 'green' : 'red');
-    const cell = (v, cls, k, sub) =>
-      `<div class="kpi${cls === 'hero' ? ' hero' : ''}"><div class="v ${cls === 'hero' ? '' : cls}">${v}</div><div class="k">${k}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
-    host.innerHTML =
-      cell(wr, wrCls || 'hero', 'Winrate global', `${g.wins}V / ${g.losses}D sur ${g.decided} décidées`) +
-      cell(String(g.games), 'hero', 'Parties (filtrées)', agg.filters.includeAI ? 'IA incluse' : 'IA exclue') +
-      cell(fs.first.winrate == null ? '—' : fs.first.winrate + '%', 'violet', 'Winrate 1er joueur', `${fs.first.wins}/${fs.first.games}`) +
-      cell(fs.second.winrate == null ? '—' : fs.second.winrate + '%', 'violet', 'Winrate 2e joueur', `${fs.second.wins}/${fs.second.games}`);
-  }
-
-  // Winrate par héros joué (« tes decks ») — même présentation que les matchups.
-  function renderMyHeroes(agg) {
-    const host = $('#dashMyHeroes');
-    if (!host) return;
-    const rows = agg.byMyHero || [];
-    // On ne montre la section que si tu as joué au moins 2 héros différents
-    // (sinon c'est juste le winrate global, déjà affiché plus haut).
-    const wrap = host.closest ? host.closest('.section-block') : null;
-    if (rows.length < 2) { host.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
-    if (wrap) wrap.style.display = '';
-    host.innerHTML = rows.map(m => {
-      const pct = m.winrate == null ? 0 : m.winrate;
-      const pctTxt = m.winrate == null ? '—' : m.winrate + '%';
-      const initial = esc((m.hero || '?').charAt(0).toUpperCase());
-      return `<div class="matchup-row">` +
-        `<div class="mu-hero"><div class="mu-avatar" data-hero="${esc(m.hero)}">${initial}</div>` +
-        `<div class="mu-name">${esc(m.hero)}</div></div>` +
-        `<div class="mu-bar"><div style="width:${pct}%"></div></div>` +
-        `<div class="mu-pct">${pctTxt}</div>` +
-        `<div class="mu-vol">${m.wins}-${m.losses}</div></div>`;
-    }).join('');
-    if (root.CardImages) {
-      host.querySelectorAll('.mu-avatar[data-hero]').forEach(av => {
-        const hero = av.getAttribute('data-hero');
-        if (!hero || hero === '(inconnu)') return;
-        root.CardImages.resolveCardImage(hero).then(url => { if (url) av.innerHTML = `<img src="${url}" alt="${esc(hero)}" loading="lazy">`; });
-      });
-    }
-  }
-
-  function renderMatchups(agg) {
-    const host = $('#dashMatchups');
-    if (!host) return;
-    if (!agg.byMatchup.length) { host.innerHTML = '<div class="board-empty" style="padding:10px 16px">Aucun matchup pour ces filtres.</div>'; return; }
-    host.innerHTML = agg.byMatchup.map(m => {
-      const pct = m.winrate == null ? 0 : m.winrate;
-      const pctTxt = m.winrate == null ? '—' : m.winrate + '%';
-      const initial = esc((m.hero || '?').charAt(0).toUpperCase());
-      return `<div class="matchup-row">` +
-        `<div class="mu-hero"><div class="mu-avatar" data-hero="${esc(m.hero)}">${initial}</div>` +
-        `<div class="mu-name">${esc(m.hero)}</div></div>` +
-        `<div class="mu-bar"><div style="width:${pct}%"></div></div>` +
-        `<div class="mu-pct">${pctTxt}</div>` +
-        `<div class="mu-vol">${m.wins}-${m.losses}</div></div>`;
-    }).join('');
-    // Avatars de héros (async, via le module partagé si présent)
-    if (root.CardImages) {
-      host.querySelectorAll('.mu-avatar[data-hero]').forEach(av => {
-        const hero = av.getAttribute('data-hero');
-        if (!hero || hero === '(inconnu)') return;
-        root.CardImages.resolveCardImage(hero).then(url => { if (url) av.innerHTML = `<img src="${url}" alt="${esc(hero)}" loading="lazy">`; });
-      });
-    }
-  }
-
-  // ---------- Avantage d'initiative détaillé (1er vs 2e, par héros/matchup) ----------
-  let _initMode = 'mine';   // 'mine' = par mon héros | 'opp' = par adversaire
-  function initRows(agg) { return _initMode === 'opp' ? (agg.byMatchup || []) : (agg.byMyHero || []); }
-  function renderInitiative(agg) {
-    const host = $('#dashInit');
-    if (!host) return;
-    const wrap = host.closest ? host.closest('.section-block') : null;
-    const rows = initRows(agg).filter(m => m.hero !== '(inconnu)' && (m.first.games + m.second.games) > 0);
-    // On ne montre la section que s'il existe au moins une partie où l'ordre
-    // du tour est connu (les vieilles parties sans endStats ne l'ont pas).
-    if (!rows.length) { host.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
-    if (wrap) wrap.style.display = '';
-    const cell = s => s.games ? `<b class="${s.winrate == null ? '' : (s.winrate >= 50 ? 'green' : 'red')}">${s.winrate == null ? '—' : s.winrate + '%'}</b> <span class="muted">${s.wins}/${s.games}</span>` : MUTED;
-    const label = _initMode === 'opp' ? 'Adversaire' : 'Mon héros';
-    const body = rows.map(m => `<tr><td>${esc(m.hero)}</td><td>${cell(m.first)}</td><td>${cell(m.second)}</td></tr>`).join('');
-    host.innerHTML =
-      '<div class="init-toggle">' +
-        `<button data-im="mine" class="${_initMode === 'mine' ? 'active' : ''}">Par mon héros</button>` +
-        `<button data-im="opp" class="${_initMode === 'opp' ? 'active' : ''}">Par adversaire</button>` +
-      '</div>' +
-      `<div class="table-scroll"><table class="off-table init-table"><tr><th>${label}</th><th title="Winrate quand tu commences (1er joueur)">En 1er</th><th title="Winrate quand tu joues en second (2e joueur)">En 2e</th></tr>${body}</table></div>`;
-    host.querySelectorAll('.init-toggle button').forEach(b => b.addEventListener('click', () => {
-      _initMode = b.getAttribute('data-im'); renderInitiative(agg);
-    }));
-  }
-
-  // ---------- Meilleurs / pires matchups ----------
-  function bwList(rows, kind) {
-    if (!rows.length) {
-      const msg = kind === 'best' ? 'Aucun matchup favorable (> 50 %) pour l\'instant.'
-        : 'Aucun matchup défavorable (< 50 %). 💪';
-      return `<div class="board-empty" style="padding:8px 12px">${msg}</div>`;
-    }
-    return rows.map(m => {
-      const initial = esc((m.hero || '?').charAt(0).toUpperCase());
-      const cls = m.winrate == null ? '' : (m.winrate >= 50 ? 'green' : 'red');
-      return `<div class="bw-row"><div class="mu-avatar" data-hero="${esc(m.hero)}">${initial}</div>` +
-        `<div class="bw-name">${esc(m.hero)}</div>` +
-        `<div class="bw-pct ${cls}">${m.winrate}%</div>` +
-        `<div class="bw-vol">${m.wins}-${m.losses}</div></div>`;
-    }).join('');
-  }
-  function renderBestWorst(agg) {
-    const host = $('#dashBestWorst');
-    if (!host) return;
-    const wrap = host.closest ? host.closest('.section-block') : null;
-    const best = agg.bestMatchups || [], worst = agg.worstMatchups || [];
-    if (!best.length && !worst.length) { host.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
-    if (wrap) wrap.style.display = '';
-    host.innerHTML =
-      `<div class="bw-col"><h3 class="bw-title good">✅ Meilleurs matchups</h3>${bwList(best, 'best')}</div>` +
-      `<div class="bw-col"><h3 class="bw-title bad">⚠️ Pires matchups</h3>${bwList(worst, 'worst')}</div>`;
-    if (root.CardImages) {
-      host.querySelectorAll('.mu-avatar[data-hero]').forEach(av => {
-        const hero = av.getAttribute('data-hero');
-        if (!hero || hero === '(inconnu)') return;
-        root.CardImages.resolveCardImage(hero).then(url => { if (url) av.innerHTML = `<img src="${url}" alt="${esc(hero)}" loading="lazy">`; });
-      });
-    }
-  }
-
-  // ---------- Cartes en victoire vs défaite ----------
-  function renderCardWinLoss(agg) {
-    const host = $('#dashCardWL');
-    if (!host) return;
-    const wrap = host.closest ? host.closest('.section-block') : null;
-    const rows = agg.cardWinLoss || [];
-    if (!rows.length) { host.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
-    if (wrap) wrap.style.display = '';
-    const body = rows.map(c => {
-      const cls = c.winrate == null ? '' : (c.winrate >= 50 ? 'green' : 'red');
-      return `<tr><td>${esc(c.name)}</td>` +
-        `<td class="green">${c.gamesWon || MUTED}</td>` +
-        `<td class="red">${c.gamesLost || MUTED}</td>` +
-        `<td><b class="${cls}">${c.winrate}%</b></td></tr>`;
-    }).join('');
-    host.innerHTML =
-      `<div class="table-scroll"><table class="off-table"><tr><th>Carte</th><th title="Parties gagnées où la carte a été jouée">En V</th><th title="Parties perdues où la carte a été jouée">En D</th><th title="Winrate des parties où cette carte a été jouée">Winrate</th></tr>${body}</table></div>` +
-      `<div class="cwl-note">Winrate des parties où la carte a été jouée (min. ${agg.cwlMin} partie${agg.cwlMin > 1 ? 's' : ''} décidée${agg.cwlMin > 1 ? 's' : ''}). À lire avec prudence sur de faibles échantillons.</div>`;
-  }
-
-  function renderTrend(agg) {
-    const wrap = $('#trendWrap');
-    if (!wrap) return;
-    const pts = agg.trend;
-    const svg = $('#trendSvg');
-    const legend = $('#trendLegend');
-    if (!pts.length) { if (svg) svg.innerHTML = ''; if (legend) legend.textContent = 'Pas encore de partie décidée à tracer.'; return; }
-    const W = 400, H = 120, padL = 26, padR = 8, padTop = 10, padBot = 18;
-    const plotW = W - padL - padR, plotH = H - padTop - padBot, n = pts.length;
-    const x = i => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
-    const y = v => padTop + plotH - (v / 100) * plotH;
-    const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ',' + y(p.winrate).toFixed(1)).join(' ');
-    const dots = pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.winrate).toFixed(1)}" r="2" fill="#c9a227"/>`).join('');
-    const grid = [0, 50, 100].map(v =>
-      `<line x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W - padR}" y2="${y(v).toFixed(1)}" stroke="#262c3d"/>` +
-      `<text class="curve-axis-label" x="${padL - 4}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end">${v}</text>`).join('');
-    if (svg) svg.innerHTML =
-      `<line x1="${padL}" y1="${y(50).toFixed(1)}" x2="${W - padR}" y2="${y(50).toFixed(1)}" stroke="rgba(139,107,255,.35)" stroke-dasharray="3,4"/>` +
-      grid +
-      `<path d="${line}" fill="none" stroke="#c9a227" stroke-width="2"/>` + dots;
-    if (legend) legend.textContent = `Winrate cumulé au fil de ${n} partie${n > 1 ? 's' : ''} décidée${n > 1 ? 's' : ''} (ancien → récent).`;
-  }
-
-  // Construit une ligne de partie (cliquable → ouvre le replay).
-  function gameRowEl(e) {
-    const rec = e.record;
-    const o = outcome(rec);
-    const cls = o == null ? '' : (o ? 'win' : 'loss');
-    const verdict = o == null ? 'En cours' : (o ? 'Victoire' : 'Défaite');
-    const subBits = [];
-    if (rec.format) subBits.push(esc(rec.format));
-    const d = dateOf(rec);
-    if (d) { const dt = new Date(d); if (!isNaN(dt)) subBits.push(dt.toLocaleDateString('fr-FR')); }
-    if (rec.turns) subBits.push(rec.turns.length + ' tours');
-    if (isVsAI(rec)) subBits.push('<span class="tag-ai">🤖 IA</span>');
-    const row = document.createElement('div');
-    row.className = 'game-row';
-    row.innerHTML =
-      `<div class="gr-result ${cls}"></div>` +
-      `<div class="gr-main"><div class="gr-matchup"><b>${esc((rec.players && rec.players.me && rec.players.me.hero) || '?')}</b> vs ${esc(oppHeroOf(rec) || '?')}</div>` +
-      `<div class="gr-sub">${subBits.join(' · ')}</div></div>` +
-      `<div class="gr-verdict ${cls}">${verdict}</div>` +
-      `<button class="gr-del" title="Supprimer cette partie">✕</button>`;
-    row.querySelector('.gr-main').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
-    row.querySelector('.gr-result').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
-    row.querySelector('.gr-verdict').addEventListener('click', () => { if (_onOpen) _onOpen(e); });
-    row.querySelector('.gr-del').addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      if (_onDelete) _onDelete(e.gameId);
-    });
-    return row;
-  }
-
-  // Texte indexé pour la recherche d'une partie (héros, adversaire, format…).
-  function histText(rec) {
-    return norm([
-      (rec.players && rec.players.me && rec.players.me.hero), oppHeroOf(rec),
-      rec.oppName, rec.myName, rec.format
-    ].filter(Boolean).join(' '));
-  }
-
-  // Onglet Historique : TOUTES les parties (récent → ancien) + recherche texte.
-  function renderHistory() {
-    const host = $('#dashGames');
-    if (!host) return;
-    const all = _entries.slice().sort((a, b) =>
-      (Date.parse(dateOf(b.record) || '') || 0) - (Date.parse(dateOf(a.record) || '') || 0));
-    // Filtres rapides (format, héros, période, IA) + recherche texte.
-    const hf = readFilters(HIST_IDS);
-    const q = norm(_histSearch);
-    const list = all.filter(e => passesFilters(e.record, hf) && (!q || histText(e.record).indexOf(q) >= 0));
-
-    const narrowed = list.length !== all.length;
-    const gc = $('#gamesCount');
-    if (gc) gc.textContent = narrowed ? '(' + list.length + ' / ' + all.length + ')' : '(' + all.length + ')';
-    const hc = $('#histCount');
-    if (hc) hc.textContent = '(' + all.length + ')';
-
-    host.innerHTML = '';
-    if (!list.length) {
-      host.innerHTML = '<div class="board-empty" style="padding:12px 16px">' +
-        (narrowed ? 'Aucune partie ne correspond aux filtres / à la recherche.' : 'Aucune partie.') + '</div>';
-      return;
-    }
-    list.forEach(e => host.appendChild(gameRowEl(e)));
-  }
-
-  // Colonnes de la table (ordre = affichage). `count` = toujours en compte brut ;
-  // `hit` = colonne « Touché » (mise en évidence). Toutes triables.
+  let _entries = [], _onOpen = null, _onDelete = null, _built = false, _A = null, _L = null;
+  const DEFAULT_ACCENT = '#c9a227';
+  const state = {
+    hero: null, format: '', opp: '', period: 'all', includeAI: false,
+    tab: 'stats', sub: 'overview', histView: 'detailed', res: 'all', q: '',
+    cardQ: '', cardMode: 'total', cardCap: 20, cardSort: { key: 'played', dir: 'desc' }
+  };
   const CARD_COLS = [
     { key: 'name', label: 'Carte' },
     { key: 'games', label: 'Parties', count: true },
@@ -576,98 +240,388 @@
   ];
   const MUTED = '<span class="muted">·</span>';
 
-  // Formate une cellule numérique selon le mode d'affichage courant.
-  // Mode « % » = lecture PAR LIGNE (à quoi sert la carte) :
-  //   - Jouée / Défense / Pitch : part de l'usage de la carte → somme ≈ 100 %.
-  //   - Coups : cas à part, taux de coups portés = touché ÷ jouée × 100
-  //     (à quel point la carte connecte quand tu l'attaques).
+  const D = (typeof document !== 'undefined') ? document : null;
+  const esc2 = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const wrCls = w => w == null ? '' : (w >= 55 ? 'good' : (w <= 45 ? 'bad' : 'mid'));
+  function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
+  function hexRgb(hex) { const n = parseInt(hex.slice(1), 16); return (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255); }
+  function avBg(color) { return 'radial-gradient(circle at 50% 22%,' + hexA(color, .95) + ',' + hexA(color, .3) + ' 68%,rgba(8,10,16,.95))'; }
+  const heroColor = name => (root.CardImages && root.CardImages.fallbackColor) ? root.CardImages.fallbackColor(name) : '#7a7f96';
+  const fmtDate = d => { const t = new Date(d); return isNaN(t) ? '?' : t.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }); };
+  const fmtDay = d => { const t = new Date(d); return isNaN(t) ? '?' : t.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); };
+  const turnsOf = rec => (rec.turns && rec.turns.length) || 0;
+
+  // Avatars : dégradé coloré (repli) + illustration réelle chargée en fond (async).
+  function avatarHTML(name, cls) {
+    const c = heroColor(name);
+    return '<div class="' + cls + '" data-hero-bg="' + esc2(name) + '" style="background-image:' + avBg(c) + '"><span class="mono">' + esc2((name || '?').charAt(0)) + '</span></div>';
+  }
+  function hydrateBg(scope) {
+    if (!root.CardImages) return;
+    (scope || D).querySelectorAll('[data-hero-bg]').forEach(el => {
+      const h = el.getAttribute('data-hero-bg');
+      if (!h || h === '(inconnu)' || el._hy) return;
+      el._hy = 1;
+      root.CardImages.resolveCardImage(h).then(url => { if (url) { el.style.backgroundImage = 'url("' + url + '")'; el.classList.add('has-img'); } });
+    });
+  }
+
+  // ---------- Theming ----------
+  function applyAccent(color) {
+    const s = D.documentElement.style;
+    s.setProperty('--accent', color); s.setProperty('--accent-rgb', hexRgb(color)); s.setProperty('--accent-dim', color);
+  }
+  function themeHero() {
+    if (!state.hero) { applyAccent(DEFAULT_ACCENT); return; }
+    applyAccent(heroColor(state.hero));                 // couleur déterministe instantanée
+    if (root.CardImages && root.CardImages.resolveHeroColor) {
+      const target = state.hero;
+      root.CardImages.resolveHeroColor(target).then(col => { if (col && state.hero === target) { applyAccent(col); renderTrend(); } });
+    }
+  }
+
+  // ---------- Agrégations ----------
+  function statsAgg() { return aggregate(_entries, { includeAI: state.includeAI, format: state.format || null, myHero: state.hero || null, oppHero: state.opp || null, period: state.period }); }
+  function lifeAgg() { return aggregate(_entries, { includeAI: state.includeAI }); }
+
+  // ---------- Squelette ----------
+  function buildSkeleton(host) {
+    host.innerHTML =
+      '<div class="hxwrap">' +
+      '<div class="caro-head"><span class="lbl">Choisis ton héros</span><span class="cur" id="hxCur">Tous les héros</span></div>' +
+      '<div class="caro" id="hxCaro"></div>' +
+      '<div class="filters-row">' +
+        '<span class="fchip"><select id="hxFormat"></select></span>' +
+        '<span class="fchip"><select id="hxOpp"></select></span>' +
+        '<div class="pseg" id="hxPeriod">' +
+          '<button data-p="all" aria-pressed="true">Tout</button>' +
+          '<button data-p="30d" aria-pressed="false">30 j</button>' +
+          '<button data-p="90d" aria-pressed="false">90 j</button></div>' +
+        '<button class="fai" id="hxAI" aria-pressed="false" title="Par défaut, les parties contre l\'IA sont exclues des stats.">🤖 IA exclue</button>' +
+        '<button class="freset" id="hxReset" hidden>↺ Réinitialiser</button>' +
+      '</div>' +
+      '<div class="tabs" id="hxTabs">' +
+        '<button data-tab="stats" aria-pressed="true">📊 Statistiques</button>' +
+        '<button data-tab="hist" aria-pressed="false">🗒 Historique <span id="hxHistCount" class="dcount"></span></button>' +
+      '</div>' +
+      '<section class="panel active" id="hxPanelStats">' +
+        '<div class="substat" id="hxSubstat">' +
+          '<button data-sub="overview" aria-pressed="true">Vue d\'ensemble</button>' +
+          '<button data-sub="matchups" aria-pressed="false">Matchups</button>' +
+          '<button data-sub="cards" aria-pressed="false">Cartes</button></div>' +
+        '<div class="subpanel active" id="hxSubOverview">' +
+          '<div class="idcard"><div id="hxIdBody"></div><div class="kpis" id="hxKpis"></div></div>' +
+          '<div class="card"><h2>Tendance du winrate</h2><div class="cbody">' +
+            '<svg class="trend-svg" id="hxTrendSvg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>' +
+            '<div class="trend-leg" id="hxTrendLeg"></div></div></div>' +
+        '</div>' +
+        '<div class="subpanel" id="hxSubMatchups">' +
+          '<div class="card"><h2>Winrate par matchup <span class="scope" id="hxMuScope"></span></h2><div class="cbody" id="hxMuBody"></div></div></div>' +
+        '<div class="subpanel" id="hxSubCards">' +
+          '<div class="card"><h2>Cartes en victoire vs défaite <span class="scope" id="hxCwlScope"></span></h2><div class="cbody" id="hxCwlBody"></div></div>' +
+          '<div class="card"><h2>Performance des cartes</h2><div class="cbody">' +
+            '<div class="cards-controls">' +
+              '<input class="search" id="hxCardSearch" type="search" placeholder="Filtrer une carte…">' +
+              '<span class="fchip"><select id="hxCardMode"><option value="total">Total</option><option value="pergame">Par partie</option><option value="pct">%</option></select></span>' +
+              '<span class="fchip"><select id="hxCardCap"><option value="20">Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="0">Tout</option></select></span>' +
+              '<span class="cards-count" id="hxCardCount"></span></div>' +
+            '<div class="tbl-scroll" id="hxCardTbl"></div></div></div>' +
+        '</div>' +
+      '</section>' +
+      '<section class="panel" id="hxPanelHist">' +
+        '<div class="controls">' +
+          '<input class="search" id="hxSearch" type="search" placeholder="Rechercher (adversaire, format…)">' +
+          '<div class="seg" id="hxHistView">' +
+            '<button data-hv="detailed" aria-pressed="true">Détaillé</button>' +
+            '<button data-hv="compact" aria-pressed="false">Compact</button></div>' +
+        '</div>' +
+        '<div class="resfilter" id="hxRes">' +
+          '<button class="chip" data-res="all" aria-pressed="true">Toutes</button>' +
+          '<button class="chip win" data-res="win" aria-pressed="false">Victoires</button>' +
+          '<button class="chip loss" data-res="loss" aria-pressed="false">Défaites</button></div>' +
+        '<div class="listmeta" id="hxMeta"></div>' +
+        '<div id="hxList" class="grouped"></div>' +
+      '</section>' +
+      '</div>';
+  }
+  function ensureToast() { if (!D.getElementById('hxToast')) { const t = D.createElement('div'); t.id = 'hxToast'; t.className = 'hx-toast'; D.body.appendChild(t); } }
+  let _toastT = null;
+  function toast(msg) { const t = D.getElementById('hxToast'); if (!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(_toastT); _toastT = setTimeout(() => t.classList.remove('show'), 1600); }
+
+  // ---------- Carrousel ----------
+  function hcardHTML(o) {
+    const wr = o.wr == null ? 0 : o.wr, wl = o.wins + '–' + o.losses;
+    let frame;
+    if (o.all) {
+      frame = '<div class="frame all"><span class="mono">Σ</span>';
+    } else {
+      frame = '<div class="frame" data-hero-bg="' + esc2(o.name) + '" style="background-image:' + avBg(heroColor(o.name)) + '"><span class="mono">' + esc2(o.name.charAt(0)) + '</span>';
+    }
+    frame += '<div class="rec"><div class="wr ' + wrCls(o.wr) + '">' + (o.wr == null ? '—' : wr + '%') + '</div><div class="wl">' + wl + '</div></div></div>';
+    return '<button class="hcard' + (o.all ? ' isall' : '') + '" data-key="' + esc2(o.key) + '" aria-pressed="' + o.sel + '">' + frame + '<div class="name">' + esc2(o.name) + '</div></button>';
+  }
+  function renderCarousel() {
+    const rows = _L.byMyHero.filter(m => m.hero !== '(inconnu)' && m.games > 0).sort((a, b) => b.games - a.games);
+    const g = _L.global;
+    let html = hcardHTML({ all: true, name: 'Tous', wins: g.wins, losses: g.losses, wr: g.winrate, sel: !state.hero, key: '__all__' });
+    rows.forEach(m => html += hcardHTML({ all: false, name: m.hero, wins: m.wins, losses: m.losses, wr: m.winrate, sel: state.hero === m.hero, key: m.hero }));
+    const host = D.getElementById('hxCaro'); host.innerHTML = html; hydrateBg(host);
+    D.getElementById('hxCur').textContent = state.hero || 'Tous les héros';
+  }
+
+  // ---------- Vue d'ensemble : identité + KPIs ----------
+  function renderId() {
+    const g = _A.global, ongoing = g.games - g.decided;
+    const t = _A.trend, half = Math.floor(t.length / 2);
+    const early = half ? t[half - 1].winrate : null, late = t.length ? t[t.length - 1].winrate : null;
+    let trend = '<span class="trend flat">— stable</span>';
+    if (early != null && late != null && Math.abs(late - early) >= 6) trend = late > early ? '<span class="trend up">▲ en progrès</span>' : '<span class="trend down">▼ en baisse</span>';
+    const hero = state.hero;
+    const full = hero || 'Toutes les parties';
+    const sub = hero ? '' : (_L.byMyHero.filter(m => m.hero !== '(inconnu)').length + ' héros joués');
+    const avatar = hero
+      ? '<div class="idavatar" data-hero-bg="' + esc2(hero) + '" style="background-image:' + avBg(heroColor(hero)) + '"><span class="mono">' + esc2(hero.charAt(0)) + '</span></div>'
+      : '<div class="idavatar isall"><span class="mono">Σ</span></div>';
+    const wm = '<div class="idwm">' + esc2(hero ? hero.charAt(0) : 'Σ') + '</div>';
+    D.getElementById('hxIdBody').innerHTML =
+      '<div class="idtop">' + wm + avatar +
+        '<div class="idmeta"><div class="iname">' + esc2(full) + '</div>' + (sub ? '<div class="icls">' + esc2(sub) + '</div>' : '<div class="icls">deck</div>') +
+        '<div class="irec"><b class="green">' + g.wins + 'V</b> · <b class="red">' + g.losses + 'D</b> · ' + g.games + ' parties' + (ongoing ? ' · ' + ongoing + ' en cours' : '') + '</div></div>' +
+        '<div class="idwr"><div class="big ' + (g.winrate >= 50 ? 'good' : 'bad') + '">' + (g.winrate == null ? '—' : g.winrate + '%') + '</div><div class="cap">winrate</div>' + trend + '</div></div>';
+    hydrateBg(D.getElementById('hxIdBody'));
+
+    const fs = _A.firstSecond;
+    let streak = 0, sign = null;
+    for (let i = _A.kept.length - 1; i >= 0; i--) { const o = outcome(_A.kept[i].record); if (o == null) continue; if (sign === null) { sign = o; streak = 1; } else if (o === sign) streak++; else break; }
+    let ts = 0, tc = 0; _A.kept.forEach(e => { const n = turnsOf(e.record); if (n) { ts += n; tc++; } });
+    const avgT = tc ? Math.round(ts / tc) : '—';
+    const kpi = (v, cls, k, sub) => '<div class="kpi"><div class="v ' + (cls || '') + '">' + v + '</div><div class="k">' + k + '</div>' + (sub ? '<div class="ksub">' + sub + '</div>' : '') + '</div>';
+    const cnt = s => s.games ? s.wins + '/' + s.games : '';
+    D.getElementById('hxKpis').innerHTML =
+      kpi(fs.first.winrate == null ? '—' : fs.first.winrate + '<small>%</small>', 'violet', 'Winrate premier', cnt(fs.first)) +
+      kpi(fs.second.winrate == null ? '—' : fs.second.winrate + '<small>%</small>', 'violet', 'Winrate second', cnt(fs.second)) +
+      kpi(g.decided ? streak + (sign ? ' V' : ' D') : '—', sign ? 'green' : 'red', 'Série en cours') +
+      kpi(avgT + (tc ? '<small> t</small>' : ''), '', 'Durée moyenne');
+  }
+
+  // ---------- Tendance ----------
+  function renderTrend() {
+    const pts = (_A ? _A.trend : []).map(p => p.winrate), svg = D.getElementById('hxTrendSvg'), leg = D.getElementById('hxTrendLeg');
+    if (!svg) return;
+    if (pts.length < 3) { svg.innerHTML = ''; if (leg) leg.textContent = 'Trop peu de parties décidées pour une tendance fiable (' + pts.length + ').'; return; }
+    const W = 400, H = 150, padL = 26, padR = 8, padT = 10, padB = 14, plotW = W - padL - padR, plotH = H - padT - padB;
+    const x = i => padL + i / (pts.length - 1) * plotW, y = v => padT + plotH - (v / 100) * plotH;
+    const line = pts.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+    const area = line + ' L' + x(pts.length - 1).toFixed(1) + ',' + (padT + plotH) + ' L' + padL + ',' + (padT + plotH) + ' Z';
+    const grid = [0, 50, 100].map(v => '<line x1="' + padL + '" y1="' + y(v).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y(v).toFixed(1) + '" stroke="#262c3d"/><text x="' + (padL - 4) + '" y="' + (y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="8.5" fill="#565b6e">' + v + '</text>').join('');
+    const accent = state.hero ? heroColor(state.hero) : DEFAULT_ACCENT, last = pts[pts.length - 1];
+    // accent réel (extrait) s'il a été appliqué sur :root
+    const real = (D.documentElement.style.getPropertyValue('--accent') || accent).trim() || accent;
+    svg.innerHTML = grid + '<line x1="' + padL + '" y1="' + y(50).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y(50).toFixed(1) + '" stroke="rgba(139,107,255,.4)" stroke-dasharray="3,4"/>' +
+      '<path d="' + area + '" fill="' + hexA(real[0] === '#' ? real : accent, .16) + '" stroke="none"/>' +
+      '<path d="' + line + '" fill="none" stroke="' + (real[0] === '#' ? real : accent) + '" stroke-width="2"/>' +
+      '<circle cx="' + x(pts.length - 1).toFixed(1) + '" cy="' + y(last).toFixed(1) + '" r="3.5" fill="' + (real[0] === '#' ? real : accent) + '" stroke="#0a0d13" stroke-width="1.5"/>';
+    if (leg) leg.textContent = 'Winrate cumulé sur ' + pts.length + ' parties (ancien → récent) · actuel ' + Math.round(last) + '%';
+  }
+
+  // ---------- Matchups (best/worst + liste triée) ----------
+  function renderMatchups() {
+    const rows = _A.byMatchup.filter(m => m.hero !== '(inconnu)' && m.winrate != null).sort((a, b) => (b.winrate - a.winrate) || (b.decided - a.decided));
+    D.getElementById('hxMuScope').textContent = state.hero ? ('· en ' + state.hero) : '· tous héros';
+    const host = D.getElementById('hxMuBody');
+    if (!rows.length) { host.innerHTML = '<div class="empty">Aucun matchup.</div>'; return; }
+    const best = (_A.bestMatchups || [])[0], worst = (_A.worstMatchups || [])[0];
+    const hl = (r, kind) => '<div class="hl ' + kind + '">' + avatarHTML(r.hero, 'mu-av') +
+      '<div class="info"><div class="htag">' + (kind === 'best' ? '✅ Meilleur' : '⚠️ Pire') + '</div><div class="hnm">' + esc2(r.hero) + '</div></div>' +
+      '<div class="hrt"><div class="hpc">' + r.winrate + '%</div><div class="hvl">' + r.wins + '/' + r.decided + '</div></div></div>';
+    const highlight = (best && worst && best.hero !== worst.hero) ? '<div class="muhl">' + hl(best, 'best') + hl(worst, 'worst') + '</div>' : '';
+    host.innerHTML = highlight + rows.map(r =>
+      '<div class="mu-row' + (r.decided < 2 ? ' mu-low' : '') + '">' + avatarHTML(r.hero, 'mu-av') +
+      '<div class="mu-nm">' + esc2(r.hero) + '</div><div class="mu-track"><div class="fill" style="width:' + r.winrate + '%"></div><div class="mid"></div></div>' +
+      '<div class="mu-pc ' + wrCls(r.winrate) + '">' + r.winrate + '%</div><div class="mu-vl">' + r.wins + '/' + r.decided + '</div></div>').join('');
+    hydrateBg(host);
+  }
+
+  // ---------- Cartes ----------
+  function renderCardsWL() {
+    D.getElementById('hxCwlScope').textContent = state.hero ? ('· en ' + state.hero) : '· tous héros';
+    const list = (_A.cardWinLoss || []).slice();
+    const host = D.getElementById('hxCwlBody');
+    if (!list.length) { host.innerHTML = '<div class="empty">Pas assez de données de cartes (nécessite les stats officielles Talishar).</div>'; return; }
+    const top = list.slice(0, 6), bottom = list.slice(-4).filter(c => top.indexOf(c) < 0), show = top.concat(bottom);
+    host.innerHTML = show.map(c => {
+      const d = c.winrate - 50, pos = d >= 0, segW = Math.min(50, Math.abs(d) / 50 * 50);
+      return '<div class="dv"><div class="dv-nm">' + esc2(c.name) + '</div>' +
+        '<div class="dv-track"><div class="mid"></div><div class="dv-seg ' + (pos ? 'pos' : 'neg') + '" style="width:' + segW + '%"></div></div>' +
+        '<div class="dv-pc ' + (pos ? 'good' : 'bad') + '">' + c.winrate + '%</div><div class="dv-vl">' + c.gamesWon + 'V·' + c.gamesLost + 'D</div></div>';
+    }).join('') + '<div class="note">Winrate des parties où la carte a été jouée (min. ' + _A.cwlMin + ' partie' + (_A.cwlMin > 1 ? 's' : '') + '). À lire avec prudence sur de faibles échantillons.</div>';
+  }
   const pct1 = v => Math.round(v * 10) / 10 + '%';
-  function fmtCardCell(col, c) {
+  function fmtCell(col, c) {
     const raw = c[col.key] || 0;
-    if (col.count || _cardMode === 'total') return raw ? String(raw) : MUTED;   // compte brut
-    if (_cardMode === 'pergame') {                                              // moyenne / partie
-      const v = _cardTotalGames ? raw / _cardTotalGames : 0;
-      return v ? String(Math.round(v * 100) / 100) : MUTED;
-    }
-    // Mode % (les zéros restent « · » comme dans les autres modes).
-    if (col.key === 'timesHit') {                                               // taux de coups portés
-      const played = c.played || 0;
-      return (played && raw) ? pct1(raw / played * 100) : MUTED;
-    }
-    const usage = (c.played || 0) + (c.blocked || 0) + (c.pitched || 0);        // répartition d'usage
+    if (col.count || state.cardMode === 'total') return raw ? String(raw) : MUTED;
+    if (state.cardMode === 'pergame') { const tg = _A.global.games || 0, v = tg ? raw / tg : 0; return v ? String(Math.round(v * 100) / 100) : MUTED; }
+    if (col.key === 'timesHit') { const p = c.played || 0; return (p && raw) ? pct1(raw / p * 100) : MUTED; }
+    const usage = (c.played || 0) + (c.blocked || 0) + (c.pitched || 0);
     return (usage && raw) ? pct1(raw / usage * 100) : MUTED;
   }
-
-  function renderCardPerf(agg) {
-    const host = $('#dashCards');
-    if (!host) return;
-    _cardPerfAll = agg.cardPerf.filter(c => c.played || c.blocked || c.timesHit);
-    _cardTotalGames = agg.global.games || 0;
-    if (!_cardPerfAll.length) { host.innerHTML = '<div class="board-empty" style="padding:10px 16px">Aucune stat de carte agrégée (nécessite les stats officielles Talishar).</div>'; return; }
-    host.innerHTML =
-      '<div class="cards-controls">' +
-        `<input type="search" id="cardSearch" class="cards-search" placeholder="Rechercher une carte…" value="${esc(_cardSearch)}">` +
-        '<select id="cardMode" class="cards-mini" title="Affichage des valeurs">' +
-          '<option value="total">Total</option><option value="pergame">Par partie</option><option value="pct">%</option></select>' +
-        '<select id="cardCap" class="cards-mini" title="Cartes affichées">' +
-          '<option value="20">Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="0">Tout</option></select>' +
-        '<span class="cards-count" id="cardCount"></span>' +
-      '</div>' +
-      '<div id="cardTableWrap"></div>';
-    const search = $('#cardSearch'), modeSel = $('#cardMode'), capSel = $('#cardCap');
-    if (modeSel) modeSel.value = _cardMode;
-    if (capSel) capSel.value = String(_cardCap);
-    // Taper ne re-render QUE la table (préserve le focus/curseur de la recherche).
-    if (search) search.addEventListener('input', () => { _cardSearch = search.value; renderCardTable(); });
-    if (modeSel) modeSel.addEventListener('change', () => { _cardMode = modeSel.value; renderCardTable(); });
-    if (capSel) capSel.addEventListener('change', () => { _cardCap = Number(capSel.value) || 0; renderCardTable(); });
-    renderCardTable();
-  }
-
-  function renderCardTable() {
-    const wrap = $('#cardTableWrap');
-    if (!wrap) return;
-    const q = norm(_cardSearch);
-    const filtered = q ? _cardPerfAll.filter(c => norm(c.name).indexOf(q) >= 0) : _cardPerfAll;
-    const sorted = filtered.slice().sort((a, b) => {
-      if (_cardSort.key === 'name') return String(a.name).localeCompare(String(b.name));
-      return (a[_cardSort.key] || 0) - (b[_cardSort.key] || 0);
-    });
-    if (_cardSort.dir === 'desc') sorted.reverse();
-    const shown = _cardCap > 0 ? sorted.slice(0, _cardCap) : sorted;
-
-    const count = $('#cardCount');
-    if (count) count.textContent = filtered.length === _cardPerfAll.length
-      ? _cardPerfAll.length + ' cartes'
-      : filtered.length + ' / ' + _cardPerfAll.length + ' cartes';
-
-    if (!shown.length) {
-      wrap.innerHTML = `<div class="board-empty" style="padding:10px 16px">Aucune carte ne correspond à « ${esc(_cardSearch)} ».</div>`;
-      return;
-    }
+  function renderCardPerf() {
+    const total = (_A.cardPerf || []).filter(c => c.played || c.blocked || c.timesHit);
+    const qn = norm(state.cardQ);
+    const filtered = qn ? total.filter(c => norm(c.name).indexOf(qn) >= 0) : total;
+    const sorted = filtered.slice().sort((a, b) => state.cardSort.key === 'name' ? String(a.name).localeCompare(String(b.name)) : (a[state.cardSort.key] || 0) - (b[state.cardSort.key] || 0));
+    if (state.cardSort.dir === 'desc') sorted.reverse();
+    const shown = state.cardCap > 0 ? sorted.slice(0, state.cardCap) : sorted;
+    const cntEl = D.getElementById('hxCardCount');
+    if (cntEl) cntEl.textContent = filtered.length === total.length ? total.length + ' cartes' : filtered.length + ' / ' + total.length + ' cartes';
+    const host = D.getElementById('hxCardTbl');
+    if (!total.length) { host.innerHTML = '<div class="empty">Aucune stat de carte agrégée (nécessite les stats officielles Talishar).</div>'; return; }
+    if (!shown.length) { host.innerHTML = '<div class="empty">Aucune carte ne correspond.</div>'; return; }
     const head = CARD_COLS.map(col => {
-      const arrow = _cardSort.key === col.key ? (_cardSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
-      const tip = col.tip ? ` title="${esc(col.tip)}"` : '';
-      return `<th class="sortable" data-key="${col.key}"${tip}>${esc(col.label)}${arrow}</th>`;
+      const arrow = state.cardSort.key === col.key ? (state.cardSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
+      return '<th class="sortable" data-key="' + col.key + '"' + (col.tip ? ' title="' + esc2(col.tip) + '"' : '') + '>' + esc2(col.label) + arrow + '</th>';
     }).join('');
-    const body = shown.map(c => '<tr>' + CARD_COLS.map(col => {
-      if (col.key === 'name') return `<td>${esc(c.name)}</td>`;
-      const cls = col.hit && c.timesHit ? ' class="hit"' : '';
-      return `<td${cls}>${fmtCardCell(col, c)}</td>`;
-    }).join('') + '</tr>').join('');
-    const note = _cardMode === 'pct'
-      ? `<div class="cwl-note">Par ligne : <b>Jouée + Défense + Pitch = 100 %</b> (à quoi sert la carte). <b>Coups</b> = taux de coups portés (touché ÷ jouée).</div>`
-      : '';
-    wrap.innerHTML = `<div class="table-scroll"><table class="off-table"><tr>${head}</tr>${body}</table></div>` + note;
-
-    // Tri au clic sur un en-tête (même colonne → inverse le sens).
-    wrap.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', () => {
-      const key = th.getAttribute('data-key');
-      if (_cardSort.key === key) _cardSort.dir = _cardSort.dir === 'desc' ? 'asc' : 'desc';
-      else { _cardSort.key = key; _cardSort.dir = key === 'name' ? 'asc' : 'desc'; }
-      renderCardTable();
-    }));
+    const body = shown.map(c => '<tr>' + CARD_COLS.map(col => col.key === 'name' ? '<td>' + esc2(c.name) + '</td>' : '<td' + (col.hit && c.timesHit ? ' class="hit"' : '') + '>' + fmtCell(col, c) + '</td>').join('') + '</tr>').join('');
+    const note = state.cardMode === 'pct' ? '<div class="note">Par ligne : <b>Jouée + Défense + Pitch ≈ 100 %</b> (à quoi sert la carte). <b>Coups</b> = taux de coups portés (touché ÷ jouée).</div>' : '';
+    host.innerHTML = '<table class="tbl"><tr>' + head + '</tr>' + body + '</table>' + note;
   }
+
+  // ---------- Historique ----------
+  function verdictCls(o) { return o == null ? 'pending' : (o ? 'win' : 'loss'); }
+  function verdictLbl(o) { return o == null ? 'En cours' : (o ? 'Victoire' : 'Défaite'); }
+  function gcardHTML(e) {
+    const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
+    const sub = [rec.format, fmtDate(dateOf(rec)), turnsOf(rec) + ' t', firstPlayerOf(rec) === false ? '2e' : (firstPlayerOf(rec) ? 'init.' : null)].filter(Boolean).concat(isVsAI(rec) ? ['🤖'] : []).join(' · ');
+    return '<div class="gcard ' + cls + '" data-id="' + esc2(e.gameId) + '"><div class="duo">' + avatarHTML(me, 'mini') + avatarHTML(op, 'mini opp') + '</div>' +
+      '<div class="body"><div class="mu"><span class="me">' + esc2(me) + '</span><span class="vs">vs</span><span>' + esc2(op) + '</span></div>' +
+      '<div class="gsub">' + esc2(sub) + '</div></div><div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
+      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
+  }
+  function crowHTML(e) {
+    const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
+    return '<div class="crow ' + cls + '" data-id="' + esc2(e.gameId) + '"><span class="cdot"></span>' +
+      '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + '</span>' +
+      '<span class="cmeta">' + fmtDate(dateOf(rec)) + ' · ' + turnsOf(rec) + 't</span>' +
+      '<span class="cv">' + (o == null ? '·' : (o ? 'V' : 'D')) + '</span>' +
+      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
+  }
+  function histList() {
+    const qn = norm(state.q);
+    return _A.kept.slice().sort((a, b) => (Date.parse(dateOf(b.record) || '') || 0) - (Date.parse(dateOf(a.record) || '') || 0)).filter(e => {
+      const o = outcome(e.record);
+      if (state.res === 'win' && o !== true) return false;
+      if (state.res === 'loss' && o !== false) return false;
+      if (qn) { const hay = norm([myHeroOf(e.record), oppHeroOf(e.record), e.record.format].filter(Boolean).join(' ')); if (hay.indexOf(qn) < 0) return false; }
+      return true;
+    });
+  }
+  function renderHistory() {
+    const list = D.getElementById('hxList'), gs = histList();
+    list.className = state.histView === 'compact' ? 'compact' : 'grouped';
+    const w = gs.filter(e => outcome(e.record) === true).length, l = gs.filter(e => outcome(e.record) === false).length, ong = gs.filter(e => outcome(e.record) == null).length;
+    D.getElementById('hxMeta').textContent = gs.length + ' partie' + (gs.length > 1 ? 's' : '') + (gs.length ? '  ·  ' + w + 'V / ' + l + 'D' + (ong ? ' · ' + ong + ' en cours' : '') : '');
+    const hc = D.getElementById('hxHistCount'); if (hc) hc.textContent = '(' + _A.kept.length + ')';
+    if (!gs.length) { list.innerHTML = '<div class="empty">Aucune partie ne correspond.</div>'; return; }
+    if (state.histView === 'compact') {
+      list.innerHTML = gs.map(crowHTML).join('');
+    } else {
+      const grp = {}, order = [];
+      gs.forEach(e => { const k = new Date(dateOf(e.record)).toDateString(); if (!grp[k]) { grp[k] = []; order.push(k); } grp[k].push(e); });
+      list.innerHTML = order.map(k => { const a = grp[k], ww = a.filter(e => outcome(e.record) === true).length, ll = a.filter(e => outcome(e.record) === false).length;
+        return '<div class="daygroup"><div class="dayhead"><span>' + esc2(fmtDay(dateOf(a[0].record))) + '</span><span>' + ww + 'V · ' + ll + 'D</span></div>' + a.map(gcardHTML).join('') + '</div>'; }).join('');
+    }
+    hydrateBg(list);
+  }
+
+  // ---------- Facettes / synchro contrôles ----------
+  function updateOppFacets() {
+    const sel = D.getElementById('hxOpp'); if (!sel) return;
+    const set = new Set();
+    _entries.forEach(e => { if ((!state.hero || myHeroOf(e.record) === state.hero) && (state.includeAI || !isVsAI(e.record))) { const o = oppHeroOf(e.record); if (o) set.add(o); } });
+    const opps = Array.from(set).sort();
+    if (state.opp && opps.indexOf(state.opp) < 0) state.opp = '';
+    sel.innerHTML = '<option value="">Tous adversaires</option>' + opps.map(o => '<option value="' + esc2(o) + '">' + esc2(o) + '</option>').join('');
+    sel.value = state.opp;
+  }
+  function updateFormatFacets() {
+    const sel = D.getElementById('hxFormat'); if (!sel) return;
+    const fmts = _L.facets.formats;
+    sel.innerHTML = '<option value="">Tous formats</option>' + fmts.map(f => '<option value="' + esc2(f) + '">' + esc2(f) + '</option>').join('');
+    sel.value = state.format;
+  }
+  function syncFilters() {
+    const ff = D.getElementById('hxFormat'); if (ff) { ff.value = state.format; ff.parentElement.classList.toggle('active', !!state.format); }
+    const fo = D.getElementById('hxOpp'); if (fo) fo.parentElement.classList.toggle('active', !!state.opp);
+    D.getElementById('hxPeriod').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x.dataset.p === state.period));
+    const ai = D.getElementById('hxAI'); if (ai) { ai.setAttribute('aria-pressed', state.includeAI); ai.textContent = '🤖 IA ' + (state.includeAI ? 'incluse' : 'exclue'); }
+    const active = !!state.format || !!state.opp || state.period !== 'all' || state.includeAI;
+    const r = D.getElementById('hxReset'); if (r) r.hidden = !active;
+  }
+
+  // ---------- Orchestration ----------
+  function renderStats() { renderId(); renderTrend(); renderMatchups(); renderCardsWL(); renderCardPerf(); }
+  function renderAll() {
+    _L = lifeAgg();
+    const heroes = _L.byMyHero.filter(m => m.hero !== '(inconnu)' && m.games > 0).map(m => m.hero);
+    if (state.hero && heroes.indexOf(state.hero) < 0) state.hero = null;
+    _A = statsAgg();
+    themeHero(); updateFormatFacets(); updateOppFacets(); syncFilters();
+    renderCarousel(); renderStats(); renderHistory();
+  }
+
+  // ---------- Câblage (une seule fois) ----------
+  function wire(host) {
+    host.querySelector('#hxTabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      state.tab = b.dataset.tab; host.querySelector('#hxTabs').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+      host.querySelector('#hxPanelStats').classList.toggle('active', state.tab === 'stats');
+      host.querySelector('#hxPanelHist').classList.toggle('active', state.tab === 'hist'); window.scrollTo(0, 0);
+    }));
+    host.querySelector('#hxSubstat').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      state.sub = b.dataset.sub; host.querySelector('#hxSubstat').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+      host.querySelector('#hxSubOverview').classList.toggle('active', state.sub === 'overview');
+      host.querySelector('#hxSubMatchups').classList.toggle('active', state.sub === 'matchups');
+      host.querySelector('#hxSubCards').classList.toggle('active', state.sub === 'cards');
+    }));
+    host.querySelector('#hxCaro').addEventListener('click', e => {
+      const c = e.target.closest('.hcard'); if (!c) return;
+      const k = c.dataset.key; state.hero = (k === '__all__') ? null : (state.hero === k ? null : k);
+      state.res = 'all'; renderAll();
+    });
+    host.querySelector('#hxFormat').addEventListener('change', e => { state.format = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
+    host.querySelector('#hxOpp').addEventListener('change', e => { state.opp = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
+    host.querySelector('#hxPeriod').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.period = b.dataset.p; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); }));
+    host.querySelector('#hxAI').addEventListener('click', () => { state.includeAI = !state.includeAI; renderAll(); });
+    host.querySelector('#hxReset').addEventListener('click', () => { state.format = ''; state.opp = ''; state.period = 'all'; state.includeAI = false; renderAll(); });
+    host.querySelector('#hxCardSearch').addEventListener('input', e => { state.cardQ = e.target.value; renderCardPerf(); });
+    host.querySelector('#hxCardMode').addEventListener('change', e => { state.cardMode = e.target.value; renderCardPerf(); });
+    host.querySelector('#hxCardCap').addEventListener('change', e => { state.cardCap = Number(e.target.value) || 0; renderCardPerf(); });
+    host.querySelector('#hxCardTbl').addEventListener('click', e => {
+      const th = e.target.closest('th.sortable'); if (!th) return; const k = th.dataset.key;
+      if (state.cardSort.key === k) state.cardSort.dir = state.cardSort.dir === 'desc' ? 'asc' : 'desc';
+      else { state.cardSort.key = k; state.cardSort.dir = k === 'name' ? 'asc' : 'desc'; }
+      renderCardPerf();
+    });
+    host.querySelector('#hxHistView').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.histView = b.dataset.hv; host.querySelector('#hxHistView').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
+    host.querySelector('#hxRes').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.res = b.dataset.res; host.querySelector('#hxRes').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
+    host.querySelector('#hxSearch').addEventListener('input', e => { state.q = e.target.value; renderHistory(); });
+    host.querySelector('#hxList').addEventListener('click', e => {
+      const del = e.target.closest('[data-del]');
+      if (del) { e.stopPropagation(); if (_onDelete) _onDelete(del.dataset.del); return; }
+      const item = e.target.closest('[data-id]');
+      if (item) { const en = _entries.find(x => String(x.gameId) === item.dataset.id); if (en && _onOpen) _onOpen(en); }
+    });
+  }
+
+  function mount(opts) {
+    _entries = (opts && opts.entries) || [];
+    _onOpen = (opts && opts.onOpen) || null;
+    _onDelete = (opts && opts.onDelete) || null;
+    const host = D.getElementById('dashboardBody');
+    if (!host) return;
+    if (!_built) { buildSkeleton(host); wire(host); ensureToast(); _built = true; }
+    renderAll();
+  }
+  function refresh() { if (_built) renderAll(); }
 
   // Exports : cœur d'agrégation (Node + navigateur) + API de rendu (navigateur).
   root.Dashboard = { aggregate, outcome, oppHeroOf, dateOf, mount, refresh };
