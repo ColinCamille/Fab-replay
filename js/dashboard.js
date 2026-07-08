@@ -263,7 +263,8 @@
       const h = el.getAttribute('data-hero-bg');
       if (!h || h === '(inconnu)' || el._hy) return;
       el._hy = 1;
-      root.CardImages.resolveCardImage(h).then(url => { if (url) { el.style.backgroundImage = 'url("' + url + '")'; el.classList.add('has-img'); } });
+      const resolve = root.CardImages.resolveHeroCardImage || root.CardImages.resolveCardImage;
+      resolve(h).then(url => { if (url) { el.style.backgroundImage = 'url("' + url + '")'; el.classList.add('has-img'); } });
     });
   }
 

@@ -36,6 +36,28 @@
     return null;
   }
 
+  // Cherche l'image d'une version « Marvel » (traitement full-art premium) :
+  // renvoie l'URL d'image d'un objet (impression/variante) dont une clé ou une
+  // valeur mentionne « marvel ». Balaye récursivement listes et objets imbriqués.
+  function findMarvelImageUrl(obj, depth) {
+    depth = depth || 0;
+    if (!obj || depth > 6) return null;
+    if (Array.isArray(obj)) {
+      for (const it of obj) { const r = findMarvelImageUrl(it, depth + 1); if (r) return r; }
+      return null;
+    }
+    if (typeof obj === 'object') {
+      const mentionsMarvel = Object.keys(obj).some(k => {
+        if (/marvel/i.test(k)) return true;
+        const v = obj[k];
+        return typeof v === 'string' && /marvel/i.test(v);
+      });
+      if (mentionsMarvel) { const img = findImageUrl(obj); if (img) return img; }
+      for (const k of Object.keys(obj)) { const r = findMarvelImageUrl(obj[k], depth + 1); if (r) return r; }
+    }
+    return null;
+  }
+
   const EQUIPMENT_RE = /\bequipment\b|\bhead\b|\bchest\b|\barms?\b|\blegs?\b|\boff-?hand\b|\bweapon\b/i;
   function findCardTypeInfo(obj, depth) {
     depth = depth || 0;
@@ -81,6 +103,27 @@
     }
   }
   async function resolveCardImage(name) { return (await resolveCardMeta(name)).image; }
+
+  // Image de héros pour le carrousel/avatars : privilégie la version « Marvel »
+  // (full-art) si l'API en renvoie une, sinon l'illustration standard. Cache dédié.
+  async function resolveHeroCardImage(name) {
+    if (!name) return null;
+    const key = 'M::' + name;
+    if (cardMetaCache[key]) return cardMetaCache[key].image;
+    try {
+      const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(name) + '&limit=8');
+      if (!res.ok) throw new Error('http ' + res.status);
+      const json = await res.json();
+      const list = json.data || json.cards || json.results || [];
+      const best = list.find(c => (c.name || '').toLowerCase() === name.toLowerCase()) || list[0] || null;
+      const image = findMarvelImageUrl(list) || (best ? findImageUrl(best) : null);
+      cardMetaCache[key] = { image: image || null };
+      saveMetaCache();
+      return image || null;
+    } catch (e) {
+      return resolveCardImage(name);   // repli : illustration standard
+    }
+  }
 
   // ============================================================
   // Couleur d'accent par héros (pour le theming du tableau de bord)
@@ -219,5 +262,5 @@
     return color;
   }
 
-  root.CardImages = { resolveCardMeta, resolveCardImage, findImageUrl, findCardTypeInfo, resolveHeroColor, heroColorSync, lookupHeroColor, fallbackColor };
+  root.CardImages = { resolveCardMeta, resolveCardImage, resolveHeroCardImage, findImageUrl, findMarvelImageUrl, findCardTypeInfo, resolveHeroColor, heroColorSync, lookupHeroColor, fallbackColor };
 })(typeof self !== 'undefined' ? self : this);
