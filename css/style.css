@@ -147,7 +147,7 @@ header{
   font-family:'Inter',sans-serif;
 }
 .replay-tab-btn:hover{border-color:var(--gold-dim)}
-.replay-tab-btn.active{border-color:var(--gold-dim);color:var(--gold);background:var(--panel-2)}
+.replay-tab-btn.active{border-color:var(--accent-dim);color:var(--accent);background:var(--panel-2)}
 .replay-tab{display:none}
 .replay-tab.active{display:block}
 
@@ -183,7 +183,7 @@ header{
 }
 .curve-readout .who{display:flex;align-items:center;gap:5px}
 .curve-readout .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.curve-readout .dot.me{background:var(--gold)}
+.curve-readout .dot.me{background:var(--accent)}
 .curve-readout .dot.opp{background:var(--violet)}
 .curve-readout .val{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--text)}
 .curve-readout .turnlbl{color:var(--text-faint);font-size:.68rem}
@@ -206,7 +206,7 @@ header{
 }
 .link.me .ring{border-color:var(--gold-dim)}
 .link.opp .ring{border-color:#4a3d7a}
-.link.active .ring{border-color:var(--gold); background:var(--gold); color:#141414; box-shadow:0 0 0 4px rgba(201,162,39,.15)}
+.link.active .ring{border-color:var(--accent); background:var(--accent); color:#141414; box-shadow:0 0 0 4px rgba(var(--accent-rgb),.15)}
 .link .lbl{font-size:.6rem;color:var(--text-faint);margin-top:4px;max-width:64px;text-align:center;white-space:normal;line-height:1.2}
 .link::before{
   content:''; position:absolute; top:23px; left:-50%; width:100%; height:2px;
@@ -410,11 +410,11 @@ footer a{color:var(--text-dim)}
   position:relative;
 }
 .hero-avatar img{width:100%;height:100%;object-fit:cover;object-position:top center}
-.match-side.me .hero-avatar{border-color:var(--gold-dim)}
+.match-side.me .hero-avatar{border-color:var(--accent-dim)}
 .match-side.opp .hero-avatar{border-color:#4a3d7a}
 .hero-meta{min-width:0;display:flex;flex-direction:column;gap:2px}
 .hero-meta .hname{font-family:'Cinzel',serif;font-size:1.05rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.match-side.me .hname{color:var(--gold)}
+.match-side.me .hname{color:var(--accent)}
 .match-side.opp .hname{color:var(--violet)}
 .hero-meta .pname{font-size:.7rem;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hero-meta .plife{font-family:'JetBrains Mono',monospace;font-size:.92rem;font-weight:700;color:var(--text)}

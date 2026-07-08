@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=43">
+<link rel="stylesheet" href="css/style.css?v=44">
 </head>
 <body>
 
@@ -110,12 +110,12 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=43"></script>
-<script src="js/images.js?v=43"></script>
-<script src="js/db.js?v=43"></script>
-<script src="js/sync.js?v=43"></script>
-<script src="js/replay.js?v=43"></script>
-<script src="js/dashboard.js?v=43"></script>
+<script src="talishar-parser.js?v=44"></script>
+<script src="js/images.js?v=44"></script>
+<script src="js/db.js?v=44"></script>
+<script src="js/sync.js?v=44"></script>
+<script src="js/replay.js?v=44"></script>
+<script src="js/dashboard.js?v=44"></script>
 
 <script>
 // ============================================================
@@ -186,6 +186,7 @@
 
   $('#backToDash').addEventListener('click', () => {
     if (history.replaceState) history.replaceState(null, '', location.pathname + location.search);
+    if (window.Dashboard && window.Dashboard.restoreTheme) window.Dashboard.restoreTheme();
     showView('dashboard');
   });
 
