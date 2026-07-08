@@ -1686,6 +1686,25 @@ footer a{color:var(--text-dim)}
     return null;
   }
 
+  // Cherche l'image FULL ART : impression dont art_variations contient « FA »
+  // (c'est la face pleine-illustration des Marvel, ex. ROS254-MV_BACK.png).
+  function findFullArtImageUrl(obj, depth) {
+    depth = depth || 0;
+    if (!obj || depth > 6) return null;
+    if (Array.isArray(obj)) {
+      for (const it of obj) { const r = findFullArtImageUrl(it, depth + 1); if (r) return r; }
+      return null;
+    }
+    if (typeof obj === 'object') {
+      const av = obj.art_variations;
+      const isFA = Array.isArray(av) && av.some(v => /^fa$|full/i.test(String(v)));
+      const url = obj.image_url || obj.image || null;
+      if (isFA && typeof url === 'string') return url;
+      for (const k of Object.keys(obj)) { const r = findFullArtImageUrl(obj[k], depth + 1); if (r) return r; }
+    }
+    return null;
+  }
+
   // Cherche l'image de la version « Marvel » (full-art premium). Sur le CDN
   // fabmaster, ces impressions ont un nom de fichier suffixé « -MV » (ex.
   // ROS254-MV.png) ; on écarte les dos de carte (« _BACK »). Renvoie la 1re
@@ -1766,8 +1785,9 @@ footer a{color:var(--text-dim)}
       const json = await res.json();
       const list = json.data || json.cards || json.results || [];
       const best = list.find(c => (c.name || '').toLowerCase() === name.toLowerCase()) || list[0] || null;
-      // Marvel de la carte EXACTE (évite de piocher la Marvel d'un homonyme jeune/adulte).
-      const image = (best && findMarvelImageUrl(best)) || (best ? findImageUrl(best) : null);
+      // Priorité (carte EXACTE) : full art (FA, la vraie pleine illustration) →
+      // face Marvel standard → illustration normale.
+      const image = (best && (findFullArtImageUrl(best) || findMarvelImageUrl(best))) || (best ? findImageUrl(best) : null);
       cardMetaCache[key] = { image: image || null };
       saveMetaCache();
       return image || null;
@@ -1913,7 +1933,7 @@ footer a{color:var(--text-dim)}
     return color;
   }
 
-  root.CardImages = { resolveCardMeta, resolveCardImage, resolveHeroCardImage, findImageUrl, findMarvelImageUrl, findCardTypeInfo, resolveHeroColor, heroColorSync, lookupHeroColor, fallbackColor };
+  root.CardImages = { resolveCardMeta, resolveCardImage, resolveHeroCardImage, findImageUrl, findMarvelImageUrl, findFullArtImageUrl, findCardTypeInfo, resolveHeroColor, heroColorSync, lookupHeroColor, fallbackColor };
 })(typeof self !== 'undefined' ? self : this);
 
 </script>
