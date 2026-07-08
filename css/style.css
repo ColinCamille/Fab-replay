@@ -757,6 +757,8 @@ footer a{color:var(--text-dim)}
 #dashboardBody .dv-pc{width:42px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:700}
 #dashboardBody .dv-pc.good{color:var(--green)} #dashboardBody .dv-pc.bad{color:var(--red)}
 #dashboardBody .dv-vl{width:52px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.64rem;color:var(--text-faint)}
+#dashboardBody .dv.mu-low{opacity:.5}
+#dashboardBody .cards-controls .minlbl{font-size:.72rem;color:var(--text-dim);white-space:nowrap}
 
 /* table perf cartes */
 #dashboardBody .cards-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}

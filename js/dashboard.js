@@ -186,8 +186,9 @@
       return { name: c.name, gamesWon: c.gamesWon, gamesLost: c.gamesLost, decided: dec, winrate: winrate(c.gamesWon, dec) };
     }).filter(c => c.decided > 0);
     const cwlMin = cwlAll.some(c => c.decided >= 3) ? 3 : (cwlAll.some(c => c.decided >= 2) ? 2 : 1);
-    const cardWinLoss = cwlAll.filter(c => c.decided >= cwlMin)
-      .sort((a, b) => b.winrate - a.winrate || b.decided - a.decided || a.name.localeCompare(b.name));
+    // Liste COMPLÈTE triée (le filtrage par seuil est laissé à l'UI).
+    const cardWinLossAll = cwlAll.slice().sort((a, b) => b.winrate - a.winrate || b.decided - a.decided || a.name.localeCompare(b.name));
+    const cardWinLoss = cardWinLossAll.filter(c => c.decided >= cwlMin);
 
     // Moyennes offensives : moyenne des moyennes/totaux Talishar sur les
     // parties qui ont un bloc de stats officielles.
@@ -213,7 +214,7 @@
       facets: { formats: Array.from(formats).sort(), myHeroes: Array.from(myHeroes).sort(), oppHeroes: Array.from(oppHeroes).sort() },
       kept,                                   // ordre chrono (ancien → récent)
       global: { games: kept.length, decided, wins, losses: decided - wins, winrate: winrate(wins, decided) },
-      byMatchup, byMyHero, firstSecond, bestMatchups, worstMatchups, cardWinLoss, cwlMin, trend, cardPerf, offAverages
+      byMatchup, byMyHero, firstSecond, bestMatchups, worstMatchups, cardWinLoss, cardWinLossAll, cwlMin, trend, cardPerf, offAverages
     };
   }
 
@@ -228,7 +229,7 @@
   const state = {
     hero: null, format: '', opp: '', period: 'all', includeAI: false,
     tab: 'stats', sub: 'overview', histView: 'detailed', res: 'all', q: '',
-    cardQ: '', cardMode: 'total', cardCap: 20, cardSort: { key: 'played', dir: 'desc' }
+    cardQ: '', cardMode: 'total', cardCap: 20, cardSort: { key: 'played', dir: 'desc' }, cwlMin: 1
   };
   const CARD_COLS = [
     { key: 'name', label: 'Carte' },
@@ -323,7 +324,12 @@
         '<div class="subpanel" id="hxSubMatchups">' +
           '<div class="card"><h2>Winrate par matchup <span class="scope" id="hxMuScope"></span></h2><div class="cbody" id="hxMuBody"></div></div></div>' +
         '<div class="subpanel" id="hxSubCards">' +
-          '<div class="card"><h2>Cartes en victoire vs défaite <span class="scope" id="hxCwlScope"></span></h2><div class="cbody" id="hxCwlBody"></div></div>' +
+          '<div class="card"><h2>Cartes en victoire vs défaite <span class="scope" id="hxCwlScope"></span></h2><div class="cbody">' +
+            '<div class="cards-controls"><span class="minlbl">Afficher dès</span>' +
+              '<span class="fchip"><select id="hxCwlMin">' +
+                '<option value="1">1 partie</option><option value="2">2 parties</option><option value="3">3 parties</option><option value="5">5 parties</option><option value="10">10 parties</option>' +
+              '</select></span></div>' +
+            '<div id="hxCwlBody"></div></div></div>' +
           '<div class="card"><h2>Performance des cartes</h2><div class="cbody">' +
             '<div class="cards-controls">' +
               '<input class="search" id="hxCardSearch" type="search" placeholder="Filtrer une carte…">' +
@@ -476,16 +482,18 @@
 
   // ---------- Cartes ----------
   function renderCardsWL() {
-    const list = (_A.cardWinLoss || []).slice();   // déjà trié par winrate décroissant
-    D.getElementById('hxCwlScope').textContent = (state.hero ? ('· en ' + state.hero) : '· tous héros') + (list.length ? ' · ' + list.length + ' cartes' : '');
+    const all = _A.cardWinLossAll || [];
+    const list = all.filter(c => c.decided >= state.cwlMin);
+    D.getElementById('hxCwlScope').textContent = (state.hero ? ('· en ' + state.hero) : '· tous héros') + ' · ' + list.length + (list.length !== all.length ? ' / ' + all.length : '') + ' cartes';
     const host = D.getElementById('hxCwlBody');
-    if (!list.length) { host.innerHTML = '<div class="empty">Pas assez de données de cartes (nécessite les stats officielles Talishar).</div>'; return; }
+    if (!all.length) { host.innerHTML = '<div class="empty">Pas de données de cartes (nécessite les stats officielles Talishar).</div>'; return; }
+    if (!list.length) { host.innerHTML = '<div class="empty">Aucune carte avec au moins ' + state.cwlMin + ' partie(s). Baisse le seuil ci-dessus.</div>'; return; }
     host.innerHTML = list.map(c => {
       const d = c.winrate - 50, pos = d >= 0, segW = Math.min(50, Math.abs(d) / 50 * 50);
-      return '<div class="dv"><div class="dv-nm">' + esc2(c.name) + '</div>' +
+      return '<div class="dv' + (c.decided < 3 ? ' mu-low' : '') + '"><div class="dv-nm">' + esc2(c.name) + '</div>' +
         '<div class="dv-track"><div class="mid"></div><div class="dv-seg ' + (pos ? 'pos' : 'neg') + '" style="width:' + segW + '%"></div></div>' +
         '<div class="dv-pc ' + (pos ? 'good' : 'bad') + '">' + c.winrate + '%</div><div class="dv-vl">' + c.gamesWon + 'V·' + c.gamesLost + 'D</div></div>';
-    }).join('') + '<div class="note">Toutes les cartes jouées dans au moins ' + _A.cwlMin + ' partie' + (_A.cwlMin > 1 ? 's' : '') + ' décidée' + (_A.cwlMin > 1 ? 's' : '') + ', triées par winrate. À lire avec prudence sur de faibles échantillons.</div>';
+    }).join('') + '<div class="note">Winrate des parties où la carte a été jouée. Les faibles échantillons (&lt; 3 parties) sont grisés — ajuste le seuil ci-dessus.</div>';
   }
   const pct1 = v => Math.round(v * 10) / 10 + '%';
   function fmtCell(col, c) {
@@ -626,6 +634,7 @@
     host.querySelector('#hxCardSearch').addEventListener('input', e => { state.cardQ = e.target.value; renderCardPerf(); });
     host.querySelector('#hxCardMode').addEventListener('change', e => { state.cardMode = e.target.value; renderCardPerf(); });
     host.querySelector('#hxCardCap').addEventListener('change', e => { state.cardCap = Number(e.target.value) || 0; renderCardPerf(); });
+    host.querySelector('#hxCwlMin').addEventListener('change', e => { state.cwlMin = Number(e.target.value) || 1; renderCardsWL(); });
     host.querySelector('#hxCardTbl').addEventListener('click', e => {
       const th = e.target.closest('th.sortable'); if (!th) return; const k = th.dataset.key;
       if (state.cardSort.key === k) state.cardSort.dir = state.cardSort.dir === 'desc' ? 'asc' : 'desc';
