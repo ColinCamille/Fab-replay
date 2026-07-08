@@ -20,6 +20,12 @@
   const resolveCardMeta = (n) => root.CardImages.resolveCardMeta(n);
   // Portrait de héros : full-art Marvel si dispo (cohérent avec le carrousel du dashboard).
   const resolveHeroImage = (n) => (root.CardImages.resolveHeroCardImage || root.CardImages.resolveCardImage)(n);
+  // Couleur « moi » = accent du héros joué (posé sur :root par le dashboard),
+  // pour l'harmonie visuelle avec le tableau de bord. Repli sur l'or historique.
+  const accentColor = () => {
+    const a = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '').trim();
+    return a || '#c9a227';
+  };
 
   // ============================================================
   // ÉTAT
@@ -31,6 +37,7 @@
   let showTechnical = false;
   let maxLife = 40; // échelle de la courbe (déduit du record)
   let inited = false;
+  let _curveGeom = null; // géométrie des points de la courbe pour l'overlay HTML
 
   const $ = sel => document.querySelector(sel);
 
@@ -40,6 +47,26 @@
     $('#prevTurn').addEventListener('click', () => { if (currentTurnIndex > 0) { currentTurnIndex--; renderChainActive(); renderTurn(); } });
     $('#nextTurn').addEventListener('click', () => { if (currentTurnIndex < GAME.turns.length - 1) { currentTurnIndex++; renderChainActive(); renderTurn(); } });
     $('#detailToggle').addEventListener('change', e => { showTechnical = e.target.checked; renderTurn(); });
+
+    // Courbe de vie interactive : survol = repère + infobulle ; clic/tap = navigation au tour.
+    const holder = $('#curveHolder');
+    if (holder) {
+      const idxAt = clientX => {
+        if (!_curveGeom || !_curveGeom.length) return -1;
+        const rect = holder.getBoundingClientRect();
+        if (!rect.width) return -1;
+        const relPct = (clientX - rect.left) / rect.width * 100;
+        let best = 0, bd = 1e9;
+        _curveGeom.forEach((p, i) => { const d = Math.abs(p.leftPct - relPct); if (d < bd) { bd = d; best = i; } });
+        return best;
+      };
+      holder.addEventListener('pointermove', e => { const i = idxAt(e.clientX); if (i >= 0) positionCurveOverlay(i, true); });
+      holder.addEventListener('pointerleave', () => positionCurveOverlay(currentTurnIndex, false));
+      holder.addEventListener('pointerdown', e => {
+        const i = idxAt(e.clientX);
+        if (i >= 0 && i !== currentTurnIndex) { currentTurnIndex = i; renderChainActive(); renderTurn(); }
+      });
+    }
   }
 
   // Total de PV attendu selon le format (repli si les PV de départ ne sont pas
@@ -96,6 +123,7 @@
     const es = $('#replayEmpty'); if (es) es.style.display = 'none';
     $('#scoreboard').style.display = 'block';
     ARSENAL_BACKFILL = computeArsenalBackfill();
+    renderTopTitle();
     renderMatchBanner();
     renderCurve();
     renderChain();
@@ -183,10 +211,21 @@
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+  // Titre de la barre du haut : matchup « Ton héros vs Héros adverse ».
+  function renderTopTitle() {
+    const el = $('#replayMatchup');
+    if (!el) return;
+    const me = GAME.players.me, opp = GAME.players.opp;
+    const mine = (me && (me.hero || me.name)) || myName || '?';
+    const theirs = (opp && (opp.hero || opp.name)) || oppName || '?';
+    el.innerHTML = '<span class="me">' + escapeHtml(mine) + '</span>'
+      + '<span class="vs">vs</span>'
+      + '<span class="opp">' + escapeHtml(theirs) + '</span>';
+  }
+
   function renderCurve() {
     const svg = $('#curveSvg');
-    // Couleur « moi » = accent du héros joué (posé sur :root), pour l'harmonie avec le dashboard.
-    const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '').trim() || '#c9a227';
+    const accent = accentColor();
     const seriesMe = GAME.lifeSeries.me, seriesOpp = GAME.lifeSeries.opp;
     const n = GAME.turns.length;
     const W = 400, H = 132;
@@ -196,9 +235,6 @@
     const y = v => padTop + plotH - (Math.max(0, v) / maxLife) * plotH;
     const line = arr => arr.map((v, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
     const area = arr => line(arr) + ' L' + x(n - 1).toFixed(1) + ',' + y(0).toFixed(1) + ' L' + x(0).toFixed(1) + ',' + y(0).toFixed(1) + ' Z';
-    const dots = (arr, color) => arr.map((v, i) =>
-      `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${i === currentTurnIndex ? 3.2 : 1.8}" fill="${color}" ${i === currentTurnIndex ? 'stroke="#e9e6da" stroke-width="1"' : ''}/>`
-    ).join('');
 
     // ---- Axe Y : repères de vie (0, moitié, max) ----
     const yTicks = [0, Math.round(maxLife / 2), maxLife];
@@ -219,6 +255,9 @@
     const critY = y(10);
     const endMe = seriesMe[seriesMe.length - 1], endOpp = seriesOpp[seriesOpp.length - 1];
 
+    // Lignes + aires en SVG (le trait garde une épaisseur constante malgré
+    // l'étirement horizontal grâce à vector-effect). Les POINTS sont en overlay
+    // HTML (ronds, non déformés) — cf. positionCurveOverlay.
     svg.innerHTML = `
       <defs>
         <linearGradient id="gradMe" x1="0" y1="0" x2="0" y2="1">
@@ -238,22 +277,59 @@
       <path d="${area(seriesMe)}" fill="url(#gradMe)"/>
       <path d="${line(seriesOpp)}" fill="none" stroke="#8b6bff" stroke-width="2" opacity=".9" vector-effect="non-scaling-stroke"/>
       <path d="${line(seriesMe)}" fill="none" stroke="${accent}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
-      ${dots(seriesOpp, '#8b6bff')}
-      ${dots(seriesMe, accent)}
-      <line x1="${x(currentTurnIndex).toFixed(1)}" y1="${padTop - 6}" x2="${x(currentTurnIndex).toFixed(1)}" y2="${padTop + plotH}" stroke="#e9e6da" stroke-width="1" stroke-dasharray="2,3" opacity=".4"/>
       <text x="${(x(n - 1) - 2).toFixed(1)}" y="${(y(endMe) - 5).toFixed(1)}" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="10" font-weight="700" fill="${accent}">${endMe}</text>
       <text x="${(x(n - 1) - 2).toFixed(1)}" y="${(y(endOpp) + 12).toFixed(1)}" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="10" font-weight="700" fill="#8b6bff">${endOpp}</text>
     `;
 
+    // Géométrie des points en % (x) / % (y sur H) pour l'overlay HTML non déformé.
+    _curveGeom = seriesMe.map((v, i) => {
+      const t = GAME.turns[i];
+      return {
+        leftPct: x(i) / W * 100,
+        meTopPct: y(seriesMe[i]) / H * 100,
+        oppTopPct: y(seriesOpp[i]) / H * 100,
+        meV: seriesMe[i], oppV: seriesOpp[i],
+        label: (t.turnNumber === 0 && i === 0) ? 'Ouverture' : 'Tour ' + t.turnNumber
+      };
+    });
+    const dotMe = $('#curveDotMe');
+    if (dotMe) dotMe.style.background = accent;
+    positionCurveOverlay(currentTurnIndex, false);
+  }
+
+  // Positionne les points ronds (overlay HTML), le repère vertical et — si
+  // survol — l'infobulle, sur le tour d'index `idx`. Met aussi à jour le lecteur.
+  function positionCurveOverlay(idx, withTip) {
+    if (!_curveGeom || !_curveGeom.length) return;
+    idx = Math.max(0, Math.min(_curveGeom.length - 1, idx));
+    const p = _curveGeom[idx];
+    const dotMe = $('#curveDotMe'), dotOpp = $('#curveDotOpp'), guide = $('#curveGuide'), tip = $('#curveTip');
+    if (dotMe) { dotMe.style.left = p.leftPct + '%'; dotMe.style.top = p.meTopPct + '%'; dotMe.style.display = 'block'; }
+    if (dotOpp) { dotOpp.style.left = p.leftPct + '%'; dotOpp.style.top = p.oppTopPct + '%'; dotOpp.style.display = 'block'; }
+    if (guide) { guide.style.left = p.leftPct + '%'; guide.classList.toggle('show', !!withTip || idx === currentTurnIndex); }
+    if (tip) {
+      if (withTip) {
+        tip.style.left = p.leftPct + '%';
+        tip.style.top = Math.min(p.meTopPct, p.oppTopPct) + '%';
+        tip.innerHTML = '<div class="ct-turn">' + p.label + '</div>'
+          + '<div class="ct-row me">Toi <b>' + p.meV + '</b></div>'
+          + '<div class="ct-row opp">Adv <b>' + p.oppV + '</b></div>';
+        tip.classList.add('show');
+        tip.classList.toggle('flipL', p.leftPct > 74);
+      } else {
+        tip.classList.remove('show');
+      }
+    }
+
     // ---- Lecteur de valeurs pour le tour sélectionné ----
     const ro = $('#curveReadout');
-    const curMe = seriesMe[currentTurnIndex], curOpp = seriesOpp[currentTurnIndex];
-    const t = GAME.turns[currentTurnIndex];
-    const tlabel = (t.turnNumber === 0 && currentTurnIndex === 0) ? 'Ouverture' : 'Tour ' + t.turnNumber;
-    ro.innerHTML =
-      '<span class="turnlbl">' + tlabel + '</span>' +
-      '<span class="who"><span class="dot me"></span>Toi <span class="val">' + curMe + '</span></span>' +
-      '<span class="who"><span class="dot opp"></span>Adv <span class="val">' + curOpp + '</span></span>';
+    if (ro) {
+      const cur = _curveGeom[currentTurnIndex];
+      ro.innerHTML =
+        '<span class="turnlbl">' + cur.label + '</span>' +
+        '<span class="who"><span class="dot me"></span>Toi <span class="val">' + cur.meV + '</span></span>' +
+        '<span class="who"><span class="dot opp"></span>Adv <span class="val">' + cur.oppV + '</span></span>';
+    }
   }
 
   function renderChain() {
@@ -683,6 +759,7 @@
   function svgTempoBars(turns) {
     const rows = turns.filter(t => t.durationSec != null && t.turnNumber > 0);
     if (!rows.length) return null;
+    const accent = accentColor();
     const W = 400, H = 150, padL = 26, padR = 6, padTop = 12, padBot = 20;
     const plotW = W - padL - padR, plotH = H - padTop - padBot, n = rows.length;
     let max = 1; rows.forEach(t => { if (t.durationSec > max) max = t.durationSec; });
@@ -694,7 +771,7 @@
     [0, Math.round(max / 2), max].forEach(v => { svg += `<line x1="${padL}" y1="${y(v)}" x2="${W - padR}" y2="${y(v)}" stroke="#262c3d"/><text x="${padL - 3}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="8" fill="#565b6e">${fmt(v)}</text>`; });
     rows.forEach((t, i) => {
       const cx = padL + groupW * i + groupW / 2, x = cx - barW / 2;
-      const col = i === maxIdx ? '#e0555a' : (t.side === 'me' ? '#c9a227' : '#8b6bff');
+      const col = i === maxIdx ? '#e0555a' : (t.side === 'me' ? accent : '#8b6bff');
       svg += `<rect x="${x.toFixed(1)}" y="${y(t.durationSec).toFixed(1)}" width="${barW.toFixed(1)}" height="${(padTop + plotH - y(t.durationSec)).toFixed(1)}" fill="${col}" rx="1.5"/>`;
       svg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#565b6e">${t.turnNumber}</text>`;
     });
@@ -888,11 +965,12 @@
       html += '<div id="offCharts"></div>';
 
       // POINT 3 — tempo : durée de chaque tour (depuis les timestamps du log)
+      const accent = accentColor();
       const tempo = svgTempoBars(GAME.turns);
       if (tempo) {
         html += '<div class="off-chart"><h4>Tempo — durée de chaque tour</h4>' + tempo
           + '<div class="off-legend">'
-          + '<span><span class="dot" style="background:#c9a227"></span>Ton tour</span>'
+          + '<span><span class="dot" style="background:' + accent + '"></span>Ton tour</span>'
           + '<span><span class="dot" style="background:#8b6bff"></span>Tour adverse</span>'
           + '<span><span class="dot" style="background:#e0555a"></span>Le plus long</span></div>'
           + '<div class="off-note" style="margin-top:6px">Temps réel écoulé par tour (inclut les réactions de l\'adversaire).</div></div>';
@@ -903,7 +981,7 @@
       if (opp) {
         html += '<div class="off-chart"><h4>Toi vs adversaire</h4>' + cmpBars(off, opp)
           + '<div class="off-legend">'
-          + '<span><span class="dot" style="background:#c9a227"></span>Toi</span>'
+          + '<span><span class="dot" style="background:' + accent + '"></span>Toi</span>'
           + '<span><span class="dot" style="background:#8b6bff"></span>Adversaire</span></div></div>';
       }
 
@@ -918,12 +996,12 @@
         const turns = off.turns.map(t => t.turn);
         mount.appendChild(buildLineChart({
           title: 'Valeur par tour', turns, showAvg: true,
-          series: [{ label: 'Valeur', color: '#c9a227', values: off.turns.map(t => (t.threatened || 0) + (t.blocked || 0) + (t.prevented || 0) + (t.lifeGained || 0)) }]
+          series: [{ label: 'Valeur', color: accent, values: off.turns.map(t => (t.threatened || 0) + (t.blocked || 0) + (t.prevented || 0) + (t.lifeGained || 0)) }]
         }));
         mount.appendChild(buildLineChart({
           title: 'Échange de pression', turns, showAvg: false,
           series: [
-            { label: 'Menacé', color: '#c9a227', values: off.turns.map(t => t.threatened || 0) },
+            { label: 'Menacé', color: accent, values: off.turns.map(t => t.threatened || 0) },
             { label: 'Subi', color: '#e0555a', values: off.turns.map(t => t.taken || 0) }
           ]
         }));
