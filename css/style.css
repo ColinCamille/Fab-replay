@@ -61,6 +61,19 @@ header{
 .brand h1{font-size:1.3rem;color:var(--gold)}
 .brand span{color:var(--text-faint);font-size:.75rem}
 
+/* En-tête compact : marque + bouton d'import repliable (import surtout auto) */
+.brand-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand-row .brand{margin-bottom:0}
+.import-toggle{
+  flex-shrink:0;background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
+  padding:8px 14px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;
+  font-family:'Inter',sans-serif;white-space:nowrap;transition:.15s;
+}
+.import-toggle:hover{border-color:var(--gold-dim);color:var(--gold)}
+.import-toggle[aria-expanded="true"]{border-color:var(--gold-dim);color:var(--gold);background:var(--panel-2)}
+.import-panel{margin-top:14px}
+.import-panel[hidden]{display:none}
+
 .dropzone{
   border:1.5px dashed var(--line);
   border-radius:10px;

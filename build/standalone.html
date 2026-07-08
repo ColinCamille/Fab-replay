@@ -68,6 +68,19 @@ header{
 .brand h1{font-size:1.3rem;color:var(--gold)}
 .brand span{color:var(--text-faint);font-size:.75rem}
 
+/* En-tête compact : marque + bouton d'import repliable (import surtout auto) */
+.brand-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand-row .brand{margin-bottom:0}
+.import-toggle{
+  flex-shrink:0;background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
+  padding:8px 14px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;
+  font-family:'Inter',sans-serif;white-space:nowrap;transition:.15s;
+}
+.import-toggle:hover{border-color:var(--gold-dim);color:var(--gold)}
+.import-toggle[aria-expanded="true"]{border-color:var(--gold-dim);color:var(--gold);background:var(--panel-2)}
+.import-panel{margin-top:14px}
+.import-panel[hidden]{display:none}
+
 .dropzone{
   border:1.5px dashed var(--line);
   border-radius:10px;
@@ -824,13 +837,18 @@ footer a{color:var(--text-dim)}
 <body>
 
 <header>
-  <div class="brand"><h1>⛓ Chain Replay</h1><span>analyseur de parties Talishar · Flesh and Blood</span></div>
-  <div class="dropzone" id="dropzone">
-    <div>Dépose <strong>un ou plusieurs .txt</strong> de log ici, ou clique pour les choisir</div>
-    <input type="file" id="fileInput" accept=".txt" multiple>
+  <div class="brand-row">
+    <div class="brand"><h1>⛓ Chain Replay</h1><span>analyseur de parties Talishar · Flesh and Blood</span></div>
+    <button class="import-toggle" id="importToggle" aria-expanded="false" aria-controls="importPanel" title="Importer un log .txt à la main (les parties arrivent normalement toutes seules)">⤒ Importer un log</button>
   </div>
-  <textarea class="or-paste" id="pasteArea" placeholder="…ou colle directement le contenu d'un log ici (une partie)"></textarea>
-  <button class="analyze-btn" id="analyzeBtn" disabled>Importer</button>
+  <div class="import-panel" id="importPanel" hidden>
+    <div class="dropzone" id="dropzone">
+      <div>Dépose <strong>un ou plusieurs .txt</strong> de log ici, ou clique pour les choisir</div>
+      <input type="file" id="fileInput" accept=".txt" multiple>
+    </div>
+    <textarea class="or-paste" id="pasteArea" placeholder="…ou colle directement le contenu d'un log ici (une partie)"></textarea>
+    <button class="analyze-btn" id="analyzeBtn" disabled>Importer</button>
+  </div>
 </header>
 
 <div id="app">
@@ -3847,6 +3865,16 @@ footer a{color:var(--text-dim)}
 
   const $ = sel => document.querySelector(sel);
   const dropzone = $('#dropzone'), fileInput = $('#fileInput'), pasteArea = $('#pasteArea'), analyzeBtn = $('#analyzeBtn');
+  const importToggle = $('#importToggle'), importPanel = $('#importPanel');
+
+  // ---------- Zone d'import repliable (import auto la plupart du temps) ----------
+  function setImportOpen(open) {
+    importPanel.hidden = !open;
+    importToggle.setAttribute('aria-expanded', String(open));
+  }
+  importToggle.addEventListener('click', () => setImportOpen(importPanel.hidden));
+  // Un glisser-déposer sur l'en-tête déplie la zone pour accueillir le fichier.
+  document.querySelector('header').addEventListener('dragover', () => { if (importPanel.hidden) setImportOpen(true); });
 
   let stagedFiles = [];   // fichiers déposés/choisis, lus au moment de l'import
 
@@ -4033,6 +4061,7 @@ footer a{color:var(--text-dim)}
     fileInput.value = '';
     analyzeBtn.disabled = true;
     resetDropzoneLabel();
+    setImportOpen(false);   // replie la zone d'import après un import réussi
 
     await reloadDashboard();
 
