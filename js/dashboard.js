@@ -88,31 +88,49 @@
     let wins = 0, decided = 0;
     kept.forEach(e => { const o = outcome(e.record); if (o != null) { decided++; if (o) wins++; } });
 
-    // Par matchup (héros adverse)
-    const muMap = {};
-    kept.forEach(e => {
-      const hero = oppHeroOf(e.record) || '(inconnu)';
-      const o = outcome(e.record);
-      const m = muMap[hero] || (muMap[hero] = { hero, games: 0, wins: 0, decided: 0 });
-      m.games++;
-      if (o != null) { m.decided++; if (o) m.wins++; }
-    });
-    const byMatchup = Object.values(muMap)
-      .map(m => ({ hero: m.hero, games: m.games, wins: m.wins, losses: m.decided - m.wins, decided: m.decided, winrate: winrate(m.wins, m.decided) }))
-      .sort((a, b) => b.games - a.games || (b.winrate || 0) - (a.winrate || 0));
+    // Accumulateur héros → { games, wins, decided, first/second }, chaque entrée
+    // portant aussi le détail 1er vs 2e joueur (pour l'avantage d'initiative).
+    function heroBreakdown(heroPick) {
+      const map = {};
+      kept.forEach(e => {
+        const hero = heroPick(e.record) || '(inconnu)';
+        const o = outcome(e.record);
+        const fp = firstPlayerOf(e.record);
+        const m = map[hero] || (map[hero] = { hero, games: 0, wins: 0, decided: 0, first: { games: 0, wins: 0 }, second: { games: 0, wins: 0 } });
+        m.games++;
+        if (o != null) {
+          m.decided++; if (o) m.wins++;
+          if (fp != null) { const s = fp ? m.first : m.second; s.games++; if (o) s.wins++; }
+        }
+      });
+      return Object.values(map)
+        .map(m => ({
+          hero: m.hero, games: m.games, wins: m.wins, losses: m.decided - m.wins, decided: m.decided, winrate: winrate(m.wins, m.decided),
+          first: { games: m.first.games, wins: m.first.wins, winrate: winrate(m.first.wins, m.first.games) },
+          second: { games: m.second.games, wins: m.second.wins, winrate: winrate(m.second.wins, m.second.games) }
+        }))
+        .sort((a, b) => b.games - a.games || (b.winrate || 0) - (a.winrate || 0));
+    }
 
-    // Par héros joué (« tes decks »)
-    const mhMap = {};
-    kept.forEach(e => {
-      const hero = myHeroOf(e.record) || '(inconnu)';
-      const o = outcome(e.record);
-      const m = mhMap[hero] || (mhMap[hero] = { hero, games: 0, wins: 0, decided: 0 });
-      m.games++;
-      if (o != null) { m.decided++; if (o) m.wins++; }
-    });
-    const byMyHero = Object.values(mhMap)
-      .map(m => ({ hero: m.hero, games: m.games, wins: m.wins, losses: m.decided - m.wins, decided: m.decided, winrate: winrate(m.wins, m.decided) }))
-      .sort((a, b) => b.games - a.games || (b.winrate || 0) - (a.winrate || 0));
+    // Par matchup (héros adverse) et par héros joué (« tes decks »).
+    const byMatchup = heroBreakdown(oppHeroOf);
+    const byMyHero = heroBreakdown(myHeroOf);
+
+    // Meilleurs / pires matchups : classés par winrate, en excluant les héros
+    // inconnus et en exigeant un minimum de parties décidées pour éviter le
+    // bruit d'un 1-0 ou 0-1. Le seuil s'abaisse à 1 s'il n'y a pas assez de
+    // données, pour toujours montrer quelque chose d'utile.
+    const rankable0 = byMatchup.filter(m => m.hero !== '(inconnu)' && m.winrate != null);
+    const minGames = rankable0.some(m => m.decided >= 2) ? 2 : 1;
+    const rankable = rankable0.filter(m => m.decided >= minGames)
+      .sort((a, b) => b.winrate - a.winrate || b.decided - a.decided);
+    // On coupe le classement en deux moitiés disjointes : meilleurs en tête,
+    // pires en queue (jusqu'à 5 de chaque). Un éventuel matchup « médian »
+    // n'apparaît dans aucune des deux colonnes.
+    const bestN = Math.min(5, Math.ceil(rankable.length / 2));
+    const worstN = Math.min(5, Math.floor(rankable.length / 2));
+    const bestMatchups = rankable.slice(0, bestN);
+    const worstMatchups = worstN ? rankable.slice(-worstN).reverse() : [];   // pires en premier
 
     // 1er vs 2e joueur
     const fs = { first: { games: 0, wins: 0 }, second: { games: 0, wins: 0 } };
@@ -143,16 +161,33 @@
     const num = v => Number(v) || 0;   // défensif : d'anciennes parties peuvent avoir des compteurs en string
     kept.forEach(e => {
       const cards = (e.record.endStats && e.record.endStats.me && e.record.endStats.me.cards) || [];
+      const o = outcome(e.record);
       const seenThisGame = new Set();  // une carte ne compte qu'une fois par partie
       cards.forEach(c => {
         const key = norm(c.name);
-        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, games: 0 });
+        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, games: 0, gamesWon: 0, gamesLost: 0 });
         agg.played += num(c.played); agg.blocked += num(c.blocked); agg.pitched += num(c.pitched);
         agg.discarded += num(c.discarded); agg.timesHit += num(c.timesHit);
-        if (!seenThisGame.has(key)) { agg.games++; seenThisGame.add(key); }
+        if (!seenThisGame.has(key)) {
+          agg.games++;
+          if (o === true) agg.gamesWon++; else if (o === false) agg.gamesLost++;
+          seenThisGame.add(key);
+        }
       });
     });
     const cardPerf = Object.values(cardMap).sort((a, b) => b.played - a.played);
+
+    // Cartes en victoire vs défaite : pour chaque carte présente dans au moins
+    // une partie décidée, winrate quand elle est jouée. Trié par winrate (les
+    // « cartes qui gagnent » en tête), avec un seuil dynamique de parties
+    // décidées pour limiter le bruit statistique.
+    const cwlAll = cardPerf.map(c => {
+      const dec = c.gamesWon + c.gamesLost;
+      return { name: c.name, gamesWon: c.gamesWon, gamesLost: c.gamesLost, decided: dec, winrate: winrate(c.gamesWon, dec) };
+    }).filter(c => c.decided > 0);
+    const cwlMin = cwlAll.some(c => c.decided >= 3) ? 3 : (cwlAll.some(c => c.decided >= 2) ? 2 : 1);
+    const cardWinLoss = cwlAll.filter(c => c.decided >= cwlMin)
+      .sort((a, b) => b.winrate - a.winrate || b.decided - a.decided || a.name.localeCompare(b.name));
 
     // Moyennes offensives : moyenne des moyennes/totaux Talishar sur les
     // parties qui ont un bloc de stats officielles.
@@ -178,7 +213,7 @@
       facets: { formats: Array.from(formats).sort(), myHeroes: Array.from(myHeroes).sort(), oppHeroes: Array.from(oppHeroes).sort() },
       kept,                                   // ordre chrono (ancien → récent)
       global: { games: kept.length, decided, wins, losses: decided - wins, winrate: winrate(wins, decided) },
-      byMatchup, byMyHero, firstSecond, trend, cardPerf, offAverages
+      byMatchup, byMyHero, firstSecond, bestMatchups, worstMatchups, cardWinLoss, cwlMin, trend, cardPerf, offAverages
     };
   }
 
@@ -267,8 +302,11 @@
     const agg = aggregate(_entries, currentFilters());
     renderKpis(agg);
     renderMyHeroes(agg);
+    renderInitiative(agg);
+    renderBestWorst(agg);
     renderMatchups(agg);
     renderTrend(agg);
+    renderCardWinLoss(agg);
     renderCardPerf(agg);
     // La liste des parties (onglet Historique) est indépendante des filtres de
     // stats : elle montre TOUTES les parties, avec sa propre recherche texte.
@@ -357,6 +395,83 @@
         root.CardImages.resolveCardImage(hero).then(url => { if (url) av.innerHTML = `<img src="${url}" alt="${esc(hero)}" loading="lazy">`; });
       });
     }
+  }
+
+  // ---------- Avantage d'initiative détaillé (1er vs 2e, par héros/matchup) ----------
+  let _initMode = 'mine';   // 'mine' = par mon héros | 'opp' = par adversaire
+  function initRows(agg) { return _initMode === 'opp' ? (agg.byMatchup || []) : (agg.byMyHero || []); }
+  function renderInitiative(agg) {
+    const host = $('#dashInit');
+    if (!host) return;
+    const wrap = host.closest ? host.closest('.section-block') : null;
+    const rows = initRows(agg).filter(m => m.hero !== '(inconnu)' && (m.first.games + m.second.games) > 0);
+    // On ne montre la section que s'il existe au moins une partie où l'ordre
+    // du tour est connu (les vieilles parties sans endStats ne l'ont pas).
+    if (!rows.length) { host.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
+    if (wrap) wrap.style.display = '';
+    const cell = s => s.games ? `<b class="${s.winrate == null ? '' : (s.winrate >= 50 ? 'green' : 'red')}">${s.winrate == null ? '—' : s.winrate + '%'}</b> <span class="muted">${s.wins}/${s.games}</span>` : MUTED;
+    const label = _initMode === 'opp' ? 'Adversaire' : 'Mon héros';
+    const body = rows.map(m => `<tr><td>${esc(m.hero)}</td><td>${cell(m.first)}</td><td>${cell(m.second)}</td></tr>`).join('');
+    host.innerHTML =
+      '<div class="init-toggle">' +
+        `<button data-im="mine" class="${_initMode === 'mine' ? 'active' : ''}">Par mon héros</button>` +
+        `<button data-im="opp" class="${_initMode === 'opp' ? 'active' : ''}">Par adversaire</button>` +
+      '</div>' +
+      `<div class="table-scroll"><table class="off-table init-table"><tr><th>${label}</th><th title="Winrate quand tu commences (1er joueur)">En 1er</th><th title="Winrate quand tu joues en second (2e joueur)">En 2e</th></tr>${body}</table></div>`;
+    host.querySelectorAll('.init-toggle button').forEach(b => b.addEventListener('click', () => {
+      _initMode = b.getAttribute('data-im'); renderInitiative(agg);
+    }));
+  }
+
+  // ---------- Meilleurs / pires matchups ----------
+  function bwList(rows, kind) {
+    if (!rows.length) return `<div class="board-empty" style="padding:8px 12px">Pas assez de données.</div>`;
+    return rows.map(m => {
+      const initial = esc((m.hero || '?').charAt(0).toUpperCase());
+      const cls = m.winrate == null ? '' : (m.winrate >= 50 ? 'green' : 'red');
+      return `<div class="bw-row"><div class="mu-avatar" data-hero="${esc(m.hero)}">${initial}</div>` +
+        `<div class="bw-name">${esc(m.hero)}</div>` +
+        `<div class="bw-pct ${cls}">${m.winrate}%</div>` +
+        `<div class="bw-vol">${m.wins}-${m.losses}</div></div>`;
+    }).join('');
+  }
+  function renderBestWorst(agg) {
+    const host = $('#dashBestWorst');
+    if (!host) return;
+    const wrap = host.closest ? host.closest('.section-block') : null;
+    const best = agg.bestMatchups || [], worst = agg.worstMatchups || [];
+    if (!best.length && !worst.length) { host.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
+    if (wrap) wrap.style.display = '';
+    host.innerHTML =
+      `<div class="bw-col"><h3 class="bw-title good">✅ Meilleurs matchups</h3>${bwList(best, 'best')}</div>` +
+      `<div class="bw-col"><h3 class="bw-title bad">⚠️ Pires matchups</h3>${bwList(worst, 'worst')}</div>`;
+    if (root.CardImages) {
+      host.querySelectorAll('.mu-avatar[data-hero]').forEach(av => {
+        const hero = av.getAttribute('data-hero');
+        if (!hero || hero === '(inconnu)') return;
+        root.CardImages.resolveCardImage(hero).then(url => { if (url) av.innerHTML = `<img src="${url}" alt="${esc(hero)}" loading="lazy">`; });
+      });
+    }
+  }
+
+  // ---------- Cartes en victoire vs défaite ----------
+  function renderCardWinLoss(agg) {
+    const host = $('#dashCardWL');
+    if (!host) return;
+    const wrap = host.closest ? host.closest('.section-block') : null;
+    const rows = agg.cardWinLoss || [];
+    if (!rows.length) { host.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
+    if (wrap) wrap.style.display = '';
+    const body = rows.map(c => {
+      const cls = c.winrate == null ? '' : (c.winrate >= 50 ? 'green' : 'red');
+      return `<tr><td>${esc(c.name)}</td>` +
+        `<td class="green">${c.gamesWon || MUTED}</td>` +
+        `<td class="red">${c.gamesLost || MUTED}</td>` +
+        `<td><b class="${cls}">${c.winrate}%</b></td></tr>`;
+    }).join('');
+    host.innerHTML =
+      `<div class="table-scroll"><table class="off-table"><tr><th>Carte</th><th title="Parties gagnées où la carte a été jouée">En V</th><th title="Parties perdues où la carte a été jouée">En D</th><th title="Winrate des parties où cette carte a été jouée">Winrate</th></tr>${body}</table></div>` +
+      `<div class="cwl-note">Winrate des parties où la carte a été jouée (min. ${agg.cwlMin} partie${agg.cwlMin > 1 ? 's' : ''} décidée${agg.cwlMin > 1 ? 's' : ''}). À lire avec prudence sur de faibles échantillons.</div>`;
   }
 
   function renderTrend(agg) {
