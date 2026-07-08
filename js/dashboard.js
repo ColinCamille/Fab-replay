@@ -116,21 +116,21 @@
     const byMatchup = heroBreakdown(oppHeroOf);
     const byMyHero = heroBreakdown(myHeroOf);
 
-    // Meilleurs / pires matchups : classés par winrate, en excluant les héros
+    // Meilleurs / pires matchups : on classe par winrate, en excluant les héros
     // inconnus et en exigeant un minimum de parties décidées pour éviter le
     // bruit d'un 1-0 ou 0-1. Le seuil s'abaisse à 1 s'il n'y a pas assez de
     // données, pour toujours montrer quelque chose d'utile.
+    // IMPORTANT : « meilleurs » = winrate > 50 % SEULEMENT, « pires » = < 50 %
+    // seulement. Un matchup gagné (p.ex. 100 %) ne doit jamais tomber côté
+    // « pires » sous prétexte qu'il est un peu moins bon que les autres ; les
+    // matchups à exactement 50 % n'apparaissent dans aucune des deux colonnes.
     const rankable0 = byMatchup.filter(m => m.hero !== '(inconnu)' && m.winrate != null);
     const minGames = rankable0.some(m => m.decided >= 2) ? 2 : 1;
-    const rankable = rankable0.filter(m => m.decided >= minGames)
-      .sort((a, b) => b.winrate - a.winrate || b.decided - a.decided);
-    // On coupe le classement en deux moitiés disjointes : meilleurs en tête,
-    // pires en queue (jusqu'à 5 de chaque). Un éventuel matchup « médian »
-    // n'apparaît dans aucune des deux colonnes.
-    const bestN = Math.min(5, Math.ceil(rankable.length / 2));
-    const worstN = Math.min(5, Math.floor(rankable.length / 2));
-    const bestMatchups = rankable.slice(0, bestN);
-    const worstMatchups = worstN ? rankable.slice(-worstN).reverse() : [];   // pires en premier
+    const rankable = rankable0.filter(m => m.decided >= minGames);
+    const bestMatchups = rankable.filter(m => m.winrate > 50)
+      .sort((a, b) => b.winrate - a.winrate || b.decided - a.decided).slice(0, 5);
+    const worstMatchups = rankable.filter(m => m.winrate < 50)
+      .sort((a, b) => a.winrate - b.winrate || b.decided - a.decided).slice(0, 5);
 
     // 1er vs 2e joueur
     const fs = { first: { games: 0, wins: 0 }, second: { games: 0, wins: 0 } };
@@ -424,7 +424,11 @@
 
   // ---------- Meilleurs / pires matchups ----------
   function bwList(rows, kind) {
-    if (!rows.length) return `<div class="board-empty" style="padding:8px 12px">Pas assez de données.</div>`;
+    if (!rows.length) {
+      const msg = kind === 'best' ? 'Aucun matchup favorable (> 50 %) pour l\'instant.'
+        : 'Aucun matchup défavorable (< 50 %). 💪';
+      return `<div class="board-empty" style="padding:8px 12px">${msg}</div>`;
+    }
     return rows.map(m => {
       const initial = esc((m.hero || '?').charAt(0).toUpperCase());
       const cls = m.winrate == null ? '' : (m.winrate >= 50 ? 'green' : 'red');
