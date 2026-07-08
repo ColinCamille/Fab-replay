@@ -706,7 +706,16 @@ footer a{color:var(--text-dim)}
 @media(max-width:560px){ #dashboardBody .kpis{grid-template-columns:1fr 1fr} }
 
 /* tendance */
+#dashboardBody .trendcard{overflow:visible}
+#dashboardBody .trend-holder{position:relative;touch-action:pan-y}
 #dashboardBody .trend-svg{width:100%;height:150px;display:block}
+#dashboardBody .trend-dot{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+#dashboardBody .trend-guide{position:absolute;top:0;bottom:0;width:1px;background:rgba(233,230,218,.35);pointer-events:none;opacity:0;transition:opacity .08s}
+#dashboardBody .trend-guide.show{opacity:1}
+#dashboardBody .trend-tip{position:absolute;transform:translate(-50%,calc(-100% - 10px));background:rgba(16,18,26,.97);border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:.74rem;color:var(--text);pointer-events:none;opacity:0;white-space:nowrap;z-index:5;box-shadow:0 3px 12px rgba(0,0,0,.55);transition:opacity .08s}
+#dashboardBody .trend-tip.show{opacity:1}
+#dashboardBody .trend-tip.flipL{transform:translate(calc(-100% + 10px),calc(-100% - 10px))}
+#dashboardBody .trend-tip b{font-family:'JetBrains Mono',monospace;color:var(--accent)}
 #dashboardBody .trend-leg{font-size:.68rem;color:var(--text-faint);margin-top:6px;font-family:'JetBrains Mono',monospace}
 
 /* matchups */
