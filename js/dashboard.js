@@ -454,8 +454,10 @@
       '<path d="' + area + '" fill="' + hexA(col, .16) + '" stroke="none"/>' +
       '<path d="' + line + '" fill="none" stroke="' + col + '" stroke-width="2" vector-effect="non-scaling-stroke"/>';
     // Géométrie pour l'overlay HTML (point + survol) — coordonnées en % (x) et px (y, hauteur = 150).
-    _trendGeom = { pts: pts.map((v, i) => ({ leftPct: x(i) / W * 100, topPx: y(v), wr: Math.round(v), n: raw[i].n })), col };
-    if (dot) { const l = _trendGeom.pts[_trendGeom.pts.length - 1]; dot.style.display = 'block'; dot.style.left = l.leftPct + '%'; dot.style.top = l.topPx + 'px'; dot.style.background = col; }
+    // Position en % (x ET y) : le conteneur adopte le ratio du viewBox, donc les
+    // pourcentages restent exacts quelle que soit la hauteur rendue (pas d'étirement).
+    _trendGeom = { pts: pts.map((v, i) => ({ leftPct: x(i) / W * 100, topPct: y(v) / H * 100, wr: Math.round(v), n: raw[i].n })), col };
+    if (dot) { const l = _trendGeom.pts[_trendGeom.pts.length - 1]; dot.style.display = 'block'; dot.style.left = l.leftPct + '%'; dot.style.top = l.topPct + '%'; dot.style.background = col; }
     if (leg) leg.textContent = 'Winrate cumulé sur ' + pts.length + ' parties (ancien → récent) · actuel ' + Math.round(pts[pts.length - 1]) + '%';
   }
   // Survol du graphe de tendance : point + repère + infobulle (overlay HTML, non déformé).
@@ -467,16 +469,16 @@
     let best = _trendGeom.pts[0], bd = 1e9;
     for (const p of _trendGeom.pts) { const d = Math.abs(p.leftPct - relPct); if (d < bd) { bd = d; best = p; } }
     const dot = D.getElementById('hxTrendDot'), guide = D.getElementById('hxTrendGuide'), tip = D.getElementById('hxTrendTip');
-    dot.style.display = 'block'; dot.style.left = best.leftPct + '%'; dot.style.top = best.topPx + 'px'; dot.style.background = _trendGeom.col;
+    dot.style.display = 'block'; dot.style.left = best.leftPct + '%'; dot.style.top = best.topPct + '%'; dot.style.background = _trendGeom.col;
     guide.style.left = best.leftPct + '%'; guide.classList.add('show');
-    tip.style.left = best.leftPct + '%'; tip.style.top = best.topPx + 'px';
+    tip.style.left = best.leftPct + '%'; tip.style.top = best.topPct + '%';
     tip.innerHTML = '<b>' + best.wr + '%</b> · partie ' + best.n; tip.classList.add('show');
     tip.classList.toggle('flipL', best.leftPct > 78);
   }
   function trendLeave() {
     if (!_trendGeom) return;
     const dot = D.getElementById('hxTrendDot'), l = _trendGeom.pts[_trendGeom.pts.length - 1];
-    if (l) { dot.style.left = l.leftPct + '%'; dot.style.top = l.topPx + 'px'; }
+    if (l) { dot.style.left = l.leftPct + '%'; dot.style.top = l.topPct + '%'; }
     D.getElementById('hxTrendGuide').classList.remove('show');
     D.getElementById('hxTrendTip').classList.remove('show');
   }
