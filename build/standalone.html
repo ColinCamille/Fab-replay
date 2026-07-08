@@ -713,7 +713,16 @@ footer a{color:var(--text-dim)}
 @media(max-width:560px){ #dashboardBody .kpis{grid-template-columns:1fr 1fr} }
 
 /* tendance */
+#dashboardBody .trendcard{overflow:visible}
+#dashboardBody .trend-holder{position:relative;touch-action:pan-y}
 #dashboardBody .trend-svg{width:100%;height:150px;display:block}
+#dashboardBody .trend-dot{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+#dashboardBody .trend-guide{position:absolute;top:0;bottom:0;width:1px;background:rgba(233,230,218,.35);pointer-events:none;opacity:0;transition:opacity .08s}
+#dashboardBody .trend-guide.show{opacity:1}
+#dashboardBody .trend-tip{position:absolute;transform:translate(-50%,calc(-100% - 10px));background:rgba(16,18,26,.97);border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:.74rem;color:var(--text);pointer-events:none;opacity:0;white-space:nowrap;z-index:5;box-shadow:0 3px 12px rgba(0,0,0,.55);transition:opacity .08s}
+#dashboardBody .trend-tip.show{opacity:1}
+#dashboardBody .trend-tip.flipL{transform:translate(calc(-100% + 10px),calc(-100% - 10px))}
+#dashboardBody .trend-tip b{font-family:'JetBrains Mono',monospace;color:var(--accent)}
 #dashboardBody .trend-leg{font-size:.68rem;color:var(--text-faint);margin-top:6px;font-family:'JetBrains Mono',monospace}
 
 /* matchups */
@@ -3484,7 +3493,7 @@ footer a{color:var(--text-dim)}
   // sous #dashboardBody pour ne jamais entrer en collision avec le
   // reste de l'app (replay, header…).
   // ============================================================
-  let _entries = [], _onOpen = null, _onDelete = null, _built = false, _A = null, _L = null;
+  let _entries = [], _onOpen = null, _onDelete = null, _built = false, _A = null, _L = null, _trendGeom = null;
   const DEFAULT_ACCENT = '#c9a227';
   const state = {
     hero: null, format: '', opp: '', period: 'all', includeAI: false,
@@ -3572,8 +3581,13 @@ footer a{color:var(--text-dim)}
           '<button data-sub="cards" aria-pressed="false">Cartes</button></div>' +
         '<div class="subpanel active" id="hxSubOverview">' +
           '<div class="idcard"><div id="hxIdBody"></div><div class="kpis" id="hxKpis"></div></div>' +
-          '<div class="card"><h2>Tendance du winrate</h2><div class="cbody">' +
-            '<svg class="trend-svg" id="hxTrendSvg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>' +
+          '<div class="card trendcard"><h2>Tendance du winrate</h2><div class="cbody">' +
+            '<div class="trend-holder" id="hxTrendHolder">' +
+              '<svg class="trend-svg" id="hxTrendSvg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>' +
+              '<div class="trend-guide" id="hxTrendGuide"></div>' +
+              '<div class="trend-dot" id="hxTrendDot"></div>' +
+              '<div class="trend-tip" id="hxTrendTip"></div>' +
+            '</div>' +
             '<div class="trend-leg" id="hxTrendLeg"></div></div></div>' +
         '</div>' +
         '<div class="subpanel" id="hxSubMatchups">' +
@@ -3667,22 +3681,49 @@ footer a{color:var(--text-dim)}
 
   // ---------- Tendance ----------
   function renderTrend() {
-    const pts = (_A ? _A.trend : []).map(p => p.winrate), svg = D.getElementById('hxTrendSvg'), leg = D.getElementById('hxTrendLeg');
+    const raw = _A ? _A.trend : [], pts = raw.map(p => p.winrate);
+    const svg = D.getElementById('hxTrendSvg'), leg = D.getElementById('hxTrendLeg'), dot = D.getElementById('hxTrendDot');
     if (!svg) return;
+    _trendGeom = null; if (dot) dot.style.display = 'none';
     if (pts.length < 3) { svg.innerHTML = ''; if (leg) leg.textContent = 'Trop peu de parties décidées pour une tendance fiable (' + pts.length + ').'; return; }
     const W = 400, H = 150, padL = 26, padR = 8, padT = 10, padB = 14, plotW = W - padL - padR, plotH = H - padT - padB;
     const x = i => padL + i / (pts.length - 1) * plotW, y = v => padT + plotH - (v / 100) * plotH;
     const line = pts.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
     const area = line + ' L' + x(pts.length - 1).toFixed(1) + ',' + (padT + plotH) + ' L' + padL + ',' + (padT + plotH) + ' Z';
     const grid = [0, 50, 100].map(v => '<line x1="' + padL + '" y1="' + y(v).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y(v).toFixed(1) + '" stroke="#262c3d"/><text x="' + (padL - 4) + '" y="' + (y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="8.5" fill="#565b6e">' + v + '</text>').join('');
-    const accent = state.hero ? heroColor(state.hero) : DEFAULT_ACCENT, last = pts[pts.length - 1];
-    // accent réel (extrait) s'il a été appliqué sur :root
-    const real = (D.documentElement.style.getPropertyValue('--accent') || accent).trim() || accent;
+    // Couleur d'accent courante (réelle si posée sur :root, sinon table du héros).
+    const acc = (D.documentElement.style.getPropertyValue('--accent') || '').trim();
+    const col = acc[0] === '#' ? acc : (state.hero ? heroColor(state.hero) : DEFAULT_ACCENT);
+    // vector-effect : le trait garde une épaisseur constante malgré l'étirement horizontal (fini l'aspect « tassé »).
     svg.innerHTML = grid + '<line x1="' + padL + '" y1="' + y(50).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y(50).toFixed(1) + '" stroke="rgba(139,107,255,.4)" stroke-dasharray="3,4"/>' +
-      '<path d="' + area + '" fill="' + hexA(real[0] === '#' ? real : accent, .16) + '" stroke="none"/>' +
-      '<path d="' + line + '" fill="none" stroke="' + (real[0] === '#' ? real : accent) + '" stroke-width="2"/>' +
-      '<circle cx="' + x(pts.length - 1).toFixed(1) + '" cy="' + y(last).toFixed(1) + '" r="3.5" fill="' + (real[0] === '#' ? real : accent) + '" stroke="#0a0d13" stroke-width="1.5"/>';
-    if (leg) leg.textContent = 'Winrate cumulé sur ' + pts.length + ' parties (ancien → récent) · actuel ' + Math.round(last) + '%';
+      '<path d="' + area + '" fill="' + hexA(col, .16) + '" stroke="none"/>' +
+      '<path d="' + line + '" fill="none" stroke="' + col + '" stroke-width="2" vector-effect="non-scaling-stroke"/>';
+    // Géométrie pour l'overlay HTML (point + survol) — coordonnées en % (x) et px (y, hauteur = 150).
+    _trendGeom = { pts: pts.map((v, i) => ({ leftPct: x(i) / W * 100, topPx: y(v), wr: Math.round(v), n: raw[i].n })), col };
+    if (dot) { const l = _trendGeom.pts[_trendGeom.pts.length - 1]; dot.style.display = 'block'; dot.style.left = l.leftPct + '%'; dot.style.top = l.topPx + 'px'; dot.style.background = col; }
+    if (leg) leg.textContent = 'Winrate cumulé sur ' + pts.length + ' parties (ancien → récent) · actuel ' + Math.round(pts[pts.length - 1]) + '%';
+  }
+  // Survol du graphe de tendance : point + repère + infobulle (overlay HTML, non déformé).
+  function trendHover(clientX) {
+    if (!_trendGeom) return;
+    const holder = D.getElementById('hxTrendHolder'); if (!holder) return;
+    const rect = holder.getBoundingClientRect(); if (!rect.width) return;
+    const relPct = (clientX - rect.left) / rect.width * 100;
+    let best = _trendGeom.pts[0], bd = 1e9;
+    for (const p of _trendGeom.pts) { const d = Math.abs(p.leftPct - relPct); if (d < bd) { bd = d; best = p; } }
+    const dot = D.getElementById('hxTrendDot'), guide = D.getElementById('hxTrendGuide'), tip = D.getElementById('hxTrendTip');
+    dot.style.display = 'block'; dot.style.left = best.leftPct + '%'; dot.style.top = best.topPx + 'px'; dot.style.background = _trendGeom.col;
+    guide.style.left = best.leftPct + '%'; guide.classList.add('show');
+    tip.style.left = best.leftPct + '%'; tip.style.top = best.topPx + 'px';
+    tip.innerHTML = '<b>' + best.wr + '%</b> · partie ' + best.n; tip.classList.add('show');
+    tip.classList.toggle('flipL', best.leftPct > 78);
+  }
+  function trendLeave() {
+    if (!_trendGeom) return;
+    const dot = D.getElementById('hxTrendDot'), l = _trendGeom.pts[_trendGeom.pts.length - 1];
+    if (l) { dot.style.left = l.leftPct + '%'; dot.style.top = l.topPx + 'px'; }
+    D.getElementById('hxTrendGuide').classList.remove('show');
+    D.getElementById('hxTrendTip').classList.remove('show');
   }
 
   // ---------- Matchups (best/worst + liste triée) ----------
@@ -3862,6 +3903,14 @@ footer a{color:var(--text-dim)}
       else { state.cardSort.key = k; state.cardSort.dir = k === 'name' ? 'asc' : 'desc'; }
       renderCardPerf();
     });
+    const th = host.querySelector('#hxTrendHolder');
+    if (th) {
+      th.addEventListener('mousemove', e => trendHover(e.clientX));
+      th.addEventListener('mouseleave', trendLeave);
+      th.addEventListener('touchstart', e => { if (e.touches[0]) trendHover(e.touches[0].clientX); }, { passive: true });
+      th.addEventListener('touchmove', e => { if (e.touches[0]) trendHover(e.touches[0].clientX); }, { passive: true });
+      th.addEventListener('touchend', trendLeave);
+    }
     host.querySelector('#hxHistView').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.histView = b.dataset.hv; host.querySelector('#hxHistView').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
     host.querySelector('#hxRes').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.res = b.dataset.res; host.querySelector('#hxRes').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
     host.querySelector('#hxSearch').addEventListener('input', e => { state.q = e.target.value; renderHistory(); });
