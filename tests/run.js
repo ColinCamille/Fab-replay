@@ -140,9 +140,27 @@ const briMy = agg.byMyHero.find(h => h.hero === 'Briar');
 assert(briMy && briMy.first.winrate === 100 && briMy.second.winrate === 50, 'byMyHero Briar 1er 100% / 2e 50%');
 
 // Meilleurs / pires matchups : Briar (2-0, 100%) devant Dorinthea (1-1, 50%).
+// Briar 2-0 (100%) est favorable ; Dorinthea est à 50 % (ni l'un ni l'autre),
+// donc « pires » est vide ici.
 assert(agg.bestMatchups[0].hero === 'Briar', 'meilleur matchup = Briar (100%)');
-assert(agg.worstMatchups[0].hero === 'Dorinthea', 'pire matchup = Dorinthea (50%)');
-assert(!agg.bestMatchups.some(m => agg.worstMatchups.includes(m)), 'meilleurs/pires disjoints');
+eq(agg.worstMatchups.length, 0, 'aucun pire matchup (pas de matchup < 50%)');
+
+// Régression : un matchup à 100 % ne doit JAMAIS apparaître dans les pires.
+// Seuls > 50 % → meilleurs, < 50 % → pires ; un matchup à 50 % (Fai) n'est
+// dans aucune des deux colonnes.
+const bwEntries = [
+  { gameId: 'w1', record: mkRec({ iWon: true,  oppHero: 'Lexi', first: true,  date: '2026-07-01T10:00:00Z' }) },
+  { gameId: 'w2', record: mkRec({ iWon: true,  oppHero: 'Lexi', first: false, date: '2026-07-02T10:00:00Z' }) },
+  { gameId: 'w3', record: mkRec({ iWon: false, oppHero: 'Kano', first: true,  date: '2026-07-03T10:00:00Z' }) },
+  { gameId: 'w4', record: mkRec({ iWon: false, oppHero: 'Kano', first: false, date: '2026-07-04T10:00:00Z' }) },
+  { gameId: 'w5', record: mkRec({ iWon: true,  oppHero: 'Fai',  first: true,  date: '2026-07-05T10:00:00Z' }) },
+  { gameId: 'w6', record: mkRec({ iWon: false, oppHero: 'Fai',  first: false, date: '2026-07-06T10:00:00Z' }) }
+];
+const bwAgg = Dashboard.aggregate(bwEntries, {});
+assert(bwAgg.bestMatchups.length === 1 && bwAgg.bestMatchups[0].hero === 'Lexi', 'meilleur = Lexi (100%)');
+assert(bwAgg.worstMatchups.length === 1 && bwAgg.worstMatchups[0].hero === 'Kano', 'pire = Kano (0%)');
+assert(!bwAgg.worstMatchups.some(m => m.winrate >= 50), 'aucun matchup ≥ 50% dans les pires (régression Lexi)');
+assert(!bwAgg.bestMatchups.concat(bwAgg.worstMatchups).some(m => m.hero === 'Fai'), 'matchup à 50% (Fai) dans aucune colonne');
 
 // Cartes en victoire vs défaite : Brutal Assault en V (g1) et en D (g2) → 50%.
 const baWL = agg.cardWinLoss.find(c => c.name === 'Brutal Assault');
