@@ -476,17 +476,16 @@
 
   // ---------- Cartes ----------
   function renderCardsWL() {
-    D.getElementById('hxCwlScope').textContent = state.hero ? ('· en ' + state.hero) : '· tous héros';
-    const list = (_A.cardWinLoss || []).slice();
+    const list = (_A.cardWinLoss || []).slice();   // déjà trié par winrate décroissant
+    D.getElementById('hxCwlScope').textContent = (state.hero ? ('· en ' + state.hero) : '· tous héros') + (list.length ? ' · ' + list.length + ' cartes' : '');
     const host = D.getElementById('hxCwlBody');
     if (!list.length) { host.innerHTML = '<div class="empty">Pas assez de données de cartes (nécessite les stats officielles Talishar).</div>'; return; }
-    const top = list.slice(0, 6), bottom = list.slice(-4).filter(c => top.indexOf(c) < 0), show = top.concat(bottom);
-    host.innerHTML = show.map(c => {
+    host.innerHTML = list.map(c => {
       const d = c.winrate - 50, pos = d >= 0, segW = Math.min(50, Math.abs(d) / 50 * 50);
       return '<div class="dv"><div class="dv-nm">' + esc2(c.name) + '</div>' +
         '<div class="dv-track"><div class="mid"></div><div class="dv-seg ' + (pos ? 'pos' : 'neg') + '" style="width:' + segW + '%"></div></div>' +
         '<div class="dv-pc ' + (pos ? 'good' : 'bad') + '">' + c.winrate + '%</div><div class="dv-vl">' + c.gamesWon + 'V·' + c.gamesLost + 'D</div></div>';
-    }).join('') + '<div class="note">Winrate des parties où la carte a été jouée (min. ' + _A.cwlMin + ' partie' + (_A.cwlMin > 1 ? 's' : '') + '). À lire avec prudence sur de faibles échantillons.</div>';
+    }).join('') + '<div class="note">Toutes les cartes jouées dans au moins ' + _A.cwlMin + ' partie' + (_A.cwlMin > 1 ? 's' : '') + ' décidée' + (_A.cwlMin > 1 ? 's' : '') + ', triées par winrate. À lire avec prudence sur de faibles échantillons.</div>';
   }
   const pct1 = v => Math.round(v * 10) / 10 + '%';
   function fmtCell(col, c) {
