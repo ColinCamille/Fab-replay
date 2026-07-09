@@ -2262,6 +2262,25 @@ footer a{color:var(--text-dim)}
     return (h >>> 0).toString(36);
   }
 
+  // ---------- Pierres tombales (suppressions persistantes) ----------
+  // La suppression est locale, mais la synchro (sync.js pull) ré-injecte
+  // sinon toute partie absente depuis le dépôt (library.json + data/raw du
+  // grabber). On mémorise donc les gameId explicitement supprimés pour que
+  // `pull` les ignore. Une réimportation VOLONTAIRE lève la pierre tombale.
+  const DELETED_KEY = 'fabDeletedIds';
+  function deletedSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]')); }
+    catch (e) { return new Set(); }
+  }
+  function saveDeleted(set) {
+    try { localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set))); } catch (e) { /* quota / privé */ }
+  }
+  function markDeleted(id) { const s = deletedSet(); s.add(String(id)); saveDeleted(s); }
+  function unmarkDeleted(id) { const s = deletedSet(); if (s.delete(String(id))) saveDeleted(s); }
+  function isDeleted(id) { return deletedSet().has(String(id)); }
+  function deletedIds() { return Array.from(deletedSet()); }
+  function clearDeleted() { try { localStorage.removeItem(DELETED_KEY); } catch (e) { /* ignore */ } }
+
   let _dbPromise = null;
   function open() {
     if (_dbPromise) return _dbPromise;
@@ -2331,7 +2350,9 @@ footer a{color:var(--text-dim)}
 
   async function removeGame(id) {
     const store = await tx('readwrite');
-    return wrap(store.delete(String(id)));
+    const res = await wrap(store.delete(String(id)));
+    markDeleted(id);   // pose la pierre tombale → la synchro ne la ré-injectera plus
+    return res;
   }
 
   async function count() {
@@ -2341,7 +2362,9 @@ footer a{color:var(--text-dim)}
 
   async function clearAll() {
     const store = await tx('readwrite');
-    return wrap(store.clear());
+    const res = await wrap(store.clear());
+    clearDeleted();   // remise à zéro complète : on oublie aussi les suppressions
+    return res;
   }
 
   // Écrit une entrée complète telle quelle (pour la restauration d'une
@@ -2404,14 +2427,16 @@ footer a{color:var(--text-dim)}
     if (opts.replace) await clearAll();
     let imported = 0;
     for (const e of entries) {
-      try { await putEntry(e); imported++; } catch (err) { console.error(err); }
+      try { await putEntry(e); unmarkDeleted(e.gameId); imported++; }   // restauration volontaire → lève la pierre tombale
+      catch (err) { console.error(err); }
     }
     return { imported, skipped: Math.max(0, rawList.length - imported) };
   }
 
   root.FabDB = {
     open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
-    putEntry, buildExport, normalizeImport, exportAll, importEntries
+    putEntry, buildExport, normalizeImport, exportAll, importEntries,
+    markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted
   };
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2510,6 +2535,9 @@ footer a{color:var(--text-dim)}
   //      (chaque brut n'est récupéré qu'une fois par appareil).
   async function pull() {
     let added = 0, sawData = false;
+    // Parties explicitement supprimées par l'utilisateur : on ne les ré-injecte
+    // jamais depuis le dépôt (sinon la suppression « ne tient pas » au reload).
+    const dead = new Set(root.FabDB.deletedIds ? root.FabDB.deletedIds() : []);
 
     // --- 1. Bibliothèque parsée ---
     const lib = await fetchLibrary();
@@ -2520,7 +2548,7 @@ footer a{color:var(--text-dim)}
         const local = await root.FabDB.getAllEntries();
         const have = new Set(local.map(e => String(e.gameId)));
         for (const e of cloud) {
-          if (have.has(String(e.gameId))) continue;
+          if (have.has(String(e.gameId)) || dead.has(String(e.gameId))) continue;
           try { await root.FabDB.putEntry(e); added++; } catch (err) { console.error(err); }
         }
       }
@@ -2536,15 +2564,17 @@ footer a{color:var(--text-dim)}
         const have = new Set(local.map(e => String(e.gameId)));
         for (const it of idx) {
           const id = String((it && (it.gameId || it.id)) || it || '');
-          if (!id || have.has(id)) continue;
+          if (!id || have.has(id) || dead.has(id)) continue;
           try {
             const r = await fetch(rawFileUrl(id), { cache: 'no-store' });
             if (!r.ok) continue;
             const txt = await r.text();
             const rec = parser.parse(txt);
             if (!rec || (!rec.myName && (!rec.playersList || rec.playersList.length < 2))) continue;
+            const gid = String((rec.source && rec.source.gameId) || id);
+            if (dead.has(gid)) continue;   // supprimée volontairement → ne pas ré-injecter
             await root.FabDB.putGame(rec, txt);   // stocke avec le raw en local
-            have.add(String((rec.source && rec.source.gameId) || id));
+            have.add(gid);
             added++;
           } catch (err) { console.error(err); }
         }
@@ -4832,6 +4862,7 @@ footer a{color:var(--text-dim)}
       if (!rec.myName) rec = ensureIdentity(rec);
       try {
         const id = await window.FabDB.putGame(rec, text);
+        window.FabDB.unmarkDeleted(id);   // réimport volontaire → lève une éventuelle suppression
         lastEntry = { gameId: id, record: rec };
         importedIds.push(id);
         imported++;

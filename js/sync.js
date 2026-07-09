@@ -91,6 +91,9 @@
   //      (chaque brut n'est récupéré qu'une fois par appareil).
   async function pull() {
     let added = 0, sawData = false;
+    // Parties explicitement supprimées par l'utilisateur : on ne les ré-injecte
+    // jamais depuis le dépôt (sinon la suppression « ne tient pas » au reload).
+    const dead = new Set(root.FabDB.deletedIds ? root.FabDB.deletedIds() : []);
 
     // --- 1. Bibliothèque parsée ---
     const lib = await fetchLibrary();
@@ -101,7 +104,7 @@
         const local = await root.FabDB.getAllEntries();
         const have = new Set(local.map(e => String(e.gameId)));
         for (const e of cloud) {
-          if (have.has(String(e.gameId))) continue;
+          if (have.has(String(e.gameId)) || dead.has(String(e.gameId))) continue;
           try { await root.FabDB.putEntry(e); added++; } catch (err) { console.error(err); }
         }
       }
@@ -117,15 +120,17 @@
         const have = new Set(local.map(e => String(e.gameId)));
         for (const it of idx) {
           const id = String((it && (it.gameId || it.id)) || it || '');
-          if (!id || have.has(id)) continue;
+          if (!id || have.has(id) || dead.has(id)) continue;
           try {
             const r = await fetch(rawFileUrl(id), { cache: 'no-store' });
             if (!r.ok) continue;
             const txt = await r.text();
             const rec = parser.parse(txt);
             if (!rec || (!rec.myName && (!rec.playersList || rec.playersList.length < 2))) continue;
+            const gid = String((rec.source && rec.source.gameId) || id);
+            if (dead.has(gid)) continue;   // supprimée volontairement → ne pas ré-injecter
             await root.FabDB.putGame(rec, txt);   // stocke avec le raw en local
-            have.add(String((rec.source && rec.source.gameId) || id));
+            have.add(gid);
             added++;
           } catch (err) { console.error(err); }
         }
