@@ -158,9 +158,7 @@
   function gcard(side, slot, name, hero) {
     return '<div class="br-gcard br-' + side + ' p-' + slot + (hero ? ' br-hero' : '') + '">' +
       '<div class="br-art" data-card="' + esc(name) + '"' + (hero ? ' data-hero' : '') + '></div>' +
-      '<div class="br-lab">' + esc(name) + '</div>' +
-      (hero ? '<span class="br-lifetok br-' + side + '" id="br-' + (side === 'me' ? 'm' : 'o') + 'LifeTok">0</span>' : '') +
-      '</div>';
+      '<div class="br-lab">' + esc(name) + '</div></div>';
   }
   // Champ d'un joueur (tapis miroir) : rail cimetière·deck·pitch | héros entouré
   // de son équipement + arme | arsenal. Les IDs des emplacements dynamiques
@@ -208,6 +206,10 @@
           '<div class="br-field br-opp" id="br-fOpp">' + buildZone('opp', P.opp) + '</div>' +
           '<div class="br-mid">' +
             '<span class="br-turnchip" id="br-turnPill"> </span>' +
+            '<div class="br-lifeside">' +
+              '<div class="br-life br-opp"><span class="br-life-who">' + esc(data.hero.opp) + '</span><span class="br-life-n" id="br-oLifeTok">0</span></div>' +
+              '<div class="br-life br-me"><span class="br-life-who">' + esc(data.hero.me) + '</span><span class="br-life-n" id="br-mLifeTok">0</span></div>' +
+            '</div>' +
             '<div class="br-lane" id="br-stage"></div>' +
           '</div>' +
           '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me) + '</div>' +
@@ -326,13 +328,18 @@
     // mobile/desktop) car le passage à la ligne des cartes dépend de la largeur.
     function stabilizeStage() {
       if (!stage.offsetParent) return;             // onglet caché → pas de layout fiable
+      // Sur desktop, la piste est bornée à la LARGEUR du plus grand contenu pour
+      // que les PV (à sa gauche) restent collés au combat au lieu de flotter au
+      // bord ; sur mobile elle remplit l'espace restant (flex) → largeur libre.
+      const wide = !!(window.matchMedia && window.matchMedia('(min-width: 900px)').matches);
       const savedH = stage.style.height, savedMin = stage.style.minHeight;
-      stage.style.height = 'auto'; stage.style.minHeight = '0';
-      let max = 0;
-      for (const s of steps) { stage.innerHTML = buildStage(s.stage); if (stage.offsetHeight > max) max = stage.offsetHeight; }
-      if (!max) { stage.style.height = savedH; stage.style.minHeight = savedMin; render(null); return; }
+      stage.style.height = 'auto'; stage.style.minHeight = '0'; stage.style.width = 'auto';
+      let maxH = 0, maxW = 0;
+      for (const s of steps) { stage.innerHTML = buildStage(s.stage); if (stage.offsetHeight > maxH) maxH = stage.offsetHeight; if (stage.offsetWidth > maxW) maxW = stage.offsetWidth; }
+      if (!maxH) { stage.style.height = savedH; stage.style.minHeight = savedMin; stage.style.width = ''; render(null); return; }
       stage.style.minHeight = '0';
-      stage.style.height = max + 'px';
+      stage.style.height = maxH + 'px';
+      stage.style.width = wide && maxW ? maxW + 'px' : '';
       render(null);                                // ré-affiche l'étape courante dans la boîte figée
     }
     if (window.ResizeObserver) {
