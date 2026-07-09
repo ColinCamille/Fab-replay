@@ -20,6 +20,19 @@
   const norm = s => (TP.normName ? TP.normName(s) : String(s || '').trim().toLowerCase());
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  // Tokens (permanents/auras) créés par certains héros. Talishar NE journalise
+  // PAS leur création (ils n'apparaissent que via leur effet, ex. « Embodiment
+  // of Lightning grants go again », et l'Earth jamais) → on les rattache au
+  // héros et on les montre comme présents sur la partie. Étendre au besoin.
+  const HERO_TOKENS = {
+    briar: ['Embodiment of Lightning', 'Embodiment of Earth'],
+    oscilio: ['Embodiment of Lightning', 'Embodiment of Earth']
+  };
+  function tokensForHero(hero) {
+    const k = norm(hero).split(/[ ,]/)[0];
+    return HERO_TOKENS[k] || [];
+  }
+
   // ---------- Images (cache local ; CardImages cache déjà côté réseau) ----------
   const _img = {};
   function resolveImg(name, hero) {
@@ -41,7 +54,7 @@
         art.classList.add('has-img');
         // La carte porte déjà son nom imprimé → on masque le nom en
         // surimpression (marqueur sur la tuile parente ; cf. CSS .br-imgok).
-        const tile = art.closest('.br-gcard,.br-zcard,.br-pcard');
+        const tile = art.closest('.br-gcard,.br-zcard,.br-pcard,.br-tok');
         if (tile) tile.classList.add('br-imgok');
       });
     });
@@ -193,6 +206,18 @@
     const data = buildTimeline(GAME), steps = data.steps, P = data.players;
     if (!steps.length) { container.innerHTML = '<div class="br-empty">Pas d\'action à rejouer pour cette partie.</div>'; return; }
 
+    // Tokens en jeu (dans un coin de la piste centrale, côté droit ; adversaire
+    // en haut, toi en bas — en miroir des PV à gauche).
+    const tokTiles = side => tokensForHero(side === 'me' ? data.hero.me : data.hero.opp)
+      .map(t => '<div class="br-tok br-' + side + '"><div class="br-art" data-card="' + esc(t) + '"></div><div class="br-nm">' + esc(t) + '</div></div>').join('');
+    const oppToks = tokTiles('opp'), meToks = tokTiles('me');
+    const tokSide = (oppToks || meToks)
+      ? '<div class="br-tokenside">' +
+          '<div class="br-tokrow br-opp">' + oppToks + '</div>' +
+          '<div class="br-tokrow br-me">' + meToks + '</div>' +
+        '</div>'
+      : '';
+
     container.innerHTML =
       '<div class="br-wrap">' +
         '<div class="br-toolbar" role="group" aria-label="Contrôles de lecture">' +
@@ -211,6 +236,7 @@
               '<div class="br-life br-me"><span class="br-life-who">' + esc(data.hero.me) + '</span><span class="br-life-n" id="br-mLifeTok">0</span></div>' +
             '</div>' +
             '<div class="br-lane" id="br-stage"></div>' +
+            tokSide +
           '</div>' +
           '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me) + '</div>' +
           '<div class="br-hand br-me" id="br-myHand"></div>' +

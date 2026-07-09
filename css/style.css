@@ -1057,7 +1057,7 @@ footer a{color:var(--text-dim)}
 .br-art.has-img{background-size:contain;background-repeat:no-repeat;background-position:center}
 /* Image chargée → la carte porte son nom : on masque le nom en surimpression.
    Spécificité tuile+imgok pour battre .br-zcard/.br-pcard .br-nm (display:-webkit-box). */
-.br-gcard.br-imgok .br-lab,.br-zcard.br-imgok .br-nm,.br-pcard.br-imgok .br-nm{display:none}
+.br-gcard.br-imgok .br-lab,.br-zcard.br-imgok .br-nm,.br-pcard.br-imgok .br-nm,.br-tok.br-imgok .br-nm{display:none}
 /* Plateau épuré : on retire les libellés de zones/emplacements (TÊTE, ARSENAL,
    PITCH, CIMETIÈRE, ARME, DECK…). La position et le visuel suffisent. */
 .br-slot-t,.br-slot-tag{display:none}
@@ -1102,6 +1102,22 @@ footer a{color:var(--text-dim)}
 .br-life.br-me{border-color:rgba(201,162,39,.5)} .br-life.br-me .br-life-who{color:var(--accent,var(--gold))}
 .br-life-n.br-hit{animation:brHit .55s ease}
 @keyframes brHit{0%{transform:scale(1)}30%{transform:scale(1.3);color:var(--red)}100%{transform:scale(1)}}
+/* Tokens en jeu : petites cartes dans le coin droit de la piste (miroir des PV
+   à gauche) — adversaire en haut, toi en bas. */
+/* Mobile : tokens en overlay dans les coins droits (n'empiètent pas sur la
+   largeur de la piste → le combat ne se replie pas, la table reste courte). */
+.br-tokenside{position:absolute;right:3px;top:5px;bottom:5px;z-index:4;pointer-events:none;
+  display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+.br-tokrow{display:flex;flex-direction:row;gap:4px;align-items:center}
+.br-tok{position:relative;width:40px;aspect-ratio:5/7;flex:0 0 auto;border-radius:7px;overflow:hidden;
+  border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel))}
+.br-tok.br-opp{border-color:#8b6bff66} .br-tok.br-me{border-color:rgba(201,162,39,.5)}
+.br-tok.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-tok.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-tok .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.44rem;line-height:1.03;
+  padding:8px 2px 2px;color:#e9e6da;text-align:center;text-shadow:0 1px 2px #000;
+  background:linear-gradient(to top,rgba(0,0,0,.92),transparent);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .br-phase{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);font-weight:700;margin-bottom:9px}
 .br-banner{text-align:center}
 .br-big{font-size:1rem;font-weight:700;font-family:'Cinzel',serif;letter-spacing:.02em}
@@ -1187,6 +1203,10 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-lane .br-pcard.br-lg{width:194px}
   #boardReplay .br-life-n{font-size:1.6rem}
   #boardReplay .br-life-who{font-size:.56rem;max-width:120px}
+  /* Desktop : tokens en colonne in-flow à droite de la piste (place dispo). */
+  #boardReplay .br-tokenside{position:static;flex:0 0 auto}
+  #boardReplay .br-tokrow{flex-direction:column;gap:6px}
+  #boardReplay .br-tok{width:62px}
   #boardReplay .br-playone{max-width:100%}
   #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}
   #boardReplay .br-big{font-size:1.5rem}
