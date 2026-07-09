@@ -523,11 +523,11 @@ footer a{color:var(--text-dim)}
     var(--panel);
   border:1px solid var(--line); border-radius:14px; padding:14px;
 }
-/* Résultat en filigrane diagonal (le payoff) */
+/* Résultat : pastille centrée entre les héros (sous « VS ») — toujours visible,
+   jamais derrière une carte de héros. */
 .match-card .verdict{
-  position:absolute; top:10px; right:-34px; transform:rotate(38deg);
-  font-family:'Cinzel',serif; font-weight:700; font-size:.62rem; letter-spacing:.12em;
-  padding:3px 40px; text-transform:uppercase; opacity:.95;
+  font-family:'Cinzel',serif; font-weight:700; font-size:.66rem; letter-spacing:.06em;
+  padding:3px 12px; border-radius:999px; text-transform:uppercase; white-space:nowrap;
 }
 .verdict.win{background:rgba(79,184,122,.22); color:var(--green); box-shadow:0 0 0 1px rgba(79,184,122,.35)}
 .verdict.loss{background:rgba(224,85,90,.20); color:var(--red); box-shadow:0 0 0 1px rgba(224,85,90,.3)}
@@ -537,7 +537,7 @@ footer a{color:var(--text-dim)}
 .match-side{flex:1;display:flex;align-items:center;gap:10px;min-width:0}
 .match-side.opp{flex-direction:row-reverse;text-align:right}
 .hero-avatar{
-  width:5rem;height:6.95rem;border-radius:10px;flex-shrink:0;overflow:hidden;
+  width:5.8rem;height:8.1rem;border-radius:10px;flex-shrink:0;overflow:hidden;
   background:var(--panel-2); border:2px solid var(--line);
   display:flex;align-items:center;justify-content:center;
   font-family:'Cinzel',serif;font-size:1.5rem;color:var(--text-faint);
@@ -555,6 +555,8 @@ footer a{color:var(--text-dim)}
 .hero-meta .plife.low{color:var(--red)}
 .match-mid{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px}
 .match-mid .vs{font-family:'Cinzel',serif;color:var(--text-faint);font-size:.72rem;letter-spacing:.1em}
+/* Résultat sur sa propre ligne, sous « héros PV VS héros PV ». */
+.match-verdict{text-align:center;margin-bottom:10px}
 
 .match-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .match-chip{
@@ -572,12 +574,33 @@ footer a{color:var(--text-dim)}
 .eq-label.opp{color:#6d5fa8}
 .eq-slots{display:flex;gap:5px;flex-wrap:wrap}
 .eq-slot{
-  width:3rem;height:4.15rem;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);
+  width:4rem;height:5.55rem;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);
   overflow:hidden;position:relative;flex-shrink:0;
 }
 .eq-slot img{width:100%;height:100%;object-fit:cover}
 .eq-slot .eq-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.9rem;opacity:.5}
-.eq-slot .eq-ph.eq-name{font-size:.5rem;opacity:.85;color:var(--text-faint);text-align:center;padding:2px;line-height:1.1;font-family:'Inter',sans-serif;overflow:hidden}
+.eq-slot .eq-ph.eq-name{font-size:.56rem;opacity:.85;color:var(--text-faint);text-align:center;padding:2px;line-height:1.12;font-family:'Inter',sans-serif;overflow:hidden}
+
+/* Onglet Table : bandeau de match RÉDUIT À UNE LIGNE (héros / équipement / PV
+   sont déjà sur le plateau) — sur mobile ET desktop, pour harmoniser. */
+#scoreboard.sb-wide .match-card{padding:8px 16px}
+#scoreboard.sb-wide .match-card .hero-avatar,
+#scoreboard.sb-wide .match-card .eq-strip,
+#scoreboard.sb-wide .match-card .match-meta{display:none}
+#scoreboard.sb-wide .match-heroes{margin-bottom:0;justify-content:center;gap:16px;flex-wrap:wrap}
+#scoreboard.sb-wide .match-side{flex:0 0 auto}
+#scoreboard.sb-wide .hero-meta{flex-direction:row;align-items:baseline;gap:8px}
+#scoreboard.sb-wide .hero-meta .pname{display:none}
+#scoreboard.sb-wide .hero-meta .hname{font-size:1rem}
+#scoreboard.sb-wide .hero-meta .plife{font-size:1rem}
+#scoreboard.sb-wide .match-mid{flex-direction:row;gap:10px;align-items:baseline}
+#scoreboard.sb-wide .match-verdict{margin:3px 0 0}
+/* Desktop : bandeau + onglets pleine largeur, alignés sur le plateau. */
+@media (min-width: 900px) {
+  #scoreboard.sb-wide #matchBanner,
+  #scoreboard.sb-wide .replay-tabs{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px));padding-inline:2px}
+  #scoreboard.sb-wide #matchBanner{padding-top:6px}
+}
 .eq-empty{font-size:.65rem;color:var(--text-faint);font-style:italic}
 
 /* ---------- Loading shimmer ---------- */
@@ -988,6 +1011,229 @@ footer a{color:var(--text-dim)}
 .hx-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(10px);background:var(--panel-2);border:1px solid var(--accent-dim);color:var(--text);padding:10px 16px;border-radius:10px;font-size:.8rem;opacity:0;pointer-events:none;transition:.2s;z-index:200;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 .hx-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* ============================================================
+   BOARD REPLAY — vue « table + timeline » (onglet Table du replay).
+   Toutes les classes sont préfixées « br- » : aucune collision avec le
+   reste du site (qui a déjà .verdict, .card, .slot, .stage, .hand…).
+   ============================================================ */
+.br-wrap{padding:4px 2px 2px}
+.br-empty{padding:24px 12px;text-align:center;color:var(--text-dim);font-size:.85rem}
+.br-toolbar{display:flex;gap:7px;justify-content:center;margin-bottom:10px}
+.br-tool{width:44px;height:38px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.br-tool:hover{border-color:var(--accent-dim,var(--gold-dim));background:var(--panel-2)}
+.br-tool:disabled{opacity:.35;cursor:default}
+.br-tool:focus-visible{outline:2px solid var(--accent,var(--gold));outline-offset:2px}
+.br-tool.br-play{font-size:1.05rem;color:#141414;background:var(--accent,var(--gold));border-color:var(--accent,var(--gold))}
+.br-mat{position:relative;display:flex;flex-direction:column;gap:7px;
+  background:radial-gradient(150% 100% at 50% 42%,#16223b,#0a0e18 82%);
+  border:1px solid var(--line);border-radius:14px;padding:9px 8px;
+  box-shadow:inset 0 0 90px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.02)}
+.br-hand{display:flex;gap:4px;justify-content:center;min-height:46px;align-items:center;flex-wrap:nowrap;overflow-x:auto;padding:2px}
+.br-handempty{font:.6rem 'JetBrains Mono',monospace;color:var(--text-faint)}
+.br-back{width:34px;height:46px;flex:0 0 auto;border-radius:5px;border:1px solid #5b1e22;background:linear-gradient(160deg,#7a2a2f,#3c1417);position:relative;box-shadow:inset 0 0 0 2px #0000002e}
+.br-back::after{content:"FaB";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99;letter-spacing:.05em}
+/* Champ d'un joueur : rail (cimetière·deck·pitch) | héros+équipement | arsenal.
+   Rails empilés en colonne sur mobile (compact) ; passent en rangée sur desktop. */
+.br-field{position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;
+  background:radial-gradient(120% 120% at 50% 50%,rgba(20,26,41,.72),rgba(10,14,24,.72));
+  border:1px solid var(--line);border-radius:12px;padding:7px 8px}
+.br-field.br-active.br-opp{box-shadow:inset 0 0 0 1px #8b6bff55,0 0 20px rgba(139,107,255,.12)}
+.br-field.br-active.br-me{box-shadow:inset 0 0 0 1px rgba(201,162,39,.42),0 0 20px rgba(201,162,39,.12)}
+.br-rail{display:flex;flex-direction:column;gap:5px;align-items:center;flex:0 0 auto}
+/* Mobile : rail gauche en 2×2 (cimetière·deck / pitch·banni) → plus compact
+   en hauteur, ce qui remonte les boutons et laisse la place au héros. */
+.br-rail.br-left{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:5px;align-content:center}
+.br-rail.br-right{justify-self:end}
+.br-zpair{display:flex;flex-direction:column;align-items:center;gap:2px}
+.br-zlbl{font:600 .5rem/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);white-space:nowrap}
+.br-cluster{display:flex;align-items:center;justify-content:center;gap:5px}
+.br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:4px}
+/* Dimensions des tuiles — mobile (héros/équipement/arme agrandis). */
+.br-rail .br-slot,.br-rail .br-deck{width:44px;aspect-ratio:5/7;min-height:0;height:auto}
+.br-equip .br-gcard{width:44px;aspect-ratio:5/7}
+.br-cluster>.br-gcard{width:50px;aspect-ratio:5/7}
+.br-cluster>.br-gcard.br-hero{width:64px}
+.br-gcard{border-radius:6px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel));position:relative}
+/* La vignette EST la carte : l'image remplit toute la tuile (portrait), le nom
+   est en surimpression en bas. Fini la fine bande mal cadrée. */
+.br-art{position:absolute;inset:0;background:radial-gradient(120% 90% at 30% 10%,#2a3350,#141a29) center/cover no-repeat}
+.br-gcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-gcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+/* contain : la carte ENTIÈRE est toujours visible, jamais recadrée/coupée
+   (au pire un fin liseré sombre si son ratio diffère de la tuile). */
+.br-art.has-img{background-size:contain;background-repeat:no-repeat;background-position:center}
+/* Image chargée → la carte porte son nom : on masque le nom en surimpression.
+   Spécificité tuile+imgok pour battre .br-zcard/.br-pcard .br-nm (display:-webkit-box). */
+.br-gcard.br-imgok .br-lab,.br-zcard.br-imgok .br-nm,.br-pcard.br-imgok .br-nm,.br-tok.br-imgok .br-nm{display:none}
+/* Plateau épuré : on retire les libellés de zones/emplacements (TÊTE, ARSENAL,
+   PITCH, CIMETIÈRE, ARME, DECK…). La position et le visuel suffisent. */
+.br-slot-t,.br-slot-tag{display:none}
+.br-slot:not(.br-filled){font-size:0}
+.br-lab{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:9px 3px 3px;color:#e9e6da;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.45) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
+.br-slot-t{font-size:.5rem;text-transform:uppercase;letter-spacing:.06em;color:#cdd2e0;position:absolute;top:2px;left:3px;z-index:2;text-shadow:0 1px 3px #000}
+.br-gcard.br-hero .br-lab{color:#fff;font-weight:700}
+.br-slot{height:100%;min-height:62px;border-radius:6px;border:1px dashed #33405e;background:#0f1420;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.56rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);padding:2px}
+.br-deck{min-height:62px;border-radius:6px;border:1px solid #5b1e22;position:relative;background:linear-gradient(160deg,#7a2a2f,#3c1417)}
+.br-deck::before{content:"";position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);text-align:center;font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99;letter-spacing:.08em}
+.br-slot.br-filled{padding:0;border-style:solid;position:relative;overflow:visible}
+.br-slot-tag{position:absolute;top:-6px;left:50%;transform:translateX(-50%);font:700 .44rem/1 'JetBrains Mono',monospace;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 4px;white-space:nowrap;z-index:2}
+.br-zcard{width:100%;height:100%;border-radius:5px;overflow:hidden;position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));border:1px solid var(--line)}
+.br-zcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-zcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-zcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:8px 2px 2px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.4) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
+.br-zcard.br-back{display:flex;background:linear-gradient(160deg,#7a2a2f,#3c1417);align-items:center;justify-content:center}
+.br-zcard.br-back::after{content:"FaB";font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99}
+.br-zcard.br-grave{filter:grayscale(.35) brightness(.85)}
+.br-badge{position:absolute;bottom:-4px;right:-4px;font:700 .52rem/1 'JetBrains Mono',monospace;color:#fff;background:#111a;border:1px solid var(--line);border-radius:6px;padding:1px 4px;z-index:2}
+.br-bump{animation:brBump .45s ease}
+@keyframes brBump{0%{transform:scale(1)}35%{transform:scale(1.18);box-shadow:0 0 10px #0006}100%{transform:scale(1)}}
+/* Bande centrale : PV (côté gauche) + piste de combat, entre les deux camps. */
+.br-mid{position:relative;display:flex;flex-direction:row;justify-content:center;align-items:stretch;gap:12px}
+.br-turnchip{position:absolute;top:-4px;left:50%;transform:translateX(-50%);z-index:4;
+  font:700 .56rem/1 'JetBrains Mono',monospace;color:#141414;background:var(--green);
+  border-radius:6px;padding:3px 9px;white-space:nowrap}
+.br-lane{position:relative;flex:1 1 auto;min-width:0;min-height:150px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;padding:16px 12px 12px;overflow:hidden;
+  background:radial-gradient(80% 120% at 50% 50%,rgba(255,255,255,.04),transparent 72%)}
+/* PV : petit tableau de score sur le CÔTÉ de la piste de combat (plus sur le
+   héros). Adversaire en haut, toi en bas → les deux PV encadrent le centre,
+   au même repère sur PC comme sur mobile. Dans les coins → n'empiète pas sur
+   l'échange (attaque/défense) qui reste centré. */
+.br-lifeside{flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+.br-life{display:flex;flex-direction:column;align-items:center;gap:0;border-radius:9px;padding:4px 9px;
+  background:rgba(12,16,26,.8);border:1px solid var(--line)}
+.br-life-who{font:600 .5rem/1.3 'JetBrains Mono',monospace;letter-spacing:.03em;text-transform:uppercase;
+  max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.br-life-n{font:800 1.4rem/1.15 'JetBrains Mono',monospace;transition:transform .2s}
+.br-life.br-opp{border-color:#8b6bff66} .br-life.br-opp .br-life-who{color:var(--violet)}
+.br-life.br-me{border-color:rgba(201,162,39,.5)} .br-life.br-me .br-life-who{color:var(--accent,var(--gold))}
+.br-life-n.br-hit{animation:brHit .55s ease}
+@keyframes brHit{0%{transform:scale(1)}30%{transform:scale(1.3);color:var(--red)}100%{transform:scale(1)}}
+/* Tokens en jeu : petites cartes dans le coin droit de la piste (miroir des PV
+   à gauche) — adversaire en haut, toi en bas. */
+/* Mobile : tokens en overlay dans les coins droits (n'empiètent pas sur la
+   largeur de la piste → le combat ne se replie pas, la table reste courte). */
+.br-tokenside{position:absolute;right:3px;top:5px;bottom:5px;z-index:4;pointer-events:none;
+  display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+.br-tokrow{display:flex;flex-direction:row;gap:4px;align-items:center}
+.br-tok{position:relative;width:40px;aspect-ratio:5/7;flex:0 0 auto;border-radius:7px;overflow:hidden;
+  border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel))}
+.br-tok.br-opp{border-color:#8b6bff66} .br-tok.br-me{border-color:rgba(201,162,39,.5)}
+.br-tok.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-tok.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-tok .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.44rem;line-height:1.03;
+  padding:8px 2px 2px;color:#e9e6da;text-align:center;text-shadow:0 1px 2px #000;
+  background:linear-gradient(to top,rgba(0,0,0,.92),transparent);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.br-phase{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);font-weight:700;margin-bottom:9px}
+.br-banner{text-align:center}
+.br-big{font-size:1rem;font-weight:700;font-family:'Cinzel',serif;letter-spacing:.02em}
+.br-banner.br-me .br-big{color:var(--accent,var(--gold))} .br-banner.br-opp .br-big{color:var(--violet)}
+.br-sub{font-size:.76rem;color:var(--text-dim);margin-top:3px}
+.br-duel{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
+.br-side{display:flex;flex-direction:column;align-items:center;gap:5px}
+.br-duel-who{font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);font-weight:700}
+.br-cardrow{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;max-width:180px}
+.br-noblock{font:.62rem 'Inter',sans-serif;color:var(--red);font-weight:600}
+.br-pcard{width:56px;aspect-ratio:5/7;border-radius:6px;overflow:hidden;border:1px solid var(--line);position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));animation:brPop .3s ease}
+.br-pcard.br-inhand{width:54px}
+@keyframes brPop{from{transform:translateY(6px) scale(.94);opacity:0}to{transform:none;opacity:1}}
+.br-pcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-pcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-pcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:9px 3px 3px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.45) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
+.br-pitch-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#82b4dd;background:#16273655;border:1px solid #2c4a6366;border-radius:999px;padding:1px 7px;margin-top:2px}
+.br-arrow{color:var(--text-faint);font-size:1.2rem}
+.br-verdict{margin-top:11px;font:700 .8rem 'JetBrains Mono',monospace;padding:5px 12px;border-radius:999px}
+.br-verdict.br-blocked{color:var(--green);background:#4fb87a1a;border:1px solid #4fb87a44}
+.br-verdict.br-through{color:var(--red);background:#e0555a1a;border:1px solid #e0555a55}
+/* Récap « une action » : juste la carte en grand, liseré = qui joue. */
+.br-playone{display:flex;flex-direction:column;align-items:center;gap:9px}
+/* Cartes de la piste de combat (centre) — agrandies. */
+.br-lane .br-pcard{width:66px}
+.br-lane .br-pcard.br-lg{width:114px}
+.br-pcard.br-lg{width:92px;border-width:2px}
+.br-pcard.br-lg.br-me{border-color:var(--accent,var(--gold));box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}
+.br-pcard.br-lg.br-opp{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,107,255,.22)}
+.br-react{font-size:.66rem;color:var(--text-dim);letter-spacing:.05em;text-transform:uppercase;font-weight:600}
+/* Aperçu grande carte au survol d'une tuile (desktop) */
+.br-preview{position:fixed;width:224px;height:313px;border-radius:14px;background-size:contain;background-repeat:no-repeat;background-position:center;background-color:#0c0f17;
+  border:1px solid var(--line-2);box-shadow:0 10px 34px rgba(0,0,0,.7);opacity:0;pointer-events:none;z-index:120;transition:opacity .1s}
+.br-preview.show{opacity:1}
+.br-timeline{margin-top:14px}
+.br-tl-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.br-tl-lbl{font:.72rem 'JetBrains Mono',monospace;color:var(--text-dim)}
+.br-info{margin-left:auto;font:.72rem 'JetBrains Mono',monospace;color:var(--text-dim)}
+.br-info b{color:var(--text)}
+#boardReplay input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:24px;background:transparent;cursor:pointer}
+#boardReplay input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--accent,var(--gold)) var(--pct,0%),var(--line) var(--pct,0%))}
+#boardReplay input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+#boardReplay input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent,var(--gold))}
+#boardReplay input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;border-radius:50%;background:var(--accent,var(--gold));border:2px solid var(--bg);box-shadow:0 0 0 1px var(--accent,var(--gold))}
+#boardReplay input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent,var(--gold));border:2px solid var(--bg)}
+#boardReplay input[type=range]:focus-visible{outline:2px solid var(--accent,var(--gold));outline-offset:3px;border-radius:4px}
+.br-ticks{display:flex;justify-content:space-between;font:.58rem 'JetBrains Mono',monospace;color:var(--text-faint);margin-top:1px;padding:0 2px}
+
+/* ---- Desktop : le tapis miroir sort de la colonne 720 px et occupe l'écran,
+   centré et agrandi. Rails à l'horizontale (on a la largeur), cartes plus
+   grandes. Le combat reste au centre entre les deux camps. Le reste
+   (Déroulé/Stats) garde sa colonne lisible. */
+@media (min-width: 900px) {
+  #boardReplay{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px))}
+  /* Plateau + barre de lecture côte à côte, alignés sur les onglets :
+     [ table (remplit) | boutons ]. La table démarre au bord gauche des onglets,
+     les boutons se collent à son bord droit, l'ensemble atteint le bord droit. */
+  #boardReplay .br-wrap{display:grid;grid-template-columns:1fr auto;column-gap:12px;
+    align-items:start;grid-template-areas:"mat tools" "tl tl"}
+  #boardReplay .br-mat{grid-area:mat;max-width:none;margin:0;gap:10px;padding:16px 24px}
+  #boardReplay .br-timeline{grid-area:tl}
+  /* gap réduit + cluster agrandi = on rogne l'espace vide au centre du champ
+     pour de plus grandes cartes, sans toucher à la taille des cases (rails). */
+  #boardReplay .br-field{gap:14px;padding:12px 26px}
+  #boardReplay .br-rail{flex-direction:row;gap:9px}
+  #boardReplay .br-rail.br-left{display:flex;flex-direction:row}
+  #boardReplay .br-cluster{gap:10px}
+  /* Équipement en RANGÉE à côté du héros : on a la largeur, ça économise la
+     hauteur (les deux mains tiennent alors à l'écran sans scroller). */
+  #boardReplay .br-equip{display:flex;flex-direction:row;gap:6px;grid-template-columns:none;grid-auto-rows:auto}
+  #boardReplay .br-equip .br-gcard{width:74px}
+  #boardReplay .br-rail .br-slot,#boardReplay .br-rail .br-deck{width:72px}
+  #boardReplay .br-cluster>.br-gcard{width:92px}
+  #boardReplay .br-cluster>.br-gcard.br-hero{width:118px}
+  #boardReplay .br-lifetok{width:38px;height:38px;font-size:1rem;right:-11px;top:-11px}
+  #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
+
+  /* Piste de combat centrale : cartes nettement plus grandes (c'est le focus). */
+  #boardReplay .br-mid{gap:16px}
+  /* Piste bornée + centrée → les PV restent collés à sa gauche (pas au bord). */
+  #boardReplay .br-lane{flex:0 0 auto;width:min(720px,100%);min-height:230px}
+  #boardReplay .br-lane .br-pcard{width:126px}
+  #boardReplay .br-lane .br-pcard.br-lg{width:194px}
+  #boardReplay .br-life-n{font-size:1.6rem}
+  #boardReplay .br-life-who{font-size:.56rem;max-width:120px}
+  /* Desktop : tokens en colonne in-flow à droite de la piste (place dispo). */
+  #boardReplay .br-tokenside{position:static;flex:0 0 auto}
+  #boardReplay .br-tokrow{flex-direction:column;gap:6px}
+  #boardReplay .br-tok{width:62px}
+  #boardReplay .br-playone{max-width:100%}
+  #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}
+  #boardReplay .br-big{font-size:1.5rem}
+  #boardReplay .br-sub{font-size:.95rem}
+  #boardReplay .br-cardrow{max-width:none}
+
+  /* Mains agrandies. */
+  #boardReplay .br-hand{min-height:0;gap:8px;padding:2px}
+  #boardReplay .br-hand .br-pcard{width:68px}
+  #boardReplay .br-hand .br-pcard.br-inhand{width:66px}
+  #boardReplay .br-hand .br-back{width:54px;height:auto;aspect-ratio:5/7}
+
+  /* Contrôles : rail vertical collé au bord droit de la table, collant en haut
+     pour rester accessibles quand on fait défiler le plateau. */
+  #boardReplay .br-toolbar{grid-area:tools;position:sticky;top:16px;align-self:start;
+    flex-direction:column;gap:8px;margin:0;padding:8px;border-radius:14px;
+    background:rgba(12,15,23,.85);border:1px solid var(--line-2);box-shadow:0 8px 28px rgba(0,0,0,.55)}
+  #boardReplay .br-toolbar .br-tool{width:46px;height:46px;font-size:1.15rem}
+}
+
 </style>
 </head>
 <body>
@@ -1027,6 +1273,7 @@ footer a{color:var(--text-dim)}
       <!-- Onglets : séparer le déroulé tour-par-tour des stats globales -->
       <div class="replay-tabs" id="replayTabs">
         <button class="replay-tab-btn active" data-tab="replay">⚔ Déroulé</button>
+        <button class="replay-tab-btn" data-tab="table">🎴 Table</button>
         <button class="replay-tab-btn" data-tab="stats">📊 Stats</button>
       </div>
 
@@ -1063,6 +1310,10 @@ footer a{color:var(--text-dim)}
             <div id="knownCardsBody"></div>
           </details>
         </div>
+      </div>
+
+      <div class="replay-tab" id="tab-table">
+        <div id="boardReplay"></div>
       </div>
 
       <div class="replay-tab" id="tab-stats">
@@ -1291,6 +1542,24 @@ footer a{color:var(--text-dim)}
     return { rest, snapshots: out };
   }
 
+  // Bloc terrain : permanents/tokens en jeu, DEUX camps par tour.
+  // Format d'une ligne : [LABEL] me: a, b | opp: c, d
+  function parseFieldSnapshotBlock(text, marker) {
+    const out = {};
+    const { rest, body } = sliceBlock(text, marker);
+    if (body == null) return { rest: text, snapshots: out };
+    const lineRe = /^\[(.+?)\]\s*(.*)$/gm;
+    const parseList = s => (!s || /^\(vide\)$/i.test(s.trim())) ? [] : s.split(',').map(x => x.trim()).filter(Boolean);
+    let hm;
+    while ((hm = lineRe.exec(body))) {
+      const key = labelToKey(hm[1].trim());
+      if (!key) continue;
+      const mm = hm[2].match(/me:\s*(.*?)\s*\|\s*opp:\s*(.*)$/i);
+      out[key] = mm ? { me: parseList(mm[1]), opp: parseList(mm[2]) } : { me: [], opp: [] };
+    }
+    return { rest, snapshots: out };
+  }
+
   function parseLifeSnapshotBlock(text, marker) {
     const out = {};
     const { rest, body } = sliceBlock(text, marker);
@@ -1400,12 +1669,18 @@ footer a{color:var(--text-dim)}
     const lifeRes = parseLifeSnapshotBlock(text, '=== LIFE SNAPSHOTS'); text = lifeRes.rest;
     const handRes = parseCardSnapshotBlock(text, '=== HAND SNAPSHOTS'); text = handRes.rest;
     const arsRes = parseCardSnapshotBlock(text, '=== ARSENAL SNAPSHOTS'); text = arsRes.rest;
+    const fieldRes = parseFieldSnapshotBlock(text, '=== FIELD SNAPSHOTS'); text = fieldRes.rest;
+    const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
+    const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
 
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
     const handSnapshots = handRes.snapshots;
     const arsenalSnapshots = arsRes.snapshots;
+    const fieldSnapshots = fieldRes.snapshots;
+    const graveSnapshots = graveRes.snapshots;
+    const banishSnapshots = banishRes.snapshots;
     const lifeSnapshots = lifeRes.snapshots;
 
     // 2) Corps du log : header + lignes d'événements.
@@ -1585,6 +1860,10 @@ footer a{color:var(--text-dim)}
       // joueur, le grabber capte l'instantané d'ouverture trop tard et peut y
       // voir une carte déjà arsenalée — on force donc le vide pour l'ouverture.
       if (t.turnNumber === 0) t.arsenal = [];
+      // Permanents/tokens + cimetière + banni (2 camps) captés par le grabber.
+      t.field = (key in fieldSnapshots) ? fieldSnapshots[key] : null;
+      t.grave = (key in graveSnapshots) ? graveSnapshots[key] : null;
+      t.banish = (key in banishSnapshots) ? banishSnapshots[key] : null;
       t.life = (key in lifeSnapshots) ? lifeSnapshots[key] : null;
       t.side = t.player === myName ? 'me' : (t.player === oppName ? 'opp' : null);
       // timing depuis les événements horodatés du tour
@@ -1764,7 +2043,7 @@ footer a{color:var(--text-dim)}
       lifeHistory,
       lifeSeries,
       life: finalLife,
-      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, life: lifeSnapshots },
+      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, grave: graveSnapshots, banish: banishSnapshots, life: lifeSnapshots },
       timeline: { startTs, endTs, durationSec, lineTs: lineTs || null },
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,
@@ -2152,6 +2431,25 @@ footer a{color:var(--text-dim)}
     return (h >>> 0).toString(36);
   }
 
+  // ---------- Pierres tombales (suppressions persistantes) ----------
+  // La suppression est locale, mais la synchro (sync.js pull) ré-injecte
+  // sinon toute partie absente depuis le dépôt (library.json + data/raw du
+  // grabber). On mémorise donc les gameId explicitement supprimés pour que
+  // `pull` les ignore. Une réimportation VOLONTAIRE lève la pierre tombale.
+  const DELETED_KEY = 'fabDeletedIds';
+  function deletedSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]')); }
+    catch (e) { return new Set(); }
+  }
+  function saveDeleted(set) {
+    try { localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set))); } catch (e) { /* quota / privé */ }
+  }
+  function markDeleted(id) { const s = deletedSet(); s.add(String(id)); saveDeleted(s); }
+  function unmarkDeleted(id) { const s = deletedSet(); if (s.delete(String(id))) saveDeleted(s); }
+  function isDeleted(id) { return deletedSet().has(String(id)); }
+  function deletedIds() { return Array.from(deletedSet()); }
+  function clearDeleted() { try { localStorage.removeItem(DELETED_KEY); } catch (e) { /* ignore */ } }
+
   let _dbPromise = null;
   function open() {
     if (_dbPromise) return _dbPromise;
@@ -2221,7 +2519,9 @@ footer a{color:var(--text-dim)}
 
   async function removeGame(id) {
     const store = await tx('readwrite');
-    return wrap(store.delete(String(id)));
+    const res = await wrap(store.delete(String(id)));
+    markDeleted(id);   // pose la pierre tombale → la synchro ne la ré-injectera plus
+    return res;
   }
 
   async function count() {
@@ -2231,7 +2531,9 @@ footer a{color:var(--text-dim)}
 
   async function clearAll() {
     const store = await tx('readwrite');
-    return wrap(store.clear());
+    const res = await wrap(store.clear());
+    clearDeleted();   // remise à zéro complète : on oublie aussi les suppressions
+    return res;
   }
 
   // Écrit une entrée complète telle quelle (pour la restauration d'une
@@ -2294,14 +2596,16 @@ footer a{color:var(--text-dim)}
     if (opts.replace) await clearAll();
     let imported = 0;
     for (const e of entries) {
-      try { await putEntry(e); imported++; } catch (err) { console.error(err); }
+      try { await putEntry(e); unmarkDeleted(e.gameId); imported++; }   // restauration volontaire → lève la pierre tombale
+      catch (err) { console.error(err); }
     }
     return { imported, skipped: Math.max(0, rawList.length - imported) };
   }
 
   root.FabDB = {
     open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
-    putEntry, buildExport, normalizeImport, exportAll, importEntries
+    putEntry, buildExport, normalizeImport, exportAll, importEntries,
+    markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted
   };
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2333,6 +2637,7 @@ footer a{color:var(--text-dim)}
   const DATA_PATH = 'data/library.json';
   const RAW_DIR = 'data/raw/';                 // dépôts bruts du grabber (Phase 3)
   const RAW_INDEX = 'data/raw/index.json';     // manifeste des .txt déposés
+  const DELETED_PATH = 'data/deleted.json';    // liste PARTAGÉE des gameId supprimés (inter-appareil)
   const API = 'https://api.github.com';
 
   // URL du fichier de données, relative au site déployé (marche sur
@@ -2340,6 +2645,7 @@ footer a{color:var(--text-dim)}
   function dataUrl() { return new URL(DATA_PATH, document.baseURI).href; }
   function rawIndexUrl() { return new URL(RAW_INDEX, document.baseURI).href; }
   function rawFileUrl(id) { return new URL(RAW_DIR + encodeURIComponent(id) + '.txt', document.baseURI).href; }
+  function deletedUrl() { return new URL(DELETED_PATH, document.baseURI).href; }
 
   // Devine {owner, repo} depuis l'URL Pages (`<owner>.github.io/<repo>/`).
   // Retourne null hors github.io → l'écriture est alors désactivée, mais
@@ -2393,13 +2699,43 @@ footer a{color:var(--text-dim)}
     } catch (e) { return []; }
   }
 
+  // Liste partagée des suppressions (data/deleted.json). Lecture statique, sans
+  // token. Tolère un tableau nu ou une enveloppe {ids:[…]}. Absent = [].
+  async function fetchDeleted() {
+    let res;
+    try { res = await fetch(deletedUrl(), { cache: 'no-store' }); }
+    catch (e) { return []; }
+    if (!res.ok) return [];
+    try {
+      const j = await res.json();
+      if (Array.isArray(j)) return j.map(String);
+      return ((j && j.ids) || []).map(String);
+    } catch (e) { return []; }
+  }
+
   // Descend le nuage → n'INSÈRE que les parties absentes en local.
   // Deux sources fusionnées, dédupliquées par gameId :
   //   1. data/library.json  : entrées déjà parsées (imports viewer).
   //   2. data/raw/*.txt      : logs bruts déposés par le grabber, parsés ici
   //      (chaque brut n'est récupéré qu'une fois par appareil).
   async function pull() {
-    let added = 0, sawData = false;
+    let added = 0, removed = 0, sawData = false;
+
+    // --- 0. Suppressions PARTAGÉES (inter-appareil) ---
+    // On applique d'abord la liste du dépôt : on retire localement les parties
+    // supprimées ailleurs et on les mémorise (pierre tombale) pour ne jamais les
+    // ré-injecter. Fusionnée avec les suppressions locales de cet appareil.
+    const remoteDead = await fetchDeleted();
+    if (remoteDead.length) {
+      const local0 = await root.FabDB.getAllEntries();
+      const have0 = new Set(local0.map(e => String(e.gameId)));
+      for (const id of remoteDead) {
+        if (root.FabDB.markDeleted) root.FabDB.markDeleted(id);
+        if (have0.has(String(id))) { try { await root.FabDB.removeGame(id); removed++; } catch (e) { console.error(e); } }
+      }
+    }
+    // Ensemble « à ne jamais ré-injecter » = suppressions locales ∪ distantes.
+    const dead = new Set(root.FabDB.deletedIds ? root.FabDB.deletedIds() : []);
 
     // --- 1. Bibliothèque parsée ---
     const lib = await fetchLibrary();
@@ -2410,7 +2746,7 @@ footer a{color:var(--text-dim)}
         const local = await root.FabDB.getAllEntries();
         const have = new Set(local.map(e => String(e.gameId)));
         for (const e of cloud) {
-          if (have.has(String(e.gameId))) continue;
+          if (have.has(String(e.gameId)) || dead.has(String(e.gameId))) continue;
           try { await root.FabDB.putEntry(e); added++; } catch (err) { console.error(err); }
         }
       }
@@ -2426,23 +2762,25 @@ footer a{color:var(--text-dim)}
         const have = new Set(local.map(e => String(e.gameId)));
         for (const it of idx) {
           const id = String((it && (it.gameId || it.id)) || it || '');
-          if (!id || have.has(id)) continue;
+          if (!id || have.has(id) || dead.has(id)) continue;
           try {
             const r = await fetch(rawFileUrl(id), { cache: 'no-store' });
             if (!r.ok) continue;
             const txt = await r.text();
             const rec = parser.parse(txt);
             if (!rec || (!rec.myName && (!rec.playersList || rec.playersList.length < 2))) continue;
+            const gid = String((rec.source && rec.source.gameId) || id);
+            if (dead.has(gid)) continue;   // supprimée volontairement → ne pas ré-injecter
             await root.FabDB.putGame(rec, txt);   // stocke avec le raw en local
-            have.add(String((rec.source && rec.source.gameId) || id));
+            have.add(gid);
             added++;
           } catch (err) { console.error(err); }
         }
       }
     }
 
-    if (!sawData) return { added: 0, offline: true };
-    return { added: added };
+    if (!sawData) return { added: 0, removed: removed, offline: true };
+    return { added: added, removed: removed };
   }
 
   // ---------- Écriture (avec token) ----------
@@ -2520,6 +2858,44 @@ footer a{color:var(--text-dim)}
     return { pushed: 0 };
   }
 
+  // ---------- Suppressions partagées (écriture de data/deleted.json) ----------
+  function buildDeleted(ids) {
+    return { app: 'fab', kind: 'deleted', version: 1, ids: Array.from(new Set(ids.map(String))) };
+  }
+  // Read-modify-write de data/deleted.json ; `mutate(set)` modifie l'ensemble
+  // d'ids et renvoie le nouvel ensemble. 1 nouvelle tentative sur conflit 409.
+  async function writeDeleted(mutate) {
+    const repo = detectRepo(), token = getToken();
+    if (!repo || !token) return { ok: false, skipped: true };
+    const branch = await defaultBranch(repo, token);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const url = API + '/repos/' + repo.owner + '/' + repo.repo + '/contents/' + DELETED_PATH;
+      const r0 = await fetch(url + '?ref=' + encodeURIComponent(branch), { headers: ghHeaders(token) });
+      let sha = null, cur = [];
+      if (r0.ok) { const j = await r0.json(); sha = j.sha; try { const p = JSON.parse(base64ToUtf8(j.content)); cur = Array.isArray(p) ? p : (p.ids || []); } catch (e) { cur = []; } }
+      else if (r0.status !== 404) throw new Error('lecture deleted: HTTP ' + r0.status);
+      const next = mutate(new Set(cur.map(String)));
+      const body = { message: 'sync: suppressions partagées', content: utf8ToBase64(JSON.stringify(buildDeleted(Array.from(next)))), branch: branch };
+      if (sha) body.sha = sha;
+      const r = await fetch(url, { method: 'PUT', headers: ghHeaders(token), body: JSON.stringify(body) });
+      if (r.ok) return { ok: true };
+      if (r.status === 409 && attempt === 0) continue;
+      const detail = await r.text().catch(() => '');
+      throw new Error('écriture deleted: HTTP ' + r.status + ' ' + detail.slice(0, 150));
+    }
+    return { ok: false };
+  }
+  async function pushDeletion(ids) {
+    const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean).map(String);
+    if (!list.length) return { ok: true };
+    return writeDeleted(set => { list.forEach(id => set.add(id)); return set; });
+  }
+  async function pushUndelete(ids) {
+    const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean).map(String);
+    if (!list.length) return { ok: true };
+    return writeDeleted(set => { list.forEach(id => set.delete(id)); return set; });
+  }
+
   // Vérifie que le token a bien accès en écriture au dépôt détecté.
   async function verifyToken() {
     const repo = detectRepo();
@@ -2537,7 +2913,7 @@ footer a{color:var(--text-dim)}
   root.FabSync = {
     detectRepo, dataUrl,
     getToken, setToken, clearToken, hasToken, canWrite,
-    fetchLibrary, pull, push, verifyToken
+    fetchLibrary, fetchDeleted, pull, push, pushDeletion, pushUndelete, verifyToken
   };
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2611,6 +2987,31 @@ footer a{color:var(--text-dim)}
         const i = idxAt(e.clientX);
         if (i >= 0 && i !== currentTurnIndex) { currentTurnIndex = i; renderChainActive(); renderTurn(); }
       });
+    }
+
+    // Aperçu grande carte au survol de l'équipement / des héros du bandeau (desktop).
+    const banner = $('#matchBanner');
+    if (banner) {
+      const prev = document.createElement('div');
+      prev.className = 'br-preview';
+      document.body.appendChild(prev);
+      const PW = 224, PH = 313;
+      const sel = '.eq-slot[data-card], .hero-avatar[data-hero]';
+      banner.addEventListener('mouseover', e => {
+        const el = e.target.closest(sel);
+        const img = el && el.querySelector('img');
+        if (!img || !img.src) return;
+        prev.style.backgroundImage = "url('" + img.src + "')";
+        const r = el.getBoundingClientRect();
+        let left = r.left + r.width / 2 - PW / 2;
+        let top = r.bottom + 10;
+        if (top + PH > window.innerHeight - 8) top = Math.max(8, r.top - PH - 10);
+        left = Math.max(8, Math.min(left, window.innerWidth - PW - 8));
+        prev.style.left = left + 'px';
+        prev.style.top = top + 'px';
+        prev.classList.add('show');
+      });
+      banner.addEventListener('mouseout', e => { if (e.target.closest(sel)) prev.classList.remove('show'); });
     }
   }
 
@@ -2731,12 +3132,12 @@ footer a{color:var(--text-dim)}
 
     el.innerHTML =
       '<div class="match-card">' +
-        verdict +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
           '<div class="match-mid"><span class="vs">VS</span></div>' +
           sideHtml(opp, curOpp, 'opp') +
         '</div>' +
+        '<div class="match-verdict">' + verdict + '</div>' +
         '<div class="match-meta">' + chips.join('') + '</div>' +
         eqStrip(me, 'me') +
         eqStrip(opp, 'opp') +
@@ -2756,16 +3157,11 @@ footer a{color:var(--text-dim)}
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  // Titre de la barre du haut : matchup « Ton héros vs Héros adverse ».
+  // Barre du haut : on n'affiche plus le matchup ici — le bandeau de match
+  // juste en dessous porte déjà les héros et les PV (doublon supprimé).
   function renderTopTitle() {
     const el = $('#replayMatchup');
-    if (!el) return;
-    const me = GAME.players.me, opp = GAME.players.opp;
-    const mine = (me && (me.hero || me.name)) || myName || '?';
-    const theirs = (opp && (opp.hero || opp.name)) || oppName || '?';
-    el.innerHTML = '<span class="me">' + escapeHtml(mine) + '</span>'
-      + '<span class="vs">vs</span>'
-      + '<span class="opp">' + escapeHtml(theirs) + '</span>';
+    if (el) el.innerHTML = '';
   }
 
   function renderCurve() {
@@ -3801,7 +4197,7 @@ footer a{color:var(--text-dim)}
     grid.innerHTML = cards.map(([v, k]) => `<div class="stat-card"><div class="v mono">${v}</div><div class="k">${k}</div></div>`).join('');
   }
 
-  root.Replay = { show, reset };
+  root.Replay = { show, reset, getGame: () => GAME };
 })(typeof self !== 'undefined' ? self : this);
 
 </script>
@@ -4562,19 +4958,29 @@ footer a{color:var(--text-dim)}
     return entries;
   }
 
-  // ---------- Onglets du replay (Déroulé / Stats) ----------
+  // ---------- Onglets du replay (Déroulé / Table / Stats) ----------
+  let _boardGame = null;   // record déjà monté sur la table (évite de reconstruire)
   function setReplayTab(name) {
     document.querySelectorAll('.replay-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-    const r = $('#tab-replay'), s = $('#tab-stats');
+    const r = $('#tab-replay'), t = $('#tab-table'), s = $('#tab-stats');
     if (r) r.classList.toggle('active', name === 'replay');
+    if (t) t.classList.toggle('active', name === 'table');
     if (s) s.classList.toggle('active', name === 'stats');
+    // Onglet Table : on élargit le bandeau + les onglets pour s'aligner sur le
+    // plateau (pleine largeur sur desktop) ; sinon on garde la colonne étroite.
+    const sb = $('#scoreboard'); if (sb) sb.classList.toggle('sb-wide', name === 'table');
+    // La table est reconstruite paresseusement à la première ouverture (par partie).
+    if (name === 'table' && window.BoardReplay && window.Replay && window.Replay.getGame) {
+      const g = window.Replay.getGame();
+      if (g && g !== _boardGame) { window.BoardReplay.mount($('#boardReplay'), g); _boardGame = g; }
+    }
     window.scrollTo(0, 0);
   }
   document.querySelectorAll('.replay-tab-btn').forEach(b => b.addEventListener('click', () => setReplayTab(b.dataset.tab)));
 
   function openGame(entry) {
     window.Replay.show(entry.record);
-    setReplayTab('replay');   // toujours ouvrir sur le déroulé
+    setReplayTab('table');   // vue Table par défaut (rejeu sur plateau)
     showView('replay');
     if (history.replaceState) history.replaceState(null, '', '#game=' + encodeURIComponent(entry.gameId));
     else location.hash = 'game=' + encodeURIComponent(entry.gameId);
@@ -4584,6 +4990,19 @@ footer a{color:var(--text-dim)}
     if (!confirm('Supprimer cette partie de la bibliothèque ?')) return;
     await window.FabDB.removeGame(id);
     await reloadDashboard();
+    // Propagation inter-appareil : on inscrit la suppression dans le dépôt
+    // (data/deleted.json) si la synchro est connectée sur cet appareil.
+    if (window.FabSync.canWrite()) {
+      try {
+        await window.FabSync.pushDeletion([id]);
+        libHint.textContent = 'Partie supprimée — propagée à tes autres appareils.';
+      } catch (e) {
+        console.error(e);
+        libHint.textContent = 'Supprimée ici, mais propagation échouée : ' + e.message;
+      }
+    } else {
+      libHint.textContent = 'Partie supprimée sur cet appareil. Connecte la synchro (☁) pour supprimer sur tous tes appareils.';
+    }
   }
 
   $('#backToDash').addEventListener('click', () => {
@@ -4715,6 +5134,7 @@ footer a{color:var(--text-dim)}
       if (!rec.myName) rec = ensureIdentity(rec);
       try {
         const id = await window.FabDB.putGame(rec, text);
+        window.FabDB.unmarkDeleted(id);   // réimport volontaire → lève une éventuelle suppression
         lastEntry = { gameId: id, record: rec };
         importedIds.push(id);
         imported++;
@@ -4737,6 +5157,9 @@ footer a{color:var(--text-dim)}
       try {
         const entries = (await Promise.all(importedIds.map(id => window.FabDB.getEntry(id)))).filter(Boolean);
         const res = await window.FabSync.push(entries);
+        // Réimport volontaire → on retire ces parties de la liste de suppressions
+        // partagée, pour qu'elles ne soient plus masquées sur les autres appareils.
+        try { await window.FabSync.pushUndelete(importedIds); } catch (e) { console.error(e); }
         libHint.textContent = res.pushed + ' partie(s) publiée(s) dans le dépôt (visibles sur tes autres appareils après le redéploiement Pages).';
       } catch (e) {
         console.error(e);
@@ -4802,7 +5225,7 @@ footer a{color:var(--text-dim)}
     // (lecture statique, sans token) et les fusionne dans le cache local.
     try {
       const r = await window.FabSync.pull();
-      if (r.added) await reloadDashboard();
+      if (r.added || r.removed) await reloadDashboard();
     } catch (e) { console.error(e); }
 
     // Reprise d'un lien profond #game=<id> (après la synchro, la partie

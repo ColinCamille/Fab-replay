@@ -67,6 +67,31 @@
         if (i >= 0 && i !== currentTurnIndex) { currentTurnIndex = i; renderChainActive(); renderTurn(); }
       });
     }
+
+    // Aperçu grande carte au survol de l'équipement / des héros du bandeau (desktop).
+    const banner = $('#matchBanner');
+    if (banner) {
+      const prev = document.createElement('div');
+      prev.className = 'br-preview';
+      document.body.appendChild(prev);
+      const PW = 224, PH = 313;
+      const sel = '.eq-slot[data-card], .hero-avatar[data-hero]';
+      banner.addEventListener('mouseover', e => {
+        const el = e.target.closest(sel);
+        const img = el && el.querySelector('img');
+        if (!img || !img.src) return;
+        prev.style.backgroundImage = "url('" + img.src + "')";
+        const r = el.getBoundingClientRect();
+        let left = r.left + r.width / 2 - PW / 2;
+        let top = r.bottom + 10;
+        if (top + PH > window.innerHeight - 8) top = Math.max(8, r.top - PH - 10);
+        left = Math.max(8, Math.min(left, window.innerWidth - PW - 8));
+        prev.style.left = left + 'px';
+        prev.style.top = top + 'px';
+        prev.classList.add('show');
+      });
+      banner.addEventListener('mouseout', e => { if (e.target.closest(sel)) prev.classList.remove('show'); });
+    }
   }
 
   // Total de PV attendu selon le format (repli si les PV de départ ne sont pas
@@ -186,12 +211,12 @@
 
     el.innerHTML =
       '<div class="match-card">' +
-        verdict +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
           '<div class="match-mid"><span class="vs">VS</span></div>' +
           sideHtml(opp, curOpp, 'opp') +
         '</div>' +
+        '<div class="match-verdict">' + verdict + '</div>' +
         '<div class="match-meta">' + chips.join('') + '</div>' +
         eqStrip(me, 'me') +
         eqStrip(opp, 'opp') +
@@ -211,16 +236,11 @@
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  // Titre de la barre du haut : matchup « Ton héros vs Héros adverse ».
+  // Barre du haut : on n'affiche plus le matchup ici — le bandeau de match
+  // juste en dessous porte déjà les héros et les PV (doublon supprimé).
   function renderTopTitle() {
     const el = $('#replayMatchup');
-    if (!el) return;
-    const me = GAME.players.me, opp = GAME.players.opp;
-    const mine = (me && (me.hero || me.name)) || myName || '?';
-    const theirs = (opp && (opp.hero || opp.name)) || oppName || '?';
-    el.innerHTML = '<span class="me">' + escapeHtml(mine) + '</span>'
-      + '<span class="vs">vs</span>'
-      + '<span class="opp">' + escapeHtml(theirs) + '</span>';
+    if (el) el.innerHTML = '';
   }
 
   function renderCurve() {
@@ -1256,5 +1276,5 @@
     grid.innerHTML = cards.map(([v, k]) => `<div class="stat-card"><div class="v mono">${v}</div><div class="k">${k}</div></div>`).join('');
   }
 
-  root.Replay = { show, reset };
+  root.Replay = { show, reset, getGame: () => GAME };
 })(typeof self !== 'undefined' ? self : this);

@@ -39,6 +39,25 @@
     return (h >>> 0).toString(36);
   }
 
+  // ---------- Pierres tombales (suppressions persistantes) ----------
+  // La suppression est locale, mais la synchro (sync.js pull) ré-injecte
+  // sinon toute partie absente depuis le dépôt (library.json + data/raw du
+  // grabber). On mémorise donc les gameId explicitement supprimés pour que
+  // `pull` les ignore. Une réimportation VOLONTAIRE lève la pierre tombale.
+  const DELETED_KEY = 'fabDeletedIds';
+  function deletedSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]')); }
+    catch (e) { return new Set(); }
+  }
+  function saveDeleted(set) {
+    try { localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(set))); } catch (e) { /* quota / privé */ }
+  }
+  function markDeleted(id) { const s = deletedSet(); s.add(String(id)); saveDeleted(s); }
+  function unmarkDeleted(id) { const s = deletedSet(); if (s.delete(String(id))) saveDeleted(s); }
+  function isDeleted(id) { return deletedSet().has(String(id)); }
+  function deletedIds() { return Array.from(deletedSet()); }
+  function clearDeleted() { try { localStorage.removeItem(DELETED_KEY); } catch (e) { /* ignore */ } }
+
   let _dbPromise = null;
   function open() {
     if (_dbPromise) return _dbPromise;
@@ -108,7 +127,9 @@
 
   async function removeGame(id) {
     const store = await tx('readwrite');
-    return wrap(store.delete(String(id)));
+    const res = await wrap(store.delete(String(id)));
+    markDeleted(id);   // pose la pierre tombale → la synchro ne la ré-injectera plus
+    return res;
   }
 
   async function count() {
@@ -118,7 +139,9 @@
 
   async function clearAll() {
     const store = await tx('readwrite');
-    return wrap(store.clear());
+    const res = await wrap(store.clear());
+    clearDeleted();   // remise à zéro complète : on oublie aussi les suppressions
+    return res;
   }
 
   // Écrit une entrée complète telle quelle (pour la restauration d'une
@@ -181,13 +204,15 @@
     if (opts.replace) await clearAll();
     let imported = 0;
     for (const e of entries) {
-      try { await putEntry(e); imported++; } catch (err) { console.error(err); }
+      try { await putEntry(e); unmarkDeleted(e.gameId); imported++; }   // restauration volontaire → lève la pierre tombale
+      catch (err) { console.error(err); }
     }
     return { imported, skipped: Math.max(0, rawList.length - imported) };
   }
 
   root.FabDB = {
     open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
-    putEntry, buildExport, normalizeImport, exportAll, importEntries
+    putEntry, buildExport, normalizeImport, exportAll, importEntries,
+    markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted
   };
 })(typeof self !== 'undefined' ? self : this);

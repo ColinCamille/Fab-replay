@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=51">
+<link rel="stylesheet" href="css/style.css?v=71">
 </head>
 <body>
 
@@ -43,6 +43,7 @@
       <!-- Onglets : séparer le déroulé tour-par-tour des stats globales -->
       <div class="replay-tabs" id="replayTabs">
         <button class="replay-tab-btn active" data-tab="replay">⚔ Déroulé</button>
+        <button class="replay-tab-btn" data-tab="table">🎴 Table</button>
         <button class="replay-tab-btn" data-tab="stats">📊 Stats</button>
       </div>
 
@@ -81,6 +82,10 @@
         </div>
       </div>
 
+      <div class="replay-tab" id="tab-table">
+        <div id="boardReplay"></div>
+      </div>
+
       <div class="replay-tab" id="tab-stats">
         <div id="statsWrap">
           <h3>Stats de la partie</h3>
@@ -117,12 +122,13 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=51"></script>
-<script src="js/images.js?v=51"></script>
-<script src="js/db.js?v=51"></script>
-<script src="js/sync.js?v=51"></script>
-<script src="js/replay.js?v=51"></script>
-<script src="js/dashboard.js?v=51"></script>
+<script src="talishar-parser.js?v=71"></script>
+<script src="js/images.js?v=71"></script>
+<script src="js/db.js?v=71"></script>
+<script src="js/sync.js?v=71"></script>
+<script src="js/replay.js?v=71"></script>
+<script src="js/boardreplay.js?v=71"></script>
+<script src="js/dashboard.js?v=71"></script>
 
 <script>
 // ============================================================
@@ -179,19 +185,29 @@
     return entries;
   }
 
-  // ---------- Onglets du replay (Déroulé / Stats) ----------
+  // ---------- Onglets du replay (Déroulé / Table / Stats) ----------
+  let _boardGame = null;   // record déjà monté sur la table (évite de reconstruire)
   function setReplayTab(name) {
     document.querySelectorAll('.replay-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-    const r = $('#tab-replay'), s = $('#tab-stats');
+    const r = $('#tab-replay'), t = $('#tab-table'), s = $('#tab-stats');
     if (r) r.classList.toggle('active', name === 'replay');
+    if (t) t.classList.toggle('active', name === 'table');
     if (s) s.classList.toggle('active', name === 'stats');
+    // Onglet Table : on élargit le bandeau + les onglets pour s'aligner sur le
+    // plateau (pleine largeur sur desktop) ; sinon on garde la colonne étroite.
+    const sb = $('#scoreboard'); if (sb) sb.classList.toggle('sb-wide', name === 'table');
+    // La table est reconstruite paresseusement à la première ouverture (par partie).
+    if (name === 'table' && window.BoardReplay && window.Replay && window.Replay.getGame) {
+      const g = window.Replay.getGame();
+      if (g && g !== _boardGame) { window.BoardReplay.mount($('#boardReplay'), g); _boardGame = g; }
+    }
     window.scrollTo(0, 0);
   }
   document.querySelectorAll('.replay-tab-btn').forEach(b => b.addEventListener('click', () => setReplayTab(b.dataset.tab)));
 
   function openGame(entry) {
     window.Replay.show(entry.record);
-    setReplayTab('replay');   // toujours ouvrir sur le déroulé
+    setReplayTab('table');   // vue Table par défaut (rejeu sur plateau)
     showView('replay');
     if (history.replaceState) history.replaceState(null, '', '#game=' + encodeURIComponent(entry.gameId));
     else location.hash = 'game=' + encodeURIComponent(entry.gameId);
@@ -201,6 +217,19 @@
     if (!confirm('Supprimer cette partie de la bibliothèque ?')) return;
     await window.FabDB.removeGame(id);
     await reloadDashboard();
+    // Propagation inter-appareil : on inscrit la suppression dans le dépôt
+    // (data/deleted.json) si la synchro est connectée sur cet appareil.
+    if (window.FabSync.canWrite()) {
+      try {
+        await window.FabSync.pushDeletion([id]);
+        libHint.textContent = 'Partie supprimée — propagée à tes autres appareils.';
+      } catch (e) {
+        console.error(e);
+        libHint.textContent = 'Supprimée ici, mais propagation échouée : ' + e.message;
+      }
+    } else {
+      libHint.textContent = 'Partie supprimée sur cet appareil. Connecte la synchro (☁) pour supprimer sur tous tes appareils.';
+    }
   }
 
   $('#backToDash').addEventListener('click', () => {
@@ -332,6 +361,7 @@
       if (!rec.myName) rec = ensureIdentity(rec);
       try {
         const id = await window.FabDB.putGame(rec, text);
+        window.FabDB.unmarkDeleted(id);   // réimport volontaire → lève une éventuelle suppression
         lastEntry = { gameId: id, record: rec };
         importedIds.push(id);
         imported++;
@@ -354,6 +384,9 @@
       try {
         const entries = (await Promise.all(importedIds.map(id => window.FabDB.getEntry(id)))).filter(Boolean);
         const res = await window.FabSync.push(entries);
+        // Réimport volontaire → on retire ces parties de la liste de suppressions
+        // partagée, pour qu'elles ne soient plus masquées sur les autres appareils.
+        try { await window.FabSync.pushUndelete(importedIds); } catch (e) { console.error(e); }
         libHint.textContent = res.pushed + ' partie(s) publiée(s) dans le dépôt (visibles sur tes autres appareils après le redéploiement Pages).';
       } catch (e) {
         console.error(e);
@@ -419,7 +452,7 @@
     // (lecture statique, sans token) et les fusionne dans le cache local.
     try {
       const r = await window.FabSync.pull();
-      if (r.added) await reloadDashboard();
+      if (r.added || r.removed) await reloadDashboard();
     } catch (e) { console.error(e); }
 
     // Reprise d'un lien profond #game=<id> (après la synchro, la partie
