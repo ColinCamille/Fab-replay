@@ -312,7 +312,40 @@
     container.addEventListener('mouseover', e => { const t = e.target.closest('[data-card]'); if (t) showPreview(t); });
     container.addEventListener('mouseout', e => { const t = e.target.closest('[data-card]'); if (t) preview.classList.remove('show'); });
 
+    // ---- Hauteur du stage figée : sinon la « carte d'action » change de taille
+    // d'une étape à l'autre (bannière courte vs carte jouée haute vs combat) et
+    // fait sauter la mise en page — sur mobile les boutons au-dessus finissaient
+    // hors écran. On mesure le contenu le plus haut parmi TOUTES les étapes (les
+    // dimensions sont fixées par le CSS, indépendamment du chargement des images)
+    // et on fige cette hauteur. Recalculé si la largeur change (rotation, bascule
+    // mobile/desktop) car le passage à la ligne des cartes dépend de la largeur.
+    function stabilizeStage() {
+      if (!stage.offsetParent) return;             // onglet caché → pas de layout fiable
+      const savedH = stage.style.height, savedMin = stage.style.minHeight;
+      stage.style.height = 'auto'; stage.style.minHeight = '0';
+      let max = 0;
+      for (const s of steps) { stage.innerHTML = buildStage(s.stage); if (stage.offsetHeight > max) max = stage.offsetHeight; }
+      if (!max) { stage.style.height = savedH; stage.style.minHeight = savedMin; render(null); return; }
+      stage.style.minHeight = '0';
+      stage.style.height = max + 'px';
+      render(null);                                // ré-affiche l'étape courante dans la boîte figée
+    }
+    if (window.ResizeObserver) {
+      let raf = 0, lastW = -1;
+      const ro = new ResizeObserver(() => {
+        // Ne réagir qu'aux changements de LARGEUR : figer le stage change la
+        // hauteur du conteneur, ce qui re-déclencherait l'observateur en boucle.
+        const w = Math.round(container.clientWidth);
+        if (w === lastW) return;
+        lastW = w;
+        if (raf) return;
+        raf = requestAnimationFrame(() => { raf = 0; stabilizeStage(); });
+      });
+      ro.observe(container);
+    }
+
     go(0, null);
+    stabilizeStage();
   }
 
   root.BoardReplay = { mount, buildTimeline };

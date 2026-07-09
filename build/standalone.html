@@ -1159,7 +1159,9 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-lifebox{padding:8px 6px}
   #boardReplay .br-lifebox .br-who{font-size:.6rem}
   #boardReplay .br-lifebox .br-n{font-size:1.8rem}
-  #boardReplay .br-stage{min-height:300px;padding:16px 12px}
+  /* flex:none → la hauteur figée par JS est respectée (en colonne flex, flex:1
+     mapperait la hauteur sur flex-basis:0 et l'ignorerait). */
+  #boardReplay .br-stage{flex:0 0 auto;min-height:300px;padding:16px 12px}
   #boardReplay .br-playone{max-width:100%}
   #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}
   #boardReplay .br-big{font-size:1.3rem}
