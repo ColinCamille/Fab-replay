@@ -555,6 +555,8 @@ footer a{color:var(--text-dim)}
 .hero-meta .plife.low{color:var(--red)}
 .match-mid{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px}
 .match-mid .vs{font-family:'Cinzel',serif;color:var(--text-faint);font-size:.72rem;letter-spacing:.1em}
+/* Résultat sur sa propre ligne, sous « héros PV VS héros PV ». */
+.match-verdict{text-align:center;margin-bottom:10px}
 
 .match-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .match-chip{
@@ -592,6 +594,7 @@ footer a{color:var(--text-dim)}
 #scoreboard.sb-wide .hero-meta .hname{font-size:1rem}
 #scoreboard.sb-wide .hero-meta .plife{font-size:1rem}
 #scoreboard.sb-wide .match-mid{flex-direction:row;gap:10px;align-items:baseline}
+#scoreboard.sb-wide .match-verdict{margin:3px 0 0}
 /* Desktop : bandeau + onglets pleine largeur, alignés sur le plateau. */
 @media (min-width: 900px) {
   #scoreboard.sb-wide #matchBanner,
@@ -1031,20 +1034,25 @@ footer a{color:var(--text-dim)}
 .br-back::after{content:"FaB";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99;letter-spacing:.05em}
 /* Champ d'un joueur : rail (cimetière·deck·pitch) | héros+équipement | arsenal.
    Rails empilés en colonne sur mobile (compact) ; passent en rangée sur desktop. */
-.br-field{position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;
+.br-field{position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;
   background:radial-gradient(120% 120% at 50% 50%,rgba(20,26,41,.72),rgba(10,14,24,.72));
-  border:1px solid var(--line);border-radius:12px;padding:7px 10px}
+  border:1px solid var(--line);border-radius:12px;padding:7px 8px}
 .br-field.br-active.br-opp{box-shadow:inset 0 0 0 1px #8b6bff55,0 0 20px rgba(139,107,255,.12)}
 .br-field.br-active.br-me{box-shadow:inset 0 0 0 1px rgba(201,162,39,.42),0 0 20px rgba(201,162,39,.12)}
 .br-rail{display:flex;flex-direction:column;gap:5px;align-items:center;flex:0 0 auto}
+/* Mobile : rail gauche en 2×2 (cimetière·deck / pitch·banni) → plus compact
+   en hauteur, ce qui remonte les boutons et laisse la place au héros. */
+.br-rail.br-left{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:5px;align-content:center}
 .br-rail.br-right{justify-self:end}
-.br-cluster{display:flex;align-items:center;justify-content:center;gap:6px}
-.br-equip{display:grid;grid-template-columns:repeat(2,40px);grid-auto-rows:56px;gap:4px}
-/* Dimensions des tuiles — mobile (compact). */
-.br-rail .br-slot,.br-rail .br-deck{width:42px;aspect-ratio:5/7;min-height:0;height:auto}
-.br-equip .br-gcard{width:40px;aspect-ratio:5/7}
-.br-cluster>.br-gcard{width:46px;aspect-ratio:5/7}
-.br-cluster>.br-gcard.br-hero{width:54px}
+.br-zpair{display:flex;flex-direction:column;align-items:center;gap:2px}
+.br-zlbl{font:600 .5rem/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);white-space:nowrap}
+.br-cluster{display:flex;align-items:center;justify-content:center;gap:5px}
+.br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:4px}
+/* Dimensions des tuiles — mobile (héros/équipement/arme agrandis). */
+.br-rail .br-slot,.br-rail .br-deck{width:44px;aspect-ratio:5/7;min-height:0;height:auto}
+.br-equip .br-gcard{width:44px;aspect-ratio:5/7}
+.br-cluster>.br-gcard{width:50px;aspect-ratio:5/7}
+.br-cluster>.br-gcard.br-hero{width:64px}
 .br-gcard{border-radius:6px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel));position:relative}
 /* La vignette EST la carte : l'image remplit toute la tuile (portrait), le nom
    est en surimpression en bas. Fini la fine bande mal cadrée. */
@@ -1089,13 +1097,18 @@ footer a{color:var(--text-dim)}
   background:radial-gradient(80% 120% at 50% 50%,rgba(255,255,255,.04),transparent 72%)}
 /* Jeton de vie posé sur le héros (toujours visible, se met à jour à chaque étape). */
 .br-gcard.br-hero{overflow:visible}
-.br-lifetok{position:absolute;right:-9px;top:-9px;width:30px;height:30px;border-radius:50%;z-index:5;
-  display:flex;align-items:center;justify-content:center;font:800 .82rem 'JetBrains Mono',monospace;
+.br-lifetok{position:absolute;left:50%;transform:translateX(-50%);width:34px;height:34px;border-radius:50%;z-index:5;
+  display:flex;align-items:center;justify-content:center;font:800 .9rem 'JetBrains Mono',monospace;
   background:radial-gradient(circle at 35% 30%,#26314c,#0c1019);transition:transform .2s}
+/* Chaque jauge de PV pointe vers le centre (piste de combat) : l'adversaire en
+   bas de son héros, toi en haut du tien → les deux PV encadrent le combat,
+   toujours visibles au même endroit sur PC comme sur mobile. */
+.br-gcard.br-hero.br-opp .br-lifetok{bottom:-13px}
+.br-gcard.br-hero.br-me .br-lifetok{top:-13px}
 .br-lifetok.br-opp{color:var(--violet);box-shadow:0 2px 7px rgba(0,0,0,.55),0 0 0 2px var(--violet)}
 .br-lifetok.br-me{color:var(--accent,var(--gold));box-shadow:0 2px 7px rgba(0,0,0,.55),0 0 0 2px var(--accent,var(--gold))}
 .br-lifetok.br-hit{animation:brHit .55s ease}
-@keyframes brHit{0%{transform:scale(1)}30%{transform:scale(1.32);color:var(--red)}100%{transform:scale(1)}}
+@keyframes brHit{0%{transform:translateX(-50%) scale(1)}30%{transform:translateX(-50%) scale(1.32);color:var(--red)}100%{transform:translateX(-50%) scale(1)}}
 .br-phase{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);font-weight:700;margin-bottom:9px}
 .br-banner{text-align:center}
 .br-big{font-size:1rem;font-weight:700;font-family:'Cinzel',serif;letter-spacing:.02em}
@@ -1119,7 +1132,7 @@ footer a{color:var(--text-dim)}
 .br-verdict.br-through{color:var(--red);background:#e0555a1a;border:1px solid #e0555a55}
 /* Récap « une action » : juste la carte en grand, liseré = qui joue. */
 .br-playone{display:flex;flex-direction:column;align-items:center;gap:9px}
-.br-pcard.br-lg{width:104px;border-width:2px}
+.br-pcard.br-lg{width:92px;border-width:2px}
 .br-pcard.br-lg.br-me{border-color:var(--accent,var(--gold));box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}
 .br-pcard.br-lg.br-opp{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,107,255,.22)}
 .br-react{font-size:.66rem;color:var(--text-dim);letter-spacing:.05em;text-transform:uppercase;font-weight:600}
@@ -1154,16 +1167,19 @@ footer a{color:var(--text-dim)}
     align-items:start;grid-template-areas:"mat tools" "tl tl"}
   #boardReplay .br-mat{grid-area:mat;max-width:none;margin:0;gap:10px;padding:16px 24px}
   #boardReplay .br-timeline{grid-area:tl}
-  #boardReplay .br-field{gap:26px;padding:12px 30px}
+  /* gap réduit + cluster agrandi = on rogne l'espace vide au centre du champ
+     pour de plus grandes cartes, sans toucher à la taille des cases (rails). */
+  #boardReplay .br-field{gap:14px;padding:12px 26px}
   #boardReplay .br-rail{flex-direction:row;gap:9px}
+  #boardReplay .br-rail.br-left{display:flex;flex-direction:row}
   #boardReplay .br-cluster{gap:10px}
   /* Équipement en RANGÉE à côté du héros : on a la largeur, ça économise la
      hauteur (les deux mains tiennent alors à l'écran sans scroller). */
   #boardReplay .br-equip{display:flex;flex-direction:row;gap:6px;grid-template-columns:none;grid-auto-rows:auto}
-  #boardReplay .br-equip .br-gcard{width:58px}
+  #boardReplay .br-equip .br-gcard{width:74px}
   #boardReplay .br-rail .br-slot,#boardReplay .br-rail .br-deck{width:72px}
-  #boardReplay .br-cluster>.br-gcard{width:72px}
-  #boardReplay .br-cluster>.br-gcard.br-hero{width:92px}
+  #boardReplay .br-cluster>.br-gcard{width:92px}
+  #boardReplay .br-cluster>.br-gcard.br-hero{width:118px}
   #boardReplay .br-lifetok{width:38px;height:38px;font-size:1rem;right:-11px;top:-11px}
   #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
 
@@ -3063,9 +3079,10 @@ footer a{color:var(--text-dim)}
       '<div class="match-card">' +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
-          '<div class="match-mid"><span class="vs">VS</span>' + verdict + '</div>' +
+          '<div class="match-mid"><span class="vs">VS</span></div>' +
           sideHtml(opp, curOpp, 'opp') +
         '</div>' +
+        '<div class="match-verdict">' + verdict + '</div>' +
         '<div class="match-meta">' + chips.join('') + '</div>' +
         eqStrip(me, 'me') +
         eqStrip(opp, 'opp') +

@@ -213,9 +213,10 @@
       '<div class="match-card">' +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
-          '<div class="match-mid"><span class="vs">VS</span>' + verdict + '</div>' +
+          '<div class="match-mid"><span class="vs">VS</span></div>' +
           sideHtml(opp, curOpp, 'opp') +
         '</div>' +
+        '<div class="match-verdict">' + verdict + '</div>' +
         '<div class="match-meta">' + chips.join('') + '</div>' +
         eqStrip(me, 'me') +
         eqStrip(opp, 'opp') +

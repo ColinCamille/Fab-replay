@@ -174,6 +174,7 @@
       '<div class="br-slot p-grave" id="br-' + gId + '">Cimetière</div>' +
       '<div class="br-deck p-deck" title="Deck"></div>' +
       '<div class="br-slot p-pitch" id="br-' + pId + '">Pitch</div>' +
+      '<div class="br-slot p-banish" title="Banni">Banni</div>' +
       '</div>';
     const equip = '<div class="br-equip">' +
       gcard(side, 'head', nm('head')) + gcard(side, 'chest', nm('chest')) +
@@ -183,7 +184,8 @@
       '<div class="br-gcard br-' + side + ' br-wpn"><div class="br-art" data-card="' + esc(nm('weaponL')) + '"></div><div class="br-lab">' + esc(nm('weaponL')) + '</div></div>' +
       '</div>';
     const rightRail = '<div class="br-rail br-right">' +
-      '<div class="br-slot br-arsenal" id="br-' + arsId + '">Arsenal</div>' +
+      '<div class="br-zpair"><span class="br-zlbl">Arsenal</span>' +
+        '<div class="br-slot br-arsenal" id="br-' + arsId + '">Arsenal</div></div>' +
       '</div>';
     return leftRail + cluster + rightRail;
   }
