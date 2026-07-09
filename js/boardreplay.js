@@ -115,22 +115,34 @@
       if (t.grave) { st.meGrave = (t.grave.me || []).slice(); st.oppGrave = (t.grave.opp || []).slice(); }
       if (t.banish) { st.meBanish = (t.banish.me || []).slice(); st.oppBanish = (t.banish.opp || []).slice(); }
 
-      // Ouverture (pas de joueur de tour) : on montre juste la main de départ.
-      if (!attacker) {
+      // Joueur actif. Le tour d'ouverture (1er joueur) n'a souvent pas d'en-tête
+      // → player=null : on déduit l'acteur (celui qui joue le plus ce tour-là).
+      const opening = !attacker;
+      let actor = attacker;
+      if (opening) {
+        const cnt = {};
+        (t.events || []).forEach(e => { if (e.type === 'played' && e.player) cnt[e.player] = (cnt[e.player] || 0) + 1; });
+        actor = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || null;
+      }
+      const atkSide = actor === MY ? 'me' : 'opp';
+      const label = String(t.label || '').replace(MY, HERO.me).replace(OPP, HERO.opp);
+
+      if (opening) {
+        // Bannière de début PUIS on rejoue les actions du 1er tour (comme le
+        // Déroulé) au lieu de sauter le tour. Main de départ affichée.
         st.meFaceUp = !!(t.hand && t.hand.length);
         if (st.meFaceUp) st.meHandCards = (t.hand || []).slice();
-        push(t.label || 'Ouverture', 'me', { type: 'banner', side: 'me', big: 'Début de la partie', sub: HERO.me + ' vs ' + HERO.opp });
-        return;
+        if (actor === MY) st.oppHandCount = 4;
+        push(t.label || 'Ouverture', atkSide, { type: 'banner', side: 'me', big: 'Début de la partie', sub: HERO.me + ' vs ' + HERO.opp });
+        if (!actor || !(t.events || []).some(e => e.type === 'played')) return;   // ouverture sans action → juste la bannière
+      } else {
+        // L'arsenal adverse n'est pas connu de façon fiable depuis un log « côté
+        // moi » → on ne l'invente pas (0). La main adverse reste cachée.
+        if (actor === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.oppHandCount = 4; }
+        else { st.meFaceUp = false; st.meHandCount = 4; st.oppHandCount = 4; st.oppArsenalCount = 0; }
+        push(label, atkSide, { type: 'banner', side: atkSide, big: actor === MY ? 'Ton tour' : 'Tour adverse',
+          sub: HERO[atkSide] + ' attaque · ' + HERO.me + ' ' + st.life.me + ' PV · ' + HERO.opp + ' ' + st.life.opp + ' PV' });
       }
-      const atkSide = sideOf(attacker);
-      // L'arsenal adverse n'est pas connu de façon fiable depuis un log « côté moi »
-      // → on ne l'invente pas (0). La main adverse reste une abstraction cachée.
-      if (attacker === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.oppHandCount = 4; }
-      else { st.meFaceUp = false; st.meHandCount = 4; st.oppHandCount = 4; st.oppArsenalCount = 0; }
-
-      const label = String(t.label || '').replace(MY, HERO.me).replace(OPP, HERO.opp);
-      push(label, atkSide, { type: 'banner', side: atkSide, big: attacker === MY ? 'Ton tour' : 'Tour adverse',
-        sub: HERO[atkSide] + ' attaque · ' + HERO.me + ' ' + st.life.me + ' PV · ' + HERO.opp + ' ' + st.life.opp + ' PV' });
 
       const evs = t.events || [], consumed = {};
       let openAtk = null, curBlocks = [], curReactions = [];

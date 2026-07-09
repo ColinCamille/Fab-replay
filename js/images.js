@@ -108,13 +108,31 @@
   async function resolveCardMeta(name) {
     if (!name) return { image: null, isEquipment: false };
     if (cardMetaCache[name]) return cardMetaCache[name];
-    try {
-      const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(name) + '&limit=5');
+    const strip = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');   // ignore ponctuation/espaces/casse
+    const query = async q => {
+      const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(q) + '&limit=10');
       if (!res.ok) throw new Error('http ' + res.status);
       const json = await res.json();
-      const list = json.data || json.cards || json.results || [];
-      let best = list.find(c => (c.name || '').toLowerCase() === name.toLowerCase()) || list[0] || null;
-      const image = best ? findImageUrl(best) : null;
+      return json.data || json.cards || json.results || [];
+    };
+    try {
+      const target = strip(name);
+      let list = await query(name);
+      // Correspondance en ignorant la ponctuation (« Volzar Meteor Storm » doit
+      // matcher « Volzar, Meteor Storm »), sinon 1re carte avec image.
+      let best = list.find(c => strip(c.name) === target) || list.find(c => findImageUrl(c)) || list[0] || null;
+      let image = best ? findImageUrl(best) : null;
+      // Repli : nom multi-mots/ponctué non trouvé → on retente sur le 1er mot
+      // (ex. arme « Volzar, … » → recherche « Volzar »).
+      if (!image) {
+        const base = name.split(/[\s,]+/)[0];
+        if (base && strip(base) !== target) {
+          const l2 = await query(base);
+          const b2 = l2.find(c => strip(c.name) === target)
+            || l2.find(c => strip(c.name).indexOf(strip(base)) === 0 && findImageUrl(c)) || null;
+          if (b2) { best = b2; image = findImageUrl(b2); }
+        }
+      }
       const typeInfo = best ? findCardTypeInfo(best) : { isEquipment: false, label: null };
       const meta = { image: image || null, isEquipment: typeInfo.isEquipment, typeLabel: typeInfo.label };
       cardMetaCache[name] = meta;
