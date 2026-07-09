@@ -572,14 +572,23 @@ footer a{color:var(--text-dim)}
 .eq-slot .eq-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.9rem;opacity:.5}
 .eq-slot .eq-ph.eq-name{font-size:.56rem;opacity:.85;color:var(--text-faint);text-align:center;padding:2px;line-height:1.12;font-family:'Inter',sans-serif;overflow:hidden}
 
-/* Onglet Table (desktop) : bandeau de match + onglets alignés sur le plateau
-   pleine largeur, avec le contenu centré (comme les zones du plateau). */
+/* Onglet Table (desktop) : onglets alignés sur le plateau + bandeau de match
+   RÉDUIT À UNE LIGNE (héros/équipement/PV sont déjà sur le plateau). */
 @media (min-width: 900px) {
   #scoreboard.sb-wide #matchBanner,
   #scoreboard.sb-wide .replay-tabs{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px));padding-inline:2px}
-  #scoreboard.sb-wide .match-heroes,
-  #scoreboard.sb-wide .match-meta,
-  #scoreboard.sb-wide .eq-strip{max-width:940px;margin-left:auto;margin-right:auto}
+  #scoreboard.sb-wide #matchBanner{padding-top:6px}
+  #scoreboard.sb-wide .match-card{padding:8px 16px}
+  #scoreboard.sb-wide .match-card .hero-avatar,
+  #scoreboard.sb-wide .match-card .eq-strip,
+  #scoreboard.sb-wide .match-card .match-meta{display:none}
+  #scoreboard.sb-wide .match-heroes{margin-bottom:0;justify-content:center;gap:22px;flex-wrap:wrap}
+  #scoreboard.sb-wide .match-side{flex:0 0 auto}
+  #scoreboard.sb-wide .hero-meta{flex-direction:row;align-items:baseline;gap:8px}
+  #scoreboard.sb-wide .hero-meta .pname{display:none}
+  #scoreboard.sb-wide .hero-meta .hname{font-size:1rem}
+  #scoreboard.sb-wide .hero-meta .plife{font-size:1rem}
+  #scoreboard.sb-wide .match-mid{flex-direction:row;gap:10px;align-items:baseline}
 }
 .eq-empty{font-size:.65rem;color:var(--text-faint);font-style:italic}
 
