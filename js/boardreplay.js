@@ -77,13 +77,13 @@
     const st = {
       meHandCards: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
       mePitch: [], oppPitch: [], meArsenal: [], oppArsenalCount: 0,
-      meGrave: [], oppGrave: [], meTokens: [], oppTokens: [], life: { me: 0, opp: 0 }
+      meGrave: [], oppGrave: [], meBanish: [], oppBanish: [], meTokens: [], oppTokens: [], life: { me: 0, opp: 0 }
     };
     const steps = [];
     const snap = () => ({
       meHandCards: st.meHandCards.slice(), meHandCount: st.meHandCount, meFaceUp: st.meFaceUp, oppHandCount: st.oppHandCount,
       mePitch: st.mePitch.slice(), oppPitch: st.oppPitch.slice(), meArsenal: st.meArsenal.slice(), oppArsenalCount: st.oppArsenalCount,
-      meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(),
+      meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(), meBanish: st.meBanish.slice(), oppBanish: st.oppBanish.slice(),
       meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(), life: { me: st.life.me, opp: st.life.opp }
     });
     const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, state: snap() });
@@ -109,6 +109,11 @@
       // grabber les a captées, sinon repli par héros (constant sur la partie).
       if (t.field) { st.meTokens = (t.field.me || []).slice(); st.oppTokens = (t.field.opp || []).slice(); }
       else { st.meTokens = HEROTOK.me.slice(); st.oppTokens = HEROTOK.opp.slice(); }
+      // Cimetière/banni réels (2 camps) si captés : on cale l'état exact en début
+      // de tour ; le cimetière continue de grandir via le log pendant le tour.
+      // Sinon (vieux logs), on garde la reconstruction cumulée depuis le récit.
+      if (t.grave) { st.meGrave = (t.grave.me || []).slice(); st.oppGrave = (t.grave.opp || []).slice(); }
+      if (t.banish) { st.meBanish = (t.banish.me || []).slice(); st.oppBanish = (t.banish.opp || []).slice(); }
 
       // Ouverture (pas de joueur de tour) : on montre juste la main de départ.
       if (!attacker) {
@@ -186,12 +191,12 @@
     const e = pl.equipment || {};
     const nm = k => (e[k] && e[k].name) || '—';
     const gId = side === 'me' ? 'mGrave' : 'oGrave', pId = side === 'me' ? 'mPitch' : 'oPitch';
-    const arsId = side === 'me' ? 'mArsenal' : 'oArsenal';
+    const arsId = side === 'me' ? 'mArsenal' : 'oArsenal', bId = side === 'me' ? 'mBanish' : 'oBanish';
     const leftRail = '<div class="br-rail br-left">' +
       '<div class="br-slot p-grave" id="br-' + gId + '">Cimetière</div>' +
       '<div class="br-deck p-deck" title="Deck"></div>' +
       '<div class="br-slot p-pitch" id="br-' + pId + '">Pitch</div>' +
-      '<div class="br-slot p-banish" title="Banni">Banni</div>' +
+      '<div class="br-slot p-banish" id="br-' + bId + '" title="Banni">Banni</div>' +
       '</div>';
     const equip = '<div class="br-equip">' +
       gcard(side, 'head', nm('head')) + gcard(side, 'chest', nm('chest')) +
@@ -311,6 +316,8 @@
       fillSlot('#br-oArsenal', 'Arsenal', stt.oppArsenalCount > 0 ? ['?'] : [], 'opp', 'back');
       fillSlot('#br-mGrave', 'Cimetière', stt.meGrave, 'me', 'grave');
       fillSlot('#br-oGrave', 'Cimetière', stt.oppGrave, 'opp', 'grave');
+      fillSlot('#br-mBanish', 'Banni', stt.meBanish, 'me', 'grave');
+      fillSlot('#br-oBanish', 'Banni', stt.oppBanish, 'opp', 'grave');
       const tokHtml = (cards, side) => (cards || []).map(c => '<div class="br-tok br-' + side + '" data-card="' + esc(c) + '"><div class="br-art" data-card="' + esc(c) + '"></div><div class="br-nm">' + esc(c) + '</div></div>').join('');
       const otk = $('#br-oppTok'); if (otk) otk.innerHTML = tokHtml(stt.oppTokens, 'opp');
       const mtk = $('#br-meTok'); if (mtk) mtk.innerHTML = tokHtml(stt.meTokens, 'me');

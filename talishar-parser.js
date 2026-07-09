@@ -317,6 +317,8 @@
     const handRes = parseCardSnapshotBlock(text, '=== HAND SNAPSHOTS'); text = handRes.rest;
     const arsRes = parseCardSnapshotBlock(text, '=== ARSENAL SNAPSHOTS'); text = arsRes.rest;
     const fieldRes = parseFieldSnapshotBlock(text, '=== FIELD SNAPSHOTS'); text = fieldRes.rest;
+    const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
+    const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
 
     const meta = metaRes.meta;
@@ -324,6 +326,8 @@
     const handSnapshots = handRes.snapshots;
     const arsenalSnapshots = arsRes.snapshots;
     const fieldSnapshots = fieldRes.snapshots;
+    const graveSnapshots = graveRes.snapshots;
+    const banishSnapshots = banishRes.snapshots;
     const lifeSnapshots = lifeRes.snapshots;
 
     // 2) Corps du log : header + lignes d'événements.
@@ -503,8 +507,10 @@
       // joueur, le grabber capte l'instantané d'ouverture trop tard et peut y
       // voir une carte déjà arsenalée — on force donc le vide pour l'ouverture.
       if (t.turnNumber === 0) t.arsenal = [];
-      // Permanents/tokens en jeu (2 camps) captés par le grabber, si présents.
+      // Permanents/tokens + cimetière + banni (2 camps) captés par le grabber.
       t.field = (key in fieldSnapshots) ? fieldSnapshots[key] : null;
+      t.grave = (key in graveSnapshots) ? graveSnapshots[key] : null;
+      t.banish = (key in banishSnapshots) ? banishSnapshots[key] : null;
       t.life = (key in lifeSnapshots) ? lifeSnapshots[key] : null;
       t.side = t.player === myName ? 'me' : (t.player === oppName ? 'opp' : null);
       // timing depuis les événements horodatés du tour
@@ -684,7 +690,7 @@
       lifeHistory,
       lifeSeries,
       life: finalLife,
-      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, life: lifeSnapshots },
+      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, grave: graveSnapshots, banish: banishSnapshots, life: lifeSnapshots },
       timeline: { startTs, endTs, durationSec, lineTs: lineTs || null },
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,
