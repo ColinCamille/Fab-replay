@@ -1256,5 +1256,5 @@
     grid.innerHTML = cards.map(([v, k]) => `<div class="stat-card"><div class="v mono">${v}</div><div class="k">${k}</div></div>`).join('');
   }
 
-  root.Replay = { show, reset };
+  root.Replay = { show, reset, getGame: () => GAME };
 })(typeof self !== 'undefined' ? self : this);
