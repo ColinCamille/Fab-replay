@@ -529,11 +529,20 @@
   // Les totaux du bandeau viennent des champs fiables du tour (damageToOpp/Me).
   // ============================================================
 
-  // Joueur actif du tour (propriétaire), avec repli sur le 1er acteur capté.
+  // Joueur actif du tour (propriétaire). On se fie d'abord au `side` résolu par
+  // le parseur (fiable), puis à `player`. En dernier recours (ouverture sans
+  // propriétaire), on prend l'acteur MAJORITAIRE du tour — plus robuste que le
+  // 1er acteur, qui peut être l'adversaire s'il réagit en premier (ce qui
+  // ferait disparaître à tort tes propres attaques du fil).
   function activePlayerOf(t) {
+    if (t.side === 'me') return myName;
+    if (t.side === 'opp') return oppName;
     if (t.player) return t.player;
-    const p = t.events.find(e => (e.type === 'played' || e.type === 'activated') && e.player);
-    return (p && p.player) || myName;
+    const counts = {};
+    t.events.forEach(e => { if ((e.type === 'played' || e.type === 'activated') && e.player) counts[e.player] = (counts[e.player] || 0) + 1; });
+    let best = null, bn = -1;
+    Object.keys(counts).forEach(p => { if (counts[p] > bn) { bn = counts[p]; best = p; } });
+    return best || myName;
   }
 
   // Regroupe les événements bruts en passes d'armes + réponses hors combat.
