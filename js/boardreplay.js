@@ -120,9 +120,10 @@
       const opening = !attacker;
       let actor = attacker;
       if (opening) {
-        const cnt = {};
-        (t.events || []).forEach(e => { if (e.type === 'played' && e.player) cnt[e.player] = (cnt[e.player] || 0) + 1; });
-        actor = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || null;
+        // 1er joueur = le 1er à jouer (l'adversaire ne fait que réagir ensuite) ;
+        // la majorité serait trompeuse s'il bloque beaucoup pendant l'ouverture.
+        const first = (t.events || []).find(e => (e.type === 'played' || e.type === 'activated') && e.player);
+        actor = first ? first.player : null;
       }
       const atkSide = actor === MY ? 'me' : 'opp';
       const label = String(t.label || '').replace(MY, HERO.me).replace(OPP, HERO.opp);

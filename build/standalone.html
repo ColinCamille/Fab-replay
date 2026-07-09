@@ -3497,11 +3497,15 @@ footer a{color:var(--text-dim)}
     if (t.side === 'me') return myName;
     if (t.side === 'opp') return oppName;
     if (t.player) return t.player;
-    const counts = {};
-    t.events.forEach(e => { if ((e.type === 'played' || e.type === 'activated') && e.player) counts[e.player] = (counts[e.player] || 0) + 1; });
-    let best = null, bn = -1;
-    Object.keys(counts).forEach(p => { if (counts[p] > bn) { bn = counts[p]; best = p; } });
-    return best || myName;
+    // Tour sans en-tête (ouverture) : le 1er joueur agit AVANT que l'adversaire
+    // réagisse → on prend le 1er à JOUER, pas l'acteur majoritaire. Sinon un
+    // adversaire qui bloque/prévient beaucoup pendant ton ouverture « vole » le
+    // tour (il a plus de cartes jouées que toi, alors que c'est TON tour).
+    for (let k = 0; k < t.events.length; k++) {
+      const e = t.events[k];
+      if ((e.type === 'played' || e.type === 'activated') && e.player) return e.player;
+    }
+    return myName;
   }
 
   // Regroupe les événements bruts en passes d'armes + réponses hors combat.
