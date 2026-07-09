@@ -1024,9 +1024,11 @@ footer a{color:var(--text-dim)}
 /* La vignette EST la carte : l'image remplit toute la tuile (portrait), le nom
    est en surimpression en bas. Fini la fine bande mal cadrée. */
 .br-art{position:absolute;inset:0;background:radial-gradient(120% 90% at 30% 10%,#2a3350,#141a29) center/cover no-repeat}
-.br-gcard.br-me .br-art{background:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
-.br-gcard.br-opp .br-art{background:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
-.br-art.has-img{background-size:cover;background-position:center}
+.br-gcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-gcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+/* contain : la carte ENTIÈRE est toujours visible, jamais recadrée/coupée
+   (au pire un fin liseré sombre si son ratio diffère de la tuile). */
+.br-art.has-img{background-size:contain;background-repeat:no-repeat;background-position:center}
 /* Image chargée → la carte porte son nom : on masque le nom en surimpression.
    Spécificité tuile+imgok pour battre .br-zcard/.br-pcard .br-nm (display:-webkit-box). */
 .br-gcard.br-imgok .br-lab,.br-zcard.br-imgok .br-nm,.br-pcard.br-imgok .br-nm{display:none}
@@ -1039,8 +1041,8 @@ footer a{color:var(--text-dim)}
 .br-slot.br-filled{padding:0;border-style:solid;position:relative;overflow:visible}
 .br-slot-tag{position:absolute;top:-6px;left:50%;transform:translateX(-50%);font:700 .44rem/1 'JetBrains Mono',monospace;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 4px;white-space:nowrap;z-index:2}
 .br-zcard{width:100%;height:100%;border-radius:5px;overflow:hidden;position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));border:1px solid var(--line)}
-.br-zcard.br-me .br-art{background:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
-.br-zcard.br-opp .br-art{background:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-zcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-zcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
 .br-zcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:8px 2px 2px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.4) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
 .br-zcard.br-back{display:flex;background:linear-gradient(160deg,#7a2a2f,#3c1417);align-items:center;justify-content:center}
 .br-zcard.br-back::after{content:"FaB";font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99}
@@ -1073,8 +1075,8 @@ footer a{color:var(--text-dim)}
 .br-pcard{width:56px;aspect-ratio:5/7;border-radius:6px;overflow:hidden;border:1px solid var(--line);position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));animation:brPop .3s ease}
 .br-pcard.br-inhand{width:54px}
 @keyframes brPop{from{transform:translateY(6px) scale(.94);opacity:0}to{transform:none;opacity:1}}
-.br-pcard.br-me .br-art{background:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
-.br-pcard.br-opp .br-art{background:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-pcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-pcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
 .br-pcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:9px 3px 3px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.45) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
 .br-pitch-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#82b4dd;background:#16273655;border:1px solid #2c4a6366;border-radius:999px;padding:1px 7px;margin-top:2px}
 .br-arrow{color:var(--text-faint);font-size:1.2rem}
@@ -1088,7 +1090,7 @@ footer a{color:var(--text-dim)}
 .br-pcard.br-lg.br-opp{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,107,255,.22)}
 .br-react{font-size:.66rem;color:var(--text-dim);letter-spacing:.05em;text-transform:uppercase;font-weight:600}
 /* Aperçu grande carte au survol d'une tuile (desktop) */
-.br-preview{position:fixed;width:224px;height:313px;border-radius:14px;background-size:cover;background-position:center;
+.br-preview{position:fixed;width:224px;height:313px;border-radius:14px;background-size:contain;background-repeat:no-repeat;background-position:center;background-color:#0c0f17;
   border:1px solid var(--line-2);box-shadow:0 10px 34px rgba(0,0,0,.7);opacity:0;pointer-events:none;z-index:120;transition:opacity .1s}
 .br-preview.show{opacity:1}
 .br-timeline{margin-top:14px}
