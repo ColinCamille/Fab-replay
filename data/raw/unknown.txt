@@ -1,0 +1,81 @@
+=== Talishar game unknown — 08/07/2026 23:07:46 ===
+
+vileplume41 is about to take 0 damage from Art of Desire: Body
+vileplume41 took 0 damage
+Combat resolved with no hit
+The chain link was resolved.
+Ehecalt played Ravenous Rabble
+🎯Valda, Seismic Impact was chosen as the target.
+Resolving play ability of Ravenous Rabble.
+👁️‍🗨️Ehecalt reveals Shelter from the Storm
+vileplume41 passed
+vileplume41 blocked with Ironfist Revelation and Tectonic Plating
+vileplume41 played Seismic Eruption
+Resolving play ability of Seismic Eruption.
+Ehecalt activated Flick Knives
+Ehecalt's Graphene Chelicera was targeted
+vileplume41's Valda, Seismic Impact was targeted
+Resolving activated ability of Flick Knives.
+vileplume41 is about to take 1 damage from Graphene Chelicera
+vileplume41 took 1 damage
+Ehecalt passed
+vileplume41 passed
+vileplume41 is about to take 0 damage from Ravenous Rabble
+vileplume41 took 0 damage
+Combat resolved with no hit
+The chain link was resolved.
+Ehecalt passed
+Ehecalt passed
+The combat chain was closed.
+Ehecalt passed
+Ehecalt passed priority. Attempting to end turn.
+═══════════════
+vileplume41's turn 11 has begun.
+Valda, Seismic Impact gives Crush attacks Dominate this turn
+vileplume41 activated Tectonic Plating
+vileplume41 pitched Thunder Quake
+Resolving activated ability of Tectonic Plating.
+vileplume41 played Disable
+🎯Arakni, 5L!p3d 7hRu 7h3 cR4X was chosen as the target.
+Resolving play ability of Disable.
+Ehecalt passed
+Ehecalt: Good Game!
+vileplume41 passed
+Ehecalt auto-passed
+Ehecalt is about to take 9 damage from Disable
+Ehecalt took 9 damage
+vileplume41 (karlim00) won! 🎉
+📊 Sending game result to Fabrary and FaB Insights (Ehecalt only)
+
+=== HAND SNAPSHOTS (ta main, captée depuis le DOM — jamais celle de l'adversaire) ===
+[vileplume41 #11] Shelter From The Storm, Codex Of Frailty, Lobotomy, Spike With Bloodrot
+
+=== ARSENAL SNAPSHOTS (ton arsenal, capté depuis le DOM — jamais celui de l'adversaire) ===
+[vileplume41 #11] (vide)
+
+=== LIFE SNAPSHOTS (vie et taille de deck : toi / adversaire) ===
+[vileplume41 #11] me=-7 opp=2 myDeck=14 oppDeck=23
+
+=== META ===
+schema: v1
+captured_with: TLG v1.10.4
+game_url: https://talishar.net/
+captured_at: 2026-07-08T21:07:46.986Z
+format: compcc
+vs_ai: non
+me: Ehecalt
+opponent: vileplume41
+my_hero: Arakni, 5L!p3d 7hRu 7h3 cR4X (valda_seismic_impact)
+opp_hero: Valda Seismic Impact (valda_seismic_impact)
+my_start_life: -7
+opp_start_life: 2
+my_start_deck_size: 14
+opp_start_deck_size: 23
+my_equipment: chest=Fyendals Spring Tunic (fyendals_spring_tunic) | arms=Flick Knives (flick_knives) | legs=Blacktek Whisperers (blacktek_whisperers) | weaponL=Orbitoclast R (orbitoclast_r)
+opp_equipment: chest=Tectonic Plating (tectonic_plating) | arms=Ironfist Revelation (ironfist_revelation) | legs=Basalt Boots (basalt_boots) | weaponL=Titans Fist (titans_fist) | weaponR=Testament Of Valahai (testament_of_valahai)
+
+=== TIMESTAMPS ===
+0-45:1783544866
+
+=== END GAME STATS (Talishar, JSON) ===
+{"myPlayerID":2,"byPlayer":{"2":{"gameId":"1603837","deckId":"","turns":11,"result":0,"winner":1,"firstPlayer":1,"opposingHero":"valda_seismic_impact","yourHero":"arakni_5lp3d_7hru_7h3_cr4x","startingLife":38,"opponentHero":"valda_seismic_impact","opponentStartingLife":40,"cardResults":[{"cardId":"art_of_desire_body_red","played":"2","blocked":"1","pitched":"0","hits":"1","discarded":"0","charged":"0","cardName":"Art of Desire: Body","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"codex_of_frailty_yellow","played":"0","blocked":"1","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Codex of Frailty","pitchValue":2,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"creep_red","played":"2","blocked":"1","pitched":"0","hits":"2","discarded":"0","charged":"0","cardName":"Creep","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"infect_red","played":"2","blocked":"1","pitched":"0","hits":"1","discarded":"0","charged":"0","cardName":"Infect","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"kiss_of_death_red","played":"2","blocked":"0","pitched":"0","hits":"2","discarded":"0","charged":"0","cardName":"Kiss of Death","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"leave_no_witnesses_red","played":"2","blocked":"1","pitched":"0","hits":"1","discarded":"0","charged":"0","cardName":"Leave No Witnesses","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"lobotomy_red","played":"1","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Lobotomy","pitchValue":1,"numCopies":2,"activated":"0","passiveTriggered":"0"},{"cardId":"mark_of_the_black_widow_red","played":"3","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Mark of the Black Widow","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"meet_madness_red","played":"1","blocked":"1","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Meet Madness","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"orb_weaver_spinneret_red","played":"2","blocked":"1","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Orb-Weaver Spinneret","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"pain_in_the_backside_red","played":"2","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Pain in the Backside","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"ravenous_rabble_red","played":"2","blocked":"0","pitched":"0","hits":"1","discarded":"0","charged":"0","cardName":"Ravenous Rabble","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"razors_edge_red","played":"2","blocked":"0","pitched":"1","hits":"0","discarded":"0","charged":"0","cardName":"Razor's Edge","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"spike_with_bloodrot_red","played":"2","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Spike with Bloodrot","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"take_up_the_mantle_yellow","played":"0","blocked":"0","pitched":"1","hits":"0","discarded":"1","charged":"0","cardName":"Take Up the Mantle","pitchValue":2,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"tarantula_toxin_red","played":"2","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Tarantula Toxin","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"sink_below_red","played":"2","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Sink Below","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"codex_of_inertia_yellow","played":"2","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Codex of Inertia","pitchValue":2,"numCopies":2,"activated":"0","passiveTriggered":"0"},{"cardId":"shelter_from_the_storm_red","played":"2","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Shelter from the Storm","pitchValue":1,"numCopies":3,"activated":"0","passiveTriggered":"0"},{"cardId":"codex_of_bloodrot_yellow","played":"0","blocked":"0","pitched":"2","hits":"0","discarded":"0","charged":"0","cardName":"Codex of Bloodrot","pitchValue":2,"numCopies":2,"activated":"0","passiveTriggered":"0"},{"cardId":"death_touch_red","played":0,"blocked":0,"pitched":0,"hits":0,"discarded":0,"charged":0,"cardName":"Death Touch","pitchValue":1,"numCopies":1},{"cardId":"bonds_of_attraction_red","played":"0","blocked":"1","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Bonds of Attraction","pitchValue":1,"numCopies":2,"activated":"0","passiveTriggered":"0"}],"character":[{"cardId":"arakni_5lp3d_7hru_7h3_cr4x","cardName":"Arakni, 5L!p3d 7hRu 7h3 cR4X","numCopies":1},{"cardId":"hunters_klaive","cardName":"Hunter's Klaive","numCopies":1},{"cardId":"hunters_klaive_r","cardName":"Hunter's Klaive","numCopies":1},{"cardId":"crown_of_providence","cardName":"Crown of Providence","numCopies":1},{"cardId":"fyendals_spring_tunic","cardName":"Fyendal's Spring Tunic","numCopies":1},{"cardId":"flick_knives","cardName":"Flick Knives","numCopies":1},{"cardId":"blacktek_whisperers","cardName":"Blacktek Whisperers","numCopies":1}],"tokenResults":[],"arenaCardResults":[{"cardId":"hunters_klaive","played":"0","blocked":"0","pitched":"0","hits":"1","discarded":"0","charged":"0","cardName":"Hunter's Klaive","pitchValue":0,"katsuDiscard":"0","activated":"2","passiveTriggered":"0"},{"cardId":"hunters_klaive_r","played":"0","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Hunter's Klaive","pitchValue":0,"katsuDiscard":"0","activated":"1","passiveTriggered":"0"},{"cardId":"flick_knives","played":"0","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Flick Knives","pitchValue":0,"katsuDiscard":"0","activated":"6","passiveTriggered":"0"},{"cardId":"fyendals_spring_tunic","played":"0","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Fyendal's Spring Tunic","pitchValue":0,"katsuDiscard":"0","activated":"2","passiveTriggered":"0"},{"cardId":"blacktek_whisperers","played":"0","blocked":"1","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Blacktek Whisperers","pitchValue":0,"katsuDiscard":"0","activated":"0","passiveTriggered":"0"},{"cardId":"crown_of_providence","played":"0","blocked":"1","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Crown of Providence","pitchValue":0,"katsuDiscard":"0","activated":"0","passiveTriggered":"0"},{"cardId":"graphene_chelicera","played":"0","blocked":"0","pitched":"0","hits":"0","discarded":"0","charged":"0","cardName":"Graphene Chelicera","pitchValue":0,"katsuDiscard":"0","activated":"1","passiveTriggered":"0"}],"turnResults":{"turn_0":{"cardsUsed":0,"cardsBlocked":"0","cardsPitched":"2","cardsDiscarded":"0","resourcesUsed":"4","resourcesLeft":"0","cardsLeft":"1","damageThreatened":"2","damageDealt":"0","damageBlocked":"0","damagePrevented":"0","damageTaken":"0","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":38,"opponentLifeAtTurnEnd":40,"turnNo":0},"turn_1":{"cardsUsed":3,"cardsBlocked":"1","cardsPitched":"1","cardsDiscarded":"1","resourcesUsed":"2","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"6","damageDealt":"2","damageBlocked":"3","damagePrevented":"0","damageTaken":"8","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":30,"opponentLifeAtTurnEnd":38,"turnNo":1},"turn_2":{"cardsUsed":4,"cardsBlocked":"0","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"0","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"13","damageDealt":"7","damageBlocked":"0","damagePrevented":"0","damageTaken":"4","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":26,"opponentLifeAtTurnEnd":31,"turnNo":2},"turn_3":{"cardsUsed":4,"cardsBlocked":"1","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"1","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"10","damageDealt":"1","damageBlocked":"7","damagePrevented":"0","damageTaken":"3","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":23,"opponentLifeAtTurnEnd":29,"turnNo":3},"turn_4":{"cardsUsed":3,"cardsBlocked":"1","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"0","resourcesLeft":"0","cardsLeft":"1","damageThreatened":"7","damageDealt":"4","damageBlocked":"6","damagePrevented":"0","damageTaken":"3","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":20,"opponentLifeAtTurnEnd":25,"turnNo":4},"turn_5":{"cardsUsed":3,"cardsBlocked":"0","cardsPitched":"1","cardsDiscarded":"0","resourcesUsed":"1","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"12","damageDealt":"6","damageBlocked":"0","damagePrevented":"0","damageTaken":"11","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":9,"opponentLifeAtTurnEnd":19,"turnNo":5},"turn_6":{"cardsUsed":4,"cardsBlocked":"0","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"0","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"10","damageDealt":"8","damageBlocked":"4","damagePrevented":"0","damageTaken":"0","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":9,"opponentLifeAtTurnEnd":9,"turnNo":6},"turn_7":{"cardsUsed":3,"cardsBlocked":"1","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"0","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"6","damageDealt":"0","damageBlocked":"7","damagePrevented":"0","damageTaken":"0","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":9,"opponentLifeAtTurnEnd":9,"turnNo":7},"turn_8":{"cardsUsed":3,"cardsBlocked":"1","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"0","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"6","damageDealt":"3","damageBlocked":"3","damagePrevented":"0","damageTaken":"5","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":4,"opponentLifeAtTurnEnd":8,"turnNo":8},"turn_9":{"cardsUsed":4,"cardsBlocked":"1","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"1","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"13","damageDealt":"5","damageBlocked":"6","damagePrevented":"0","damageTaken":"1","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":3,"opponentLifeAtTurnEnd":3,"turnNo":9},"turn_10":{"cardsUsed":2,"cardsBlocked":"2","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"0","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"8","damageDealt":"1","damageBlocked":"6","damagePrevented":"0","damageTaken":"1","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":2,"opponentLifeAtTurnEnd":2,"turnNo":10},"turn_11":{"cardsUsed":0,"cardsBlocked":"0","cardsPitched":"0","cardsDiscarded":"0","resourcesUsed":"0","resourcesLeft":"0","cardsLeft":"0","damageThreatened":"0","damageDealt":"0","damageBlocked":"0","damagePrevented":"0","damageTaken":"9","lifeGained":"0","lifeLost":"0","lifeAtTurnEnd":null,"opponentLifeAtTurnEnd":null,"turnNo":11}},"yourTime":"410","totalTime":821,"totalDamageThreatened":93,"totalDamageDealt":37,"totalLifeGained":0,"totalDamageBlocked":42,"totalDamagePrevented":0,"totalLifeLost":0,"averageDamageThreatenedPerTurn":8.27,"averageDamageDealtPerTurn":3.36,"averageDamageThreatenedPerCard":2.84,"averageResourcesUsedPerTurn":0.45,"averageCardsLeftOverPerTurn":0.09,"averageCombatValuePerTurn":12.09,"averageValuePerTurn":12.09,"totalDamageThreatened_NoLast":93,"totalDamageDealt_NoLast":37,"totalLifeGained_NoLast":0,"totalDamageBlocked_NoLast":42,"totalDamagePrevented_NoLast":0,"totalLifeLost_NoLast":0,"averageDamageThreatenedPerTurn_NoLast":9.1,"averageDamageDealtPerTurn_NoLast":3.7,"averageDamageThreatenedPerCard_NoLast":3.25,"averageResourcesUsedPerTurn_NoLast":0.5,"averageCardsLeftOverPerTurn_NoLast":0.1,"averageCombatValuePerTurn_NoLast":13.3,"averageValuePerTurn_NoLast":13.3,"fullLog":""}}}
