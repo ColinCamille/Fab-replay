@@ -136,10 +136,13 @@
         push(t.label || 'Ouverture', atkSide, { type: 'banner', side: 'me', big: 'Début de la partie', sub: HERO.me + ' vs ' + HERO.opp });
         if (!actor || !(t.events || []).some(e => e.type === 'played')) return;   // ouverture sans action → juste la bannière
       } else {
-        // L'arsenal adverse n'est pas connu de façon fiable depuis un log « côté
-        // moi » → on ne l'invente pas (0). La main adverse reste cachée.
+        // Règle FaB : on repioche à la FIN de son tour, pas au début. La main
+        // adverse est donc remise à 4 au début de MON tour (l'adversaire a
+        // repioché en fin du sien) — mais PAS au début du tour adverse : il
+        // garde ce qu'il lui reste après ses blocs, et ne repioche qu'à la fin.
+        // L'arsenal adverse n'est pas connu de façon fiable → on ne l'invente pas.
         if (actor === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.oppHandCount = 4; }
-        else { st.meFaceUp = false; st.meHandCount = 4; st.oppHandCount = 4; st.oppArsenalCount = 0; }
+        else { st.meFaceUp = false; st.meHandCount = 4; st.oppArsenalCount = 0; }
         push(label, atkSide, { type: 'banner', side: atkSide, big: actor === MY ? 'Ton tour' : 'Tour adverse',
           sub: HERO[atkSide] + ' attaque · ' + HERO.me + ' ' + st.life.me + ' PV · ' + HERO.opp + ' ' + st.life.opp + ' PV' });
       }
