@@ -35,7 +35,15 @@
       const name = art.getAttribute('data-card');
       if (!name) return;
       art.dataset.painted = '1';
-      resolveImg(name, art.hasAttribute('data-hero')).then(u => { if (u) { art.style.backgroundImage = 'url("' + u + '")'; art.classList.add('has-img'); } });
+      resolveImg(name, art.hasAttribute('data-hero')).then(u => {
+        if (!u) return;
+        art.style.backgroundImage = 'url("' + u + '")';
+        art.classList.add('has-img');
+        // La carte porte déjà son nom imprimé → on masque le nom en
+        // surimpression (marqueur sur la tuile parente ; cf. CSS .br-imgok).
+        const tile = art.closest('.br-gcard,.br-zcard,.br-pcard');
+        if (tile) tile.classList.add('br-imgok');
+      });
     });
   }
 
@@ -207,10 +215,10 @@
     const slider = $('#br-slider'), stage = $('#br-stage');
     let i = 0, playing = false, timer = null; const prevCounts = {};
 
-    const pcard = (c, side) => '<div class="br-pcard br-' + side + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"></div><div class="br-nm">' + esc(c.nm) + '</div></div>';
+    const pcard = (c, side, lg) => '<div class="br-pcard br-' + side + (lg ? ' br-lg' : '') + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"></div><div class="br-nm">' + esc(c.nm) + '</div></div>';
     function buildStage(s) {
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
-      if (s.type === 'play') return '<div class="br-phase">' + (s.reaction ? 'Réaction' : 'Action') + '</div><div class="br-duel"><div class="br-side">' + pcard(s.card, s.side) + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div></div><div class="br-banner br-' + s.side + '"><div class="br-sub" style="margin-top:8px">' + esc(s.text) + '</div></div>';
+      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
         return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div></div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
@@ -275,6 +283,27 @@
     container.querySelector('[data-act="restart"]').addEventListener('click', () => { stop(); go(0, null); });
     $('.br-play').addEventListener('click', () => { playing ? stop() : play(); });
     slider.addEventListener('input', () => { stop(); go(parseInt(slider.value, 10), i); });
+
+    // ---- Survol : aperçu de la carte en grand (lisibilité ; desktop) ----
+    const preview = document.createElement('div');
+    preview.className = 'br-preview';
+    container.appendChild(preview);
+    const PW = 224, PH = 313;
+    function showPreview(tile) {
+      const art = tile.matches('.br-art') ? tile : tile.querySelector('.br-art');
+      if (!art || !art.classList.contains('has-img') || !art.style.backgroundImage) return;
+      preview.style.backgroundImage = art.style.backgroundImage;
+      const r = tile.getBoundingClientRect();
+      let left = r.left + r.width / 2 - PW / 2;
+      let top = r.top - PH - 10;
+      if (top < 8) top = Math.min(r.bottom + 10, window.innerHeight - PH - 8);
+      left = Math.max(8, Math.min(left, window.innerWidth - PW - 8));
+      preview.style.left = left + 'px';
+      preview.style.top = Math.max(8, top) + 'px';
+      preview.classList.add('show');
+    }
+    container.addEventListener('mouseover', e => { const t = e.target.closest('[data-card]'); if (t) showPreview(t); });
+    container.addEventListener('mouseout', e => { const t = e.target.closest('[data-card]'); if (t) preview.classList.remove('show'); });
 
     go(0, null);
   }
