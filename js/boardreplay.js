@@ -149,6 +149,14 @@
 
       const evs = t.events || [], consumed = {};
       let openAtk = null, curBlocks = [], curReactions = [];
+      // Affiche en carte SEULE une carte de l'attaquant restée sans combat
+      // (action hors-combat). Une vraie carte d'ATTAQUE, elle, n'est montrée que
+      // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
+      const flushAtk = () => {
+        if (!openAtk) return;
+        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm }, pitch: openAtk.pitch, text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt });
+        openAtk = null;
+      };
       evs.forEach((e, i) => {
         if (consumed[i]) return;
         if (e.type === 'played') {
@@ -157,8 +165,8 @@
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
           if (side === atkSide) {
-            openAtk = { nm: e.card, side };
-            push(label, side, { type: 'play', side, card: { nm: e.card }, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + pTxt });
+            flushAtk();   // attaque précédente restée sans combat → carte seule
+            openAtk = { nm: e.card, side, pitch: pitches.join(', '), pTxt: pTxt };
           } else {
             curReactions.push({ card: e.card, owner: side });
             push(label, side, { type: 'play', side, card: { nm: e.card }, reaction: true, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt });
@@ -187,6 +195,7 @@
           openAtk = null; curBlocks = []; curReactions = [];
         }
       });
+      flushAtk();   // fin de tour : dernière action hors-combat affichée seule
     });
     return { players: GAME.players, myName: MY, oppName: OPP, hero: HERO, steps };
   }
