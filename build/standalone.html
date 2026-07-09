@@ -579,23 +579,24 @@ footer a{color:var(--text-dim)}
 .eq-slot .eq-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.9rem;opacity:.5}
 .eq-slot .eq-ph.eq-name{font-size:.56rem;opacity:.85;color:var(--text-faint);text-align:center;padding:2px;line-height:1.12;font-family:'Inter',sans-serif;overflow:hidden}
 
-/* Onglet Table (desktop) : onglets alignés sur le plateau + bandeau de match
-   RÉDUIT À UNE LIGNE (héros/équipement/PV sont déjà sur le plateau). */
+/* Onglet Table : bandeau de match RÉDUIT À UNE LIGNE (héros / équipement / PV
+   sont déjà sur le plateau) — sur mobile ET desktop, pour harmoniser. */
+#scoreboard.sb-wide .match-card{padding:8px 16px}
+#scoreboard.sb-wide .match-card .hero-avatar,
+#scoreboard.sb-wide .match-card .eq-strip,
+#scoreboard.sb-wide .match-card .match-meta{display:none}
+#scoreboard.sb-wide .match-heroes{margin-bottom:0;justify-content:center;gap:16px;flex-wrap:wrap}
+#scoreboard.sb-wide .match-side{flex:0 0 auto}
+#scoreboard.sb-wide .hero-meta{flex-direction:row;align-items:baseline;gap:8px}
+#scoreboard.sb-wide .hero-meta .pname{display:none}
+#scoreboard.sb-wide .hero-meta .hname{font-size:1rem}
+#scoreboard.sb-wide .hero-meta .plife{font-size:1rem}
+#scoreboard.sb-wide .match-mid{flex-direction:row;gap:10px;align-items:baseline}
+/* Desktop : bandeau + onglets pleine largeur, alignés sur le plateau. */
 @media (min-width: 900px) {
   #scoreboard.sb-wide #matchBanner,
   #scoreboard.sb-wide .replay-tabs{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px));padding-inline:2px}
   #scoreboard.sb-wide #matchBanner{padding-top:6px}
-  #scoreboard.sb-wide .match-card{padding:8px 16px}
-  #scoreboard.sb-wide .match-card .hero-avatar,
-  #scoreboard.sb-wide .match-card .eq-strip,
-  #scoreboard.sb-wide .match-card .match-meta{display:none}
-  #scoreboard.sb-wide .match-heroes{margin-bottom:0;justify-content:center;gap:22px;flex-wrap:wrap}
-  #scoreboard.sb-wide .match-side{flex:0 0 auto}
-  #scoreboard.sb-wide .hero-meta{flex-direction:row;align-items:baseline;gap:8px}
-  #scoreboard.sb-wide .hero-meta .pname{display:none}
-  #scoreboard.sb-wide .hero-meta .hname{font-size:1rem}
-  #scoreboard.sb-wide .hero-meta .plife{font-size:1rem}
-  #scoreboard.sb-wide .match-mid{flex-direction:row;gap:10px;align-items:baseline}
 }
 .eq-empty{font-size:.65rem;color:var(--text-faint);font-style:italic}
 
@@ -1118,7 +1119,7 @@ footer a{color:var(--text-dim)}
 .br-verdict.br-through{color:var(--red);background:#e0555a1a;border:1px solid #e0555a55}
 /* Récap « une action » : juste la carte en grand, liseré = qui joue. */
 .br-playone{display:flex;flex-direction:column;align-items:center;gap:9px}
-.br-pcard.br-lg{width:132px;border-width:2px}
+.br-pcard.br-lg{width:104px;border-width:2px}
 .br-pcard.br-lg.br-me{border-color:var(--accent,var(--gold));box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}
 .br-pcard.br-lg.br-opp{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,107,255,.22)}
 .br-react{font-size:.66rem;color:var(--text-dim);letter-spacing:.05em;text-transform:uppercase;font-weight:600}
@@ -1146,39 +1147,46 @@ footer a{color:var(--text-dim)}
    (Déroulé/Stats) garde sa colonne lisible. */
 @media (min-width: 900px) {
   #boardReplay{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px))}
-  #boardReplay .br-mat{max-width:1060px;margin:0 auto;gap:10px;padding:16px 22px}
-  #boardReplay .br-field{gap:26px;padding:12px 26px}
+  /* Plateau + barre de lecture côte à côte, alignés sur les onglets :
+     [ table (remplit) | boutons ]. La table démarre au bord gauche des onglets,
+     les boutons se collent à son bord droit, l'ensemble atteint le bord droit. */
+  #boardReplay .br-wrap{display:grid;grid-template-columns:1fr auto;column-gap:12px;
+    align-items:start;grid-template-areas:"mat tools" "tl tl"}
+  #boardReplay .br-mat{grid-area:mat;max-width:none;margin:0;gap:10px;padding:16px 24px}
+  #boardReplay .br-timeline{grid-area:tl}
+  #boardReplay .br-field{gap:26px;padding:12px 30px}
   #boardReplay .br-rail{flex-direction:row;gap:9px}
   #boardReplay .br-cluster{gap:10px}
   /* Équipement en RANGÉE à côté du héros : on a la largeur, ça économise la
      hauteur (les deux mains tiennent alors à l'écran sans scroller). */
   #boardReplay .br-equip{display:flex;flex-direction:row;gap:6px;grid-template-columns:none;grid-auto-rows:auto}
-  #boardReplay .br-equip .br-gcard{width:56px}
-  #boardReplay .br-rail .br-slot,#boardReplay .br-rail .br-deck{width:70px}
-  #boardReplay .br-cluster>.br-gcard{width:70px}
-  #boardReplay .br-cluster>.br-gcard.br-hero{width:88px}
+  #boardReplay .br-equip .br-gcard{width:58px}
+  #boardReplay .br-rail .br-slot,#boardReplay .br-rail .br-deck{width:72px}
+  #boardReplay .br-cluster>.br-gcard{width:72px}
+  #boardReplay .br-cluster>.br-gcard.br-hero{width:92px}
   #boardReplay .br-lifetok{width:38px;height:38px;font-size:1rem;right:-11px;top:-11px}
   #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
 
-  /* Piste de combat centrale, un peu plus haute et lisible. */
-  #boardReplay .br-lane{min-height:210px}
-  #boardReplay .br-lane .br-pcard{width:78px}
-  #boardReplay .br-lane .br-pcard.br-lg{width:120px}
+  /* Piste de combat centrale : cartes nettement plus grandes (c'est le focus). */
+  #boardReplay .br-lane{min-height:230px}
+  #boardReplay .br-lane .br-pcard{width:104px}
+  #boardReplay .br-lane .br-pcard.br-lg{width:168px}
   #boardReplay .br-playone{max-width:100%}
   #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}
-  #boardReplay .br-big{font-size:1.35rem}
-  #boardReplay .br-sub{font-size:.9rem}
+  #boardReplay .br-big{font-size:1.5rem}
+  #boardReplay .br-sub{font-size:.95rem}
   #boardReplay .br-cardrow{max-width:none}
 
   /* Mains agrandies. */
   #boardReplay .br-hand{min-height:0;gap:8px;padding:2px}
-  #boardReplay .br-hand .br-pcard{width:66px}
-  #boardReplay .br-hand .br-pcard.br-inhand{width:64px}
-  #boardReplay .br-hand .br-back{width:52px;height:auto;aspect-ratio:5/7}
+  #boardReplay .br-hand .br-pcard{width:68px}
+  #boardReplay .br-hand .br-pcard.br-inhand{width:66px}
+  #boardReplay .br-hand .br-back{width:54px;height:auto;aspect-ratio:5/7}
 
-  /* Contrôles : rail vertical flottant à droite → toujours accessibles. */
-  #boardReplay .br-toolbar{position:fixed;right:14px;top:50%;transform:translateY(-50%);
-    flex-direction:column;gap:8px;margin:0;z-index:60;padding:8px;border-radius:14px;
+  /* Contrôles : rail vertical collé au bord droit de la table, collant en haut
+     pour rester accessibles quand on fait défiler le plateau. */
+  #boardReplay .br-toolbar{grid-area:tools;position:sticky;top:16px;align-self:start;
+    flex-direction:column;gap:8px;margin:0;padding:8px;border-radius:14px;
     background:rgba(12,15,23,.85);border:1px solid var(--line-2);box-shadow:0 8px 28px rgba(0,0,0,.55)}
   #boardReplay .br-toolbar .br-tool{width:46px;height:46px;font-size:1.15rem}
 }
@@ -3077,16 +3085,11 @@ footer a{color:var(--text-dim)}
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  // Titre de la barre du haut : matchup « Ton héros vs Héros adverse ».
+  // Barre du haut : on n'affiche plus le matchup ici — le bandeau de match
+  // juste en dessous porte déjà les héros et les PV (doublon supprimé).
   function renderTopTitle() {
     const el = $('#replayMatchup');
-    if (!el) return;
-    const me = GAME.players.me, opp = GAME.players.opp;
-    const mine = (me && (me.hero || me.name)) || myName || '?';
-    const theirs = (opp && (opp.hero || opp.name)) || oppName || '?';
-    el.innerHTML = '<span class="me">' + escapeHtml(mine) + '</span>'
-      + '<span class="vs">vs</span>'
-      + '<span class="opp">' + escapeHtml(theirs) + '</span>';
+    if (el) el.innerHTML = '';
   }
 
   function renderCurve() {

@@ -235,16 +235,11 @@
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  // Titre de la barre du haut : matchup « Ton héros vs Héros adverse ».
+  // Barre du haut : on n'affiche plus le matchup ici — le bandeau de match
+  // juste en dessous porte déjà les héros et les PV (doublon supprimé).
   function renderTopTitle() {
     const el = $('#replayMatchup');
-    if (!el) return;
-    const me = GAME.players.me, opp = GAME.players.opp;
-    const mine = (me && (me.hero || me.name)) || myName || '?';
-    const theirs = (opp && (opp.hero || opp.name)) || oppName || '?';
-    el.innerHTML = '<span class="me">' + escapeHtml(mine) + '</span>'
-      + '<span class="vs">vs</span>'
-      + '<span class="opp">' + escapeHtml(theirs) + '</span>';
+    if (el) el.innerHTML = '';
   }
 
   function renderCurve() {
