@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=55">
+<link rel="stylesheet" href="css/style.css?v=56">
 </head>
 <body>
 
@@ -122,13 +122,13 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=55"></script>
-<script src="js/images.js?v=55"></script>
-<script src="js/db.js?v=55"></script>
-<script src="js/sync.js?v=55"></script>
-<script src="js/replay.js?v=55"></script>
-<script src="js/boardreplay.js?v=55"></script>
-<script src="js/dashboard.js?v=55"></script>
+<script src="talishar-parser.js?v=56"></script>
+<script src="js/images.js?v=56"></script>
+<script src="js/db.js?v=56"></script>
+<script src="js/sync.js?v=56"></script>
+<script src="js/replay.js?v=56"></script>
+<script src="js/boardreplay.js?v=56"></script>
+<script src="js/dashboard.js?v=56"></script>
 
 <script>
 // ============================================================
@@ -214,6 +214,19 @@
     if (!confirm('Supprimer cette partie de la bibliothèque ?')) return;
     await window.FabDB.removeGame(id);
     await reloadDashboard();
+    // Propagation inter-appareil : on inscrit la suppression dans le dépôt
+    // (data/deleted.json) si la synchro est connectée sur cet appareil.
+    if (window.FabSync.canWrite()) {
+      try {
+        await window.FabSync.pushDeletion([id]);
+        libHint.textContent = 'Partie supprimée — propagée à tes autres appareils.';
+      } catch (e) {
+        console.error(e);
+        libHint.textContent = 'Supprimée ici, mais propagation échouée : ' + e.message;
+      }
+    } else {
+      libHint.textContent = 'Partie supprimée sur cet appareil. Connecte la synchro (☁) pour supprimer sur tous tes appareils.';
+    }
   }
 
   $('#backToDash').addEventListener('click', () => {
@@ -368,6 +381,9 @@
       try {
         const entries = (await Promise.all(importedIds.map(id => window.FabDB.getEntry(id)))).filter(Boolean);
         const res = await window.FabSync.push(entries);
+        // Réimport volontaire → on retire ces parties de la liste de suppressions
+        // partagée, pour qu'elles ne soient plus masquées sur les autres appareils.
+        try { await window.FabSync.pushUndelete(importedIds); } catch (e) { console.error(e); }
         libHint.textContent = res.pushed + ' partie(s) publiée(s) dans le dépôt (visibles sur tes autres appareils après le redéploiement Pages).';
       } catch (e) {
         console.error(e);
@@ -433,7 +449,7 @@
     // (lecture statique, sans token) et les fusionne dans le cache local.
     try {
       const r = await window.FabSync.pull();
-      if (r.added) await reloadDashboard();
+      if (r.added || r.removed) await reloadDashboard();
     } catch (e) { console.error(e); }
 
     // Reprise d'un lien profond #game=<id> (après la synchro, la partie

@@ -24,6 +24,7 @@
   const DATA_PATH = 'data/library.json';
   const RAW_DIR = 'data/raw/';                 // dépôts bruts du grabber (Phase 3)
   const RAW_INDEX = 'data/raw/index.json';     // manifeste des .txt déposés
+  const DELETED_PATH = 'data/deleted.json';    // liste PARTAGÉE des gameId supprimés (inter-appareil)
   const API = 'https://api.github.com';
 
   // URL du fichier de données, relative au site déployé (marche sur
@@ -31,6 +32,7 @@
   function dataUrl() { return new URL(DATA_PATH, document.baseURI).href; }
   function rawIndexUrl() { return new URL(RAW_INDEX, document.baseURI).href; }
   function rawFileUrl(id) { return new URL(RAW_DIR + encodeURIComponent(id) + '.txt', document.baseURI).href; }
+  function deletedUrl() { return new URL(DELETED_PATH, document.baseURI).href; }
 
   // Devine {owner, repo} depuis l'URL Pages (`<owner>.github.io/<repo>/`).
   // Retourne null hors github.io → l'écriture est alors désactivée, mais
@@ -84,15 +86,42 @@
     } catch (e) { return []; }
   }
 
+  // Liste partagée des suppressions (data/deleted.json). Lecture statique, sans
+  // token. Tolère un tableau nu ou une enveloppe {ids:[…]}. Absent = [].
+  async function fetchDeleted() {
+    let res;
+    try { res = await fetch(deletedUrl(), { cache: 'no-store' }); }
+    catch (e) { return []; }
+    if (!res.ok) return [];
+    try {
+      const j = await res.json();
+      if (Array.isArray(j)) return j.map(String);
+      return ((j && j.ids) || []).map(String);
+    } catch (e) { return []; }
+  }
+
   // Descend le nuage → n'INSÈRE que les parties absentes en local.
   // Deux sources fusionnées, dédupliquées par gameId :
   //   1. data/library.json  : entrées déjà parsées (imports viewer).
   //   2. data/raw/*.txt      : logs bruts déposés par le grabber, parsés ici
   //      (chaque brut n'est récupéré qu'une fois par appareil).
   async function pull() {
-    let added = 0, sawData = false;
-    // Parties explicitement supprimées par l'utilisateur : on ne les ré-injecte
-    // jamais depuis le dépôt (sinon la suppression « ne tient pas » au reload).
+    let added = 0, removed = 0, sawData = false;
+
+    // --- 0. Suppressions PARTAGÉES (inter-appareil) ---
+    // On applique d'abord la liste du dépôt : on retire localement les parties
+    // supprimées ailleurs et on les mémorise (pierre tombale) pour ne jamais les
+    // ré-injecter. Fusionnée avec les suppressions locales de cet appareil.
+    const remoteDead = await fetchDeleted();
+    if (remoteDead.length) {
+      const local0 = await root.FabDB.getAllEntries();
+      const have0 = new Set(local0.map(e => String(e.gameId)));
+      for (const id of remoteDead) {
+        if (root.FabDB.markDeleted) root.FabDB.markDeleted(id);
+        if (have0.has(String(id))) { try { await root.FabDB.removeGame(id); removed++; } catch (e) { console.error(e); } }
+      }
+    }
+    // Ensemble « à ne jamais ré-injecter » = suppressions locales ∪ distantes.
     const dead = new Set(root.FabDB.deletedIds ? root.FabDB.deletedIds() : []);
 
     // --- 1. Bibliothèque parsée ---
@@ -137,8 +166,8 @@
       }
     }
 
-    if (!sawData) return { added: 0, offline: true };
-    return { added: added };
+    if (!sawData) return { added: 0, removed: removed, offline: true };
+    return { added: added, removed: removed };
   }
 
   // ---------- Écriture (avec token) ----------
@@ -216,6 +245,44 @@
     return { pushed: 0 };
   }
 
+  // ---------- Suppressions partagées (écriture de data/deleted.json) ----------
+  function buildDeleted(ids) {
+    return { app: 'fab', kind: 'deleted', version: 1, ids: Array.from(new Set(ids.map(String))) };
+  }
+  // Read-modify-write de data/deleted.json ; `mutate(set)` modifie l'ensemble
+  // d'ids et renvoie le nouvel ensemble. 1 nouvelle tentative sur conflit 409.
+  async function writeDeleted(mutate) {
+    const repo = detectRepo(), token = getToken();
+    if (!repo || !token) return { ok: false, skipped: true };
+    const branch = await defaultBranch(repo, token);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const url = API + '/repos/' + repo.owner + '/' + repo.repo + '/contents/' + DELETED_PATH;
+      const r0 = await fetch(url + '?ref=' + encodeURIComponent(branch), { headers: ghHeaders(token) });
+      let sha = null, cur = [];
+      if (r0.ok) { const j = await r0.json(); sha = j.sha; try { const p = JSON.parse(base64ToUtf8(j.content)); cur = Array.isArray(p) ? p : (p.ids || []); } catch (e) { cur = []; } }
+      else if (r0.status !== 404) throw new Error('lecture deleted: HTTP ' + r0.status);
+      const next = mutate(new Set(cur.map(String)));
+      const body = { message: 'sync: suppressions partagées', content: utf8ToBase64(JSON.stringify(buildDeleted(Array.from(next)))), branch: branch };
+      if (sha) body.sha = sha;
+      const r = await fetch(url, { method: 'PUT', headers: ghHeaders(token), body: JSON.stringify(body) });
+      if (r.ok) return { ok: true };
+      if (r.status === 409 && attempt === 0) continue;
+      const detail = await r.text().catch(() => '');
+      throw new Error('écriture deleted: HTTP ' + r.status + ' ' + detail.slice(0, 150));
+    }
+    return { ok: false };
+  }
+  async function pushDeletion(ids) {
+    const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean).map(String);
+    if (!list.length) return { ok: true };
+    return writeDeleted(set => { list.forEach(id => set.add(id)); return set; });
+  }
+  async function pushUndelete(ids) {
+    const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean).map(String);
+    if (!list.length) return { ok: true };
+    return writeDeleted(set => { list.forEach(id => set.delete(id)); return set; });
+  }
+
   // Vérifie que le token a bien accès en écriture au dépôt détecté.
   async function verifyToken() {
     const repo = detectRepo();
@@ -233,6 +300,6 @@
   root.FabSync = {
     detectRepo, dataUrl,
     getToken, setToken, clearToken, hasToken, canWrite,
-    fetchLibrary, pull, push, verifyToken
+    fetchLibrary, fetchDeleted, pull, push, pushDeletion, pushUndelete, verifyToken
   };
 })(typeof self !== 'undefined' ? self : this);
