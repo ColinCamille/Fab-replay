@@ -186,10 +186,9 @@
 
     el.innerHTML =
       '<div class="match-card">' +
-        verdict +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
-          '<div class="match-mid"><span class="vs">VS</span></div>' +
+          '<div class="match-mid"><span class="vs">VS</span>' + verdict + '</div>' +
           sideHtml(opp, curOpp, 'opp') +
         '</div>' +
         '<div class="match-meta">' + chips.join('') + '</div>' +

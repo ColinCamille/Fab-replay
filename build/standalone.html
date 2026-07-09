@@ -523,11 +523,11 @@ footer a{color:var(--text-dim)}
     var(--panel);
   border:1px solid var(--line); border-radius:14px; padding:14px;
 }
-/* Résultat en filigrane diagonal (le payoff) */
+/* Résultat : pastille centrée entre les héros (sous « VS ») — toujours visible,
+   jamais derrière une carte de héros. */
 .match-card .verdict{
-  position:absolute; top:10px; right:-34px; transform:rotate(38deg);
-  font-family:'Cinzel',serif; font-weight:700; font-size:.62rem; letter-spacing:.12em;
-  padding:3px 40px; text-transform:uppercase; opacity:.95;
+  font-family:'Cinzel',serif; font-weight:700; font-size:.66rem; letter-spacing:.06em;
+  padding:3px 12px; border-radius:999px; text-transform:uppercase; white-space:nowrap;
 }
 .verdict.win{background:rgba(79,184,122,.22); color:var(--green); box-shadow:0 0 0 1px rgba(79,184,122,.35)}
 .verdict.loss{background:rgba(224,85,90,.20); color:var(--red); box-shadow:0 0 0 1px rgba(224,85,90,.3)}
@@ -537,7 +537,7 @@ footer a{color:var(--text-dim)}
 .match-side{flex:1;display:flex;align-items:center;gap:10px;min-width:0}
 .match-side.opp{flex-direction:row-reverse;text-align:right}
 .hero-avatar{
-  width:5rem;height:6.95rem;border-radius:10px;flex-shrink:0;overflow:hidden;
+  width:5.8rem;height:8.1rem;border-radius:10px;flex-shrink:0;overflow:hidden;
   background:var(--panel-2); border:2px solid var(--line);
   display:flex;align-items:center;justify-content:center;
   font-family:'Cinzel',serif;font-size:1.5rem;color:var(--text-faint);
@@ -572,12 +572,22 @@ footer a{color:var(--text-dim)}
 .eq-label.opp{color:#6d5fa8}
 .eq-slots{display:flex;gap:5px;flex-wrap:wrap}
 .eq-slot{
-  width:3rem;height:4.15rem;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);
+  width:4rem;height:5.55rem;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);
   overflow:hidden;position:relative;flex-shrink:0;
 }
 .eq-slot img{width:100%;height:100%;object-fit:cover}
 .eq-slot .eq-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.9rem;opacity:.5}
-.eq-slot .eq-ph.eq-name{font-size:.5rem;opacity:.85;color:var(--text-faint);text-align:center;padding:2px;line-height:1.1;font-family:'Inter',sans-serif;overflow:hidden}
+.eq-slot .eq-ph.eq-name{font-size:.56rem;opacity:.85;color:var(--text-faint);text-align:center;padding:2px;line-height:1.12;font-family:'Inter',sans-serif;overflow:hidden}
+
+/* Onglet Table (desktop) : bandeau de match + onglets alignés sur le plateau
+   pleine largeur, avec le contenu centré (comme les zones du plateau). */
+@media (min-width: 900px) {
+  #scoreboard.sb-wide #matchBanner,
+  #scoreboard.sb-wide .replay-tabs{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px));padding-inline:2px}
+  #scoreboard.sb-wide .match-heroes,
+  #scoreboard.sb-wide .match-meta,
+  #scoreboard.sb-wide .eq-strip{max-width:940px;margin-left:auto;margin-right:auto}
+}
 .eq-empty{font-size:.65rem;color:var(--text-faint);font-style:italic}
 
 /* ---------- Loading shimmer ---------- */
@@ -2988,10 +2998,9 @@ footer a{color:var(--text-dim)}
 
     el.innerHTML =
       '<div class="match-card">' +
-        verdict +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
-          '<div class="match-mid"><span class="vs">VS</span></div>' +
+          '<div class="match-mid"><span class="vs">VS</span>' + verdict + '</div>' +
           sideHtml(opp, curOpp, 'opp') +
         '</div>' +
         '<div class="match-meta">' + chips.join('') + '</div>' +
@@ -4827,6 +4836,9 @@ footer a{color:var(--text-dim)}
     if (r) r.classList.toggle('active', name === 'replay');
     if (t) t.classList.toggle('active', name === 'table');
     if (s) s.classList.toggle('active', name === 'stats');
+    // Onglet Table : on élargit le bandeau + les onglets pour s'aligner sur le
+    // plateau (pleine largeur sur desktop) ; sinon on garde la colonne étroite.
+    const sb = $('#scoreboard'); if (sb) sb.classList.toggle('sb-wide', name === 'table');
     // La table est reconstruite paresseusement à la première ouverture (par partie).
     if (name === 'table' && window.BoardReplay && window.Replay && window.Replay.getGame) {
       const g = window.Replay.getGame();
@@ -4838,7 +4850,7 @@ footer a{color:var(--text-dim)}
 
   function openGame(entry) {
     window.Replay.show(entry.record);
-    setReplayTab('replay');   // toujours ouvrir sur le déroulé
+    setReplayTab('table');   // vue Table par défaut (rejeu sur plateau)
     showView('replay');
     if (history.replaceState) history.replaceState(null, '', '#game=' + encodeURIComponent(entry.gameId));
     else location.hash = 'game=' + encodeURIComponent(entry.gameId);
