@@ -191,7 +191,7 @@
         '<div class="br-toolbar" role="group" aria-label="Contrôles de lecture">' +
           '<button class="br-tool" data-act="restart" title="Recommencer" aria-label="Recommencer">⏮</button>' +
           '<button class="br-tool" data-act="prev" title="Étape précédente" aria-label="Étape précédente">‹</button>' +
-          '<button class="br-tool br-play" data-act="play" aria-label="Lecture automatique">▶ Lecture</button>' +
+          '<button class="br-tool br-play" data-act="play" title="Lecture automatique" aria-label="Lecture automatique">▶</button>' +
           '<button class="br-tool" data-act="next" title="Étape suivante" aria-label="Étape suivante">›</button>' +
         '</div>' +
         '<div class="br-table">' +
@@ -282,8 +282,8 @@
       paintArt(container);
     }
     function go(n, prev) { i = Math.max(0, Math.min(steps.length - 1, n)); render(prev); container.__brIndex = i; }
-    function stop() { playing = false; clearInterval(timer); $('.br-play').innerHTML = '▶ Lecture'; }
-    function play() { if (i >= steps.length - 1) go(0); playing = true; $('.br-play').innerHTML = '❚❚ Pause'; timer = setInterval(() => { if (i >= steps.length - 1) { stop(); return; } go(i + 1, i); }, 1150); }
+    function stop() { playing = false; clearInterval(timer); $('.br-play').innerHTML = '▶'; $('.br-play').title = 'Lecture automatique'; }
+    function play() { if (i >= steps.length - 1) go(0); playing = true; $('.br-play').innerHTML = '❚❚'; $('.br-play').title = 'Pause'; timer = setInterval(() => { if (i >= steps.length - 1) { stop(); return; } go(i + 1, i); }, 1150); }
 
     container.querySelector('[data-act="next"]').addEventListener('click', () => { stop(); go(i + 1, i); });
     container.querySelector('[data-act="prev"]').addEventListener('click', () => { stop(); go(i - 1, i); });

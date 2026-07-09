@@ -67,6 +67,31 @@
         if (i >= 0 && i !== currentTurnIndex) { currentTurnIndex = i; renderChainActive(); renderTurn(); }
       });
     }
+
+    // Aperçu grande carte au survol de l'équipement / des héros du bandeau (desktop).
+    const banner = $('#matchBanner');
+    if (banner) {
+      const prev = document.createElement('div');
+      prev.className = 'br-preview';
+      document.body.appendChild(prev);
+      const PW = 224, PH = 313;
+      const sel = '.eq-slot[data-card], .hero-avatar[data-hero]';
+      banner.addEventListener('mouseover', e => {
+        const el = e.target.closest(sel);
+        const img = el && el.querySelector('img');
+        if (!img || !img.src) return;
+        prev.style.backgroundImage = "url('" + img.src + "')";
+        const r = el.getBoundingClientRect();
+        let left = r.left + r.width / 2 - PW / 2;
+        let top = r.bottom + 10;
+        if (top + PH > window.innerHeight - 8) top = Math.max(8, r.top - PH - 10);
+        left = Math.max(8, Math.min(left, window.innerWidth - PW - 8));
+        prev.style.left = left + 'px';
+        prev.style.top = top + 'px';
+        prev.classList.add('show');
+      });
+      banner.addEventListener('mouseout', e => { if (e.target.closest(sel)) prev.classList.remove('show'); });
+    }
   }
 
   // Total de PV attendu selon le format (repli si les PV de départ ne sont pas
