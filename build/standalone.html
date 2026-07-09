@@ -1127,29 +1127,54 @@ footer a{color:var(--text-dim)}
    le viewport (borné à 1280 px) + cellules/cartes agrandies proportionnellement. */
 @media (min-width: 900px) {
   #boardReplay{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px))}
-  #boardReplay .br-zone{gap:26px;padding:14px 16px;justify-content:center}
-  /* Cellules PORTRAIT (largeur × ~1,4) → l'image de carte remplit joliment. */
-  #boardReplay .br-equip{grid-template-columns:repeat(2,68px);grid-auto-rows:96px;gap:7px}
-  #boardReplay .br-heroblk{grid-template-columns:repeat(2,72px);grid-auto-rows:100px;gap:7px}
-  #boardReplay .br-deckrail{grid-template-columns:64px 72px;grid-auto-rows:minmax(96px,auto);gap:7px}
-  #boardReplay .br-deckrail .br-slot{min-height:96px}
-  #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.6rem;padding-top:12px}
-  #boardReplay .br-slot-t{font-size:.56rem}
-  #boardReplay .br-slot,#boardReplay .br-deck{min-height:96px}
-  #boardReplay .br-back{width:66px;height:92px}
-  #boardReplay .br-hand{min-height:126px;gap:8px}
-  #boardReplay .br-pcard{width:88px}
-  #boardReplay .br-pcard.br-inhand{width:84px}
-  #boardReplay .br-pcard.br-lg{width:168px}
-  #boardReplay .br-mid{gap:12px}
-  #boardReplay .br-stage{min-height:240px;padding:18px 16px}
-  #boardReplay .br-lifecol{flex:0 0 120px;gap:8px}
-  #boardReplay .br-lifebox{padding:9px 6px}
-  #boardReplay .br-lifebox .br-who{font-size:.62rem}
-  #boardReplay .br-lifebox .br-n{font-size:2rem}
-  #boardReplay .br-big{font-size:1.4rem}
-  #boardReplay .br-sub{font-size:.9rem}
+  /* ===== Desktop : plateau « paysage » — tout tient dans l'écran =====
+     .br-table en 2 colonnes : aire de jeu (mains + zones) à gauche, panneau
+     récap (PV + tour + action) collant à droite. Zones étalées en RANGÉES
+     (équipement | héros | pioche) → moins haut, remplit la largeur. */
+  #boardReplay .br-table{
+    display:grid;
+    grid-template-columns:1fr minmax(300px,360px);
+    grid-template-areas:"oh side" "oz side" "mz side" "mh side";
+    column-gap:16px;row-gap:8px;align-items:start;
+  }
+  #boardReplay #br-oppHand{grid-area:oh}
+  #boardReplay #br-zOpp{grid-area:oz}
+  #boardReplay #br-zMe{grid-area:mz}
+  #boardReplay #br-myHand{grid-area:mh}
+  #boardReplay .br-mid{grid-area:side;flex-direction:column;gap:10px;position:sticky;top:12px;align-self:start;min-width:0}
+  /* PV en haut du panneau : Adv | Toi côte à côte, tour en dessous. */
+  #boardReplay .br-lifecol{flex:0 0 auto;order:-1;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #boardReplay .br-lifecol .br-opp{grid-column:1;grid-row:1}
+  #boardReplay .br-lifecol .br-me{grid-column:2;grid-row:1}
+  #boardReplay .br-turnchip{grid-column:1 / -1;grid-row:2}
+  #boardReplay .br-lifebox{padding:8px 6px}
+  #boardReplay .br-lifebox .br-who{font-size:.6rem}
+  #boardReplay .br-lifebox .br-n{font-size:1.8rem}
+  #boardReplay .br-stage{min-height:300px;padding:16px 12px}
+  #boardReplay .br-playone{max-width:100%}
+  #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}
+  #boardReplay .br-big{font-size:1.3rem}
+  #boardReplay .br-sub{font-size:.86rem}
   #boardReplay .br-cardrow{max-width:none}
+
+  /* Zones en rangées : équipement / héros / pioche répartis sur la largeur. */
+  #boardReplay .br-zone{justify-content:space-around;gap:14px;padding:12px 20px}
+  #boardReplay .br-equip,#boardReplay .br-heroblk,#boardReplay .br-deckrail{
+    display:flex;flex-direction:row;gap:8px;grid-template-columns:none}
+  #boardReplay .br-equip .br-gcard,
+  #boardReplay .br-heroblk .br-gcard,
+  #boardReplay .br-heroblk .br-slot,
+  #boardReplay .br-deckrail .br-slot,
+  #boardReplay .br-deckrail .br-deck{width:76px;height:auto;aspect-ratio:5/7;min-height:0}
+  #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
+  #boardReplay .br-slot-t{font-size:.54rem}
+
+  /* Mains : cartes calibrées pour que l'ensemble tienne en hauteur. */
+  #boardReplay .br-hand{min-height:0;gap:8px;padding:2px}
+  #boardReplay .br-pcard{width:74px}
+  #boardReplay .br-pcard.br-inhand{width:72px}
+  #boardReplay .br-pcard.br-lg{width:150px}
+  #boardReplay .br-back{width:54px;height:76px}
   /* Contrôles de lecture : rail vertical flottant, centré verticalement à droite
      → toujours accessibles sans remonter, même quand on regarde le centre du plateau. */
   #boardReplay .br-toolbar{position:fixed;right:14px;top:50%;transform:translateY(-50%);
