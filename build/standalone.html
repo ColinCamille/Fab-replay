@@ -1024,7 +1024,8 @@ footer a{color:var(--text-dim)}
 .br-art{height:24px;background:radial-gradient(120% 90% at 30% 10%,#2a3350,#141a29) center/cover no-repeat}
 .br-gcard.br-me .br-art{background:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
 .br-gcard.br-opp .br-art{background:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
-.br-art.has-img{background-size:cover;background-position:top center}
+/* Cadrage sur l'ILLUSTRATION de la carte (≈ tiers supérieur), pas la bordure. */
+.br-art.has-img{background-size:cover;background-position:center 30%}
 .br-lab{font-size:.55rem;line-height:1.12;padding:3px 3px 4px;color:var(--text-dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:20px}
 .br-slot-t{font-size:.5rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);position:absolute;top:2px;left:3px;z-index:2;text-shadow:0 1px 2px #000a}
 .br-gcard.br-hero .br-lab{color:var(--text);font-weight:600}
@@ -1092,6 +1093,40 @@ footer a{color:var(--text-dim)}
 #boardReplay input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent,var(--gold));border:2px solid var(--bg)}
 #boardReplay input[type=range]:focus-visible{outline:2px solid var(--accent,var(--gold));outline-offset:3px;border-radius:4px}
 .br-ticks{display:flex;justify-content:space-between;font:.58rem 'JetBrains Mono',monospace;color:var(--text-faint);margin-top:1px;padding:0 2px}
+
+/* ---- Desktop : la table sort de la colonne 720 px et occupe l'écran ----
+   Le plateau est le seul contenu qui gagne à être large (récap tour-à-tour) ;
+   le reste (Déroulé/Stats) garde sa colonne lisible. « Full-bleed » centré sur
+   le viewport (borné à 1280 px) + cellules/cartes agrandies proportionnellement. */
+@media (min-width: 900px) {
+  #boardReplay{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px))}
+  #boardReplay .br-zone{gap:22px;padding:12px 16px;justify-content:center}
+  #boardReplay .br-equip{grid-template-columns:repeat(2,64px);grid-auto-rows:64px;gap:6px}
+  #boardReplay .br-heroblk{grid-template-columns:repeat(2,68px);grid-auto-rows:74px;gap:6px}
+  #boardReplay .br-deckrail{grid-template-columns:58px 64px;grid-auto-rows:minmax(60px,auto);gap:6px}
+  #boardReplay .br-deckrail .br-slot{min-height:60px}
+  #boardReplay .br-art{height:38px}
+  #boardReplay .br-gcard.br-hero .br-art{height:48px}
+  #boardReplay .br-lab{font-size:.64rem;min-height:22px}
+  #boardReplay .br-slot-t{font-size:.54rem}
+  #boardReplay .br-slot,#boardReplay .br-deck{min-height:70px}
+  #boardReplay .br-back{width:46px;height:64px}
+  #boardReplay .br-hand{min-height:70px;gap:6px}
+  #boardReplay .br-pcard{width:76px}
+  #boardReplay .br-pcard.br-inhand{width:72px}
+  #boardReplay .br-pcard .br-art{height:44px}
+  #boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.64rem;min-height:22px}
+  #boardReplay .br-mid{gap:12px}
+  #boardReplay .br-stage{min-height:230px;padding:18px 16px}
+  #boardReplay .br-lifecol{flex:0 0 120px;gap:8px}
+  #boardReplay .br-lifebox{padding:9px 6px}
+  #boardReplay .br-lifebox .br-who{font-size:.62rem}
+  #boardReplay .br-lifebox .br-n{font-size:2rem}
+  #boardReplay .br-big{font-size:1.4rem}
+  #boardReplay .br-sub{font-size:.9rem}
+  #boardReplay .br-cardrow{max-width:none}
+  #boardReplay .br-toolbar .br-tool{height:42px}
+}
 
 </style>
 </head>
