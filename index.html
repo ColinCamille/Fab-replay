@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=50">
+<link rel="stylesheet" href="css/style.css?v=51">
 </head>
 <body>
 
@@ -112,17 +112,17 @@
   </div>
 </section>
 
-<footer>Images de cartes via <a href="https://api.goagain.dev" target="_blank" rel="noopener">goagain.dev</a> · données non affiliées à Legend Story Studios</footer>
+<footer>Images de cartes via <a href="https://api.goagain.dev" target="_blank" rel="noopener">goagain.dev</a> · données non affiliées à Legend Story Studios<span id="buildTag"></span></footer>
 
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=50"></script>
-<script src="js/images.js?v=50"></script>
-<script src="js/db.js?v=50"></script>
-<script src="js/sync.js?v=50"></script>
-<script src="js/replay.js?v=50"></script>
-<script src="js/dashboard.js?v=50"></script>
+<script src="talishar-parser.js?v=51"></script>
+<script src="js/images.js?v=51"></script>
+<script src="js/db.js?v=51"></script>
+<script src="js/sync.js?v=51"></script>
+<script src="js/replay.js?v=51"></script>
+<script src="js/dashboard.js?v=51"></script>
 
 <script>
 // ============================================================
@@ -134,6 +134,18 @@
   if (!window.TalisharParser) { alert('talishar-parser.js introuvable.'); return; }
 
   const $ = sel => document.querySelector(sel);
+
+  // Numéro de build affiché en pied de page : lu depuis le ?v=N réellement
+  // chargé sur les scripts (source unique) → permet de vérifier d'un coup d'œil
+  // quelle version le navigateur sert vraiment (utile face au cache mobile).
+  (function () {
+    const bt = $('#buildTag');
+    if (!bt) return;
+    const srcs = [].map.call(document.scripts, s => s.src || '').join(' ');
+    const m = /[?&]v=(\d+)/.exec(srcs);
+    bt.textContent = m ? ' · build ' + m[1] : '';
+  })();
+
   const dropzone = $('#dropzone'), fileInput = $('#fileInput'), pasteArea = $('#pasteArea'), analyzeBtn = $('#analyzeBtn');
   const importToggle = $('#importToggle'), importPanel = $('#importPanel');
 
