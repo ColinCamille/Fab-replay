@@ -86,16 +86,23 @@
       if (ls.opp[idx] != null) st.life.opp = ls.opp[idx];
       st.mePitch = []; st.oppPitch = [];   // le pitch part au deck en fin de tour
 
+      // t.hand / t.arsenal sont TOUJOURS les instantanés du joueur (moi), quel
+      // que soit le tour. Mon arsenal est donc toujours à jour — y compris une
+      // carte mise en arsenal en fin de mon tour, visible dès le tour suivant.
+      st.meArsenal = (t.arsenal || []).slice();
+
       // Ouverture (pas de joueur de tour) : on montre juste la main de départ.
       if (!attacker) {
         st.meFaceUp = !!(t.hand && t.hand.length);
-        if (st.meFaceUp) { st.meHandCards = (t.hand || []).slice(); st.meArsenal = (t.arsenal || []).slice(); }
+        if (st.meFaceUp) st.meHandCards = (t.hand || []).slice();
         push(t.label || 'Ouverture', 'me', { type: 'banner', side: 'me', big: 'Début de la partie', sub: HERO.me + ' vs ' + HERO.opp });
         return;
       }
       const atkSide = sideOf(attacker);
-      if (attacker === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.meArsenal = (t.arsenal || []).slice(); st.oppHandCount = 4; }
-      else { st.meFaceUp = false; st.meHandCount = 4; st.oppHandCount = (t.hand || []).length || 4; st.oppArsenalCount = (t.arsenal || []).length; }
+      // L'arsenal adverse n'est pas connu de façon fiable depuis un log « côté moi »
+      // → on ne l'invente pas (0). La main adverse reste une abstraction cachée.
+      if (attacker === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.oppHandCount = 4; }
+      else { st.meFaceUp = false; st.meHandCount = 4; st.oppHandCount = 4; st.oppArsenalCount = 0; }
 
       const label = String(t.label || '').replace(MY, HERO.me).replace(OPP, HERO.opp);
       push(label, atkSide, { type: 'banner', side: atkSide, big: attacker === MY ? 'Ton tour' : 'Tour adverse',
