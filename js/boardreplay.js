@@ -68,6 +68,7 @@
   function buildTimeline(GAME) {
     const MY = GAME.myName, OPP = GAME.oppName;
     const HERO = { me: (GAME.players.me && GAME.players.me.hero) || MY, opp: (GAME.players.opp && GAME.players.opp.hero) || OPP };
+    const HEROTOK = { me: tokensForHero(HERO.me), opp: tokensForHero(HERO.opp) };
     const EQ = { me: equipSet(GAME.players.me), opp: equipSet(GAME.players.opp) };
     const sideOf = p => (p === MY ? 'me' : 'opp');
     const isEquip = (side, card) => !!EQ[side][norm(card)];
@@ -76,13 +77,14 @@
     const st = {
       meHandCards: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
       mePitch: [], oppPitch: [], meArsenal: [], oppArsenalCount: 0,
-      meGrave: [], oppGrave: [], life: { me: 0, opp: 0 }
+      meGrave: [], oppGrave: [], meTokens: [], oppTokens: [], life: { me: 0, opp: 0 }
     };
     const steps = [];
     const snap = () => ({
       meHandCards: st.meHandCards.slice(), meHandCount: st.meHandCount, meFaceUp: st.meFaceUp, oppHandCount: st.oppHandCount,
       mePitch: st.mePitch.slice(), oppPitch: st.oppPitch.slice(), meArsenal: st.meArsenal.slice(), oppArsenalCount: st.oppArsenalCount,
-      meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(), life: { me: st.life.me, opp: st.life.opp }
+      meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(),
+      meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(), life: { me: st.life.me, opp: st.life.opp }
     });
     const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, state: snap() });
     const rm = (a, n) => { const k = a.findIndex(x => norm(x) === norm(n)); if (k >= 0) { a.splice(k, 1); return true; } return false; };
@@ -103,6 +105,10 @@
       // que soit le tour. Mon arsenal est donc toujours à jour — y compris une
       // carte mise en arsenal en fin de mon tour, visible dès le tour suivant.
       st.meArsenal = (t.arsenal || []).slice();
+      // Tokens/permanents en jeu : données réelles du terrain (2 camps) si le
+      // grabber les a captées, sinon repli par héros (constant sur la partie).
+      if (t.field) { st.meTokens = (t.field.me || []).slice(); st.oppTokens = (t.field.opp || []).slice(); }
+      else { st.meTokens = HEROTOK.me.slice(); st.oppTokens = HEROTOK.opp.slice(); }
 
       // Ouverture (pas de joueur de tour) : on montre juste la main de départ.
       if (!attacker) {
@@ -206,15 +212,15 @@
     const data = buildTimeline(GAME), steps = data.steps, P = data.players;
     if (!steps.length) { container.innerHTML = '<div class="br-empty">Pas d\'action à rejouer pour cette partie.</div>'; return; }
 
-    // Tokens en jeu (dans un coin de la piste centrale, côté droit ; adversaire
-    // en haut, toi en bas — en miroir des PV à gauche).
-    const tokTiles = side => tokensForHero(side === 'me' ? data.hero.me : data.hero.opp)
-      .map(t => '<div class="br-tok br-' + side + '"><div class="br-art" data-card="' + esc(t) + '"></div><div class="br-nm">' + esc(t) + '</div></div>').join('');
-    const oppToks = tokTiles('opp'), meToks = tokTiles('me');
-    const tokSide = (oppToks || meToks)
+    // Tokens en jeu (coin droit de la piste centrale ; adversaire en haut, toi
+    // en bas — miroir des PV). Conteneurs remplis à chaque étape depuis l'état
+    // (terrain réel capté par le grabber, sinon repli par héros). Masqués si la
+    // partie n'a aucun token.
+    const hasTokens = steps.some(s => (s.state.meTokens && s.state.meTokens.length) || (s.state.oppTokens && s.state.oppTokens.length));
+    const tokSide = hasTokens
       ? '<div class="br-tokenside">' +
-          '<div class="br-tokrow br-opp">' + oppToks + '</div>' +
-          '<div class="br-tokrow br-me">' + meToks + '</div>' +
+          '<div class="br-tokrow br-opp" id="br-oppTok"></div>' +
+          '<div class="br-tokrow br-me" id="br-meTok"></div>' +
         '</div>'
       : '';
 
@@ -305,6 +311,9 @@
       fillSlot('#br-oArsenal', 'Arsenal', stt.oppArsenalCount > 0 ? ['?'] : [], 'opp', 'back');
       fillSlot('#br-mGrave', 'Cimetière', stt.meGrave, 'me', 'grave');
       fillSlot('#br-oGrave', 'Cimetière', stt.oppGrave, 'opp', 'grave');
+      const tokHtml = (cards, side) => (cards || []).map(c => '<div class="br-tok br-' + side + '" data-card="' + esc(c) + '"><div class="br-art" data-card="' + esc(c) + '"></div><div class="br-nm">' + esc(c) + '</div></div>').join('');
+      const otk = $('#br-oppTok'); if (otk) otk.innerHTML = tokHtml(stt.oppTokens, 'opp');
+      const mtk = $('#br-meTok'); if (mtk) mtk.innerHTML = tokHtml(stt.meTokens, 'me');
       $('#br-fMe').classList.toggle('br-active', s.actor === 'me');
       $('#br-fOpp').classList.toggle('br-active', s.actor === 'opp');
       slider.value = i; slider.style.setProperty('--pct', (steps.length > 1 ? i / (steps.length - 1) * 100 : 0) + '%');

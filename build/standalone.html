@@ -1542,6 +1542,24 @@ footer a{color:var(--text-dim)}
     return { rest, snapshots: out };
   }
 
+  // Bloc terrain : permanents/tokens en jeu, DEUX camps par tour.
+  // Format d'une ligne : [LABEL] me: a, b | opp: c, d
+  function parseFieldSnapshotBlock(text, marker) {
+    const out = {};
+    const { rest, body } = sliceBlock(text, marker);
+    if (body == null) return { rest: text, snapshots: out };
+    const lineRe = /^\[(.+?)\]\s*(.*)$/gm;
+    const parseList = s => (!s || /^\(vide\)$/i.test(s.trim())) ? [] : s.split(',').map(x => x.trim()).filter(Boolean);
+    let hm;
+    while ((hm = lineRe.exec(body))) {
+      const key = labelToKey(hm[1].trim());
+      if (!key) continue;
+      const mm = hm[2].match(/me:\s*(.*?)\s*\|\s*opp:\s*(.*)$/i);
+      out[key] = mm ? { me: parseList(mm[1]), opp: parseList(mm[2]) } : { me: [], opp: [] };
+    }
+    return { rest, snapshots: out };
+  }
+
   function parseLifeSnapshotBlock(text, marker) {
     const out = {};
     const { rest, body } = sliceBlock(text, marker);
@@ -1651,12 +1669,14 @@ footer a{color:var(--text-dim)}
     const lifeRes = parseLifeSnapshotBlock(text, '=== LIFE SNAPSHOTS'); text = lifeRes.rest;
     const handRes = parseCardSnapshotBlock(text, '=== HAND SNAPSHOTS'); text = handRes.rest;
     const arsRes = parseCardSnapshotBlock(text, '=== ARSENAL SNAPSHOTS'); text = arsRes.rest;
+    const fieldRes = parseFieldSnapshotBlock(text, '=== FIELD SNAPSHOTS'); text = fieldRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
 
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
     const handSnapshots = handRes.snapshots;
     const arsenalSnapshots = arsRes.snapshots;
+    const fieldSnapshots = fieldRes.snapshots;
     const lifeSnapshots = lifeRes.snapshots;
 
     // 2) Corps du log : header + lignes d'événements.
@@ -1836,6 +1856,8 @@ footer a{color:var(--text-dim)}
       // joueur, le grabber capte l'instantané d'ouverture trop tard et peut y
       // voir une carte déjà arsenalée — on force donc le vide pour l'ouverture.
       if (t.turnNumber === 0) t.arsenal = [];
+      // Permanents/tokens en jeu (2 camps) captés par le grabber, si présents.
+      t.field = (key in fieldSnapshots) ? fieldSnapshots[key] : null;
       t.life = (key in lifeSnapshots) ? lifeSnapshots[key] : null;
       t.side = t.player === myName ? 'me' : (t.player === oppName ? 'opp' : null);
       // timing depuis les événements horodatés du tour
@@ -2015,7 +2037,7 @@ footer a{color:var(--text-dim)}
       lifeHistory,
       lifeSeries,
       life: finalLife,
-      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, life: lifeSnapshots },
+      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, life: lifeSnapshots },
       timeline: { startTs, endTs, durationSec, lineTs: lineTs || null },
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,

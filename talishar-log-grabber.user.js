@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.10.4
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). Export texte / téléchargement + localStorage.
+// @version      1.11.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. Export texte / téléchargement + localStorage.
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
 // @run-at       document-idle
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.10.4';
+  const VERSION = '1.11.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -20,6 +20,7 @@
   const LS_PREFIX = 'taliLog_';
   const LS_HAND_PREFIX = 'taliHand_';
   const LS_ARSENAL_PREFIX = 'taliArsenal_';
+  const LS_FIELD_PREFIX = 'taliField_';
   const LS_LIFE_PREFIX = 'taliLife_';
   const LS_META_PREFIX = 'taliMeta_';
   const LS_TS_PREFIX = 'taliTs_';
@@ -34,6 +35,7 @@
 
   let handSnapshots = {};
   let arsenalSnapshots = {};
+  let fieldSnapshots = {};  // clé tour -> { me: [noms], opp: [noms] } (permanents/tokens en jeu)
   let lifeSnapshots = {};   // clé tour -> { me, opp, myDeck, oppDeck }
   let tsBatches = [];       // [{from, to, t}] : lignes captured[from..to] vues à l'epoch t (s)
   let meta = {};
@@ -252,6 +254,7 @@
       localStorage.setItem(LS_PREFIX + gameName, JSON.stringify(captured));
       localStorage.setItem(LS_HAND_PREFIX + gameName, JSON.stringify(handSnapshots));
       localStorage.setItem(LS_ARSENAL_PREFIX + gameName, JSON.stringify(arsenalSnapshots));
+      localStorage.setItem(LS_FIELD_PREFIX + gameName, JSON.stringify(fieldSnapshots));
       localStorage.setItem(LS_LIFE_PREFIX + gameName, JSON.stringify(lifeSnapshots));
       localStorage.setItem(LS_META_PREFIX + gameName, JSON.stringify(meta));
       localStorage.setItem(LS_TS_PREFIX + gameName, JSON.stringify(tsBatches));
@@ -266,6 +269,7 @@
     captured = read(LS_PREFIX + gameName, []);
     handSnapshots = read(LS_HAND_PREFIX + gameName, {});
     arsenalSnapshots = read(LS_ARSENAL_PREFIX + gameName, {});
+    fieldSnapshots = read(LS_FIELD_PREFIX + gameName, {});
     lifeSnapshots = read(LS_LIFE_PREFIX + gameName, {});
     meta = read(LS_META_PREFIX + gameName, {});
     tsBatches = read(LS_TS_PREFIX + gameName, []);
@@ -318,6 +322,23 @@
       return cardListNames(g.playerOne.Arsenal);
     }
     return extractZoneCardsDOM('[class*="pOneArsenal_" i] img');
+  }
+
+  // Permanents / tokens en jeu (arène). Zone PUBLIQUE → on lit les DEUX joueurs.
+  // Talishar range alliés / items / auras / tokens (ex. Embodiment of Lightning)
+  // dans playerX.Permanents (parfois Effects). On renvoie les noms par camp.
+  function permanentsOf(player) {
+    const out = [];
+    if (!player) return out;
+    ['Permanents', 'Effects'].forEach(zone => {
+      if (Array.isArray(player[zone])) player[zone].forEach(c => { const n = cardLabel(c); if (n) out.push(n); });
+    });
+    return out;
+  }
+  function extractField() {
+    const g = getGameState();
+    if (!g) return null;
+    return { me: permanentsOf(g.playerOne), opp: permanentsOf(g.playerTwo) };
   }
 
   function extractLife() {
@@ -470,6 +491,7 @@
         handSnapshots['__opening__'] = hand;                // la main grandit encore (rendu / pioche d'ouverture)
         arsenalSnapshots['__opening__'] = extractMyArsenal();
         lifeSnapshots['__opening__'] = extractLife();
+        const f0 = extractField(); if (f0) fieldSnapshots['__opening__'] = f0;
       } else if (prev.length && hand.length < prev.length) {
         openingSnapped = true;                              // 1re baisse → main d'ouverture figée
       }
@@ -484,6 +506,7 @@
       const hand = extractMyHandCards(), arsenal = extractMyArsenal();
       if (hand.length) handSnapshots[key] = hand;
       arsenalSnapshots[key] = arsenal;
+      const f = extractField(); if (f) fieldSnapshots[key] = f;
       lifeSnapshots[key] = extractLife();
     }
   }
@@ -640,6 +663,19 @@
     return '\n=== ' + title + ' ===\n' + lines.join('\n') + '\n';
   }
 
+  // Bloc terrain : permanents/tokens en jeu, DEUX camps par tour.
+  function fieldBlockText() {
+    const keys = Object.keys(fieldSnapshots);
+    if (!keys.length) return '';
+    const fmt = v => (v && v.length) ? v.join(', ') : '(vide)';
+    const lines = keys.map(k => {
+      const label = k === '__opening__' ? 'OUVERTURE' : k.replace('#', ' #');
+      const f = fieldSnapshots[k] || {};
+      return '[' + label + '] me: ' + fmt(f.me) + ' | opp: ' + fmt(f.opp);
+    });
+    return '\n=== FIELD SNAPSHOTS (permanents/tokens en jeu : toi | adversaire) ===\n' + lines.join('\n') + '\n';
+  }
+
   function metaBlockText() {
     const eqText = eq => {
       if (!eq) return '(non capté)';
@@ -690,6 +726,7 @@
           v => v.length ? v.join(', ') : '(vide)')
       + snapshotBlockText('ARSENAL SNAPSHOTS (ton arsenal, capté depuis le DOM — jamais celui de l\'adversaire)', arsenalSnapshots,
           v => v.length ? v.join(', ') : '(vide)')
+      + fieldBlockText()
       + snapshotBlockText('LIFE SNAPSHOTS (vie et taille de deck : toi / adversaire)', lifeSnapshots, lifeLineFmt)
       + metaBlockText()
       + tsBlockText()
@@ -726,7 +763,7 @@
   function clearLog() {
     if (!confirm('Effacer le log, les snapshots et les métadonnées capturés de cette partie ?')) return;
     captured = []; lastVisibleSig = ''; handSnapshots = {}; arsenalSnapshots = {};
-    lifeSnapshots = {}; tsBatches = []; meta = {};
+    fieldSnapshots = {}; lifeSnapshots = {}; tsBatches = []; meta = {};
     lastTurnKey = null; openingSnapped = false;
     save(); updateUI();
   }
