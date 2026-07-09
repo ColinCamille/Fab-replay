@@ -375,7 +375,7 @@ header{
 #turnBoard .rexch::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
 #turnBoard .rexch.side-opp::before{background:var(--violet)}
 #turnBoard .rexch.blocked::before{background:var(--text-faint)}
-#turnBoard .rexch.arcane::before{background:var(--violet)}
+#turnBoard .rexch.prevented::before{background:var(--violet)}
 #turnBoard .rexch.big{border-color:rgba(var(--accent-rgb),.4);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.15)}
 #turnBoard .rexch.side-opp.big{border-color:rgba(139,107,255,.4);box-shadow:0 0 0 1px rgba(139,107,255,.15)}
 #turnBoard .ehead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}

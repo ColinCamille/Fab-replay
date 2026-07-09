@@ -556,8 +556,12 @@
       if ((e.type === 'played' || e.type === 'activated') && byActive) {
         close();
         cur = { card: e.card, isActivation: e.type === 'activated', fromArsenal: !!e.fromArsenal,
-                blocks: [], reveals: [], pitchCost: [], mode: null, result: null };
+                blocks: [], defense: [], reveals: [], pitchCost: [], mode: null, result: null };
         if (e.type === 'activated') secondary.activate++;
+      } else if ((e.type === 'played' || e.type === 'activated') && e.player === defender && cur) {
+        // Réaction du défenseur PENDANT l'attaque (hors blocage) : prévention
+        // arcanique (ex. Voltic Veil), activation défensive… → « comment l'adversaire a répondu ».
+        if (e.card) cur.defense.push({ card: e.card, isActivation: e.type === 'activated' });
       } else if (e.type === 'pitched' && byActive) {
         secondary.pitch++;
         if (cur) cur.pitchCost.push(e.card);
@@ -595,9 +599,21 @@
     return d;
   }
 
-  // Une passe est « porteuse » si elle a un résultat de combat ou un blocage.
-  // Les autres (jouées sans effet de combat capté) sont des actions neutres.
-  function isMeaningful(ex) { return !!ex.result || ex.blocks.length > 0; }
+  // Une passe est « porteuse » si elle a un résultat de combat, un blocage ou
+  // une réponse adverse. Les autres (jouées sans effet capté) sont neutres.
+  function isMeaningful(ex) { return !!ex.result || ex.blocks.length > 0 || (ex.defense && ex.defense.length > 0); }
+
+  // Réactions défensives hors blocage, dédoublonnées et sans les cartes déjà
+  // listées comme blocage (une carte peut apparaître dans les deux flux du log).
+  function defenseCards(ex) {
+    const blockSet = new Set(ex.blocks || []);
+    const seen = new Set(), out = [];
+    (ex.defense || []).forEach(d => {
+      if (!d.card || blockSet.has(d.card) || seen.has(d.card)) return;
+      seen.add(d.card); out.push(d);
+    });
+    return out;
+  }
 
   // Classe le résultat d'une passe → badge + type visuel. On s'appuie
   // uniquement sur les signaux fiables du log (combatResult + blocages) ; les
@@ -606,12 +622,16 @@
   function exchangeVerdict(ex, defender) {
     const dmgToMe = defender === myName;   // les dégâts vont-ils à moi ?
     const r = ex.result, amount = r ? r.amount : 0;
+    const hasDef = defenseCards(ex).length > 0;
     if (r && r.hit && amount > 0) {
-      const label = ex.blocks.length ? (amount + ' ' + (amount > 1 ? 'passent' : 'passe')) : (amount + ' ' + (amount > 1 ? 'dégâts' : 'dégât'));
+      const label = (ex.blocks.length || hasDef) ? (amount + ' ' + (amount > 1 ? 'passent' : 'passe')) : (amount + ' ' + (amount > 1 ? 'dégâts' : 'dégât'));
       return { kind: 'hit', badge: '💥 ' + label, cls: dmgToMe ? 'taken' : 'hit', amount };
     }
     if (ex.blocks.length) return { kind: 'blocked', badge: '🛡 Bloqué · 0', cls: 'blk' };
+    // Attaque neutralisée sans blocage : prévention (sort/effet) de l'adversaire.
+    if (hasDef && r) return { kind: 'prevented', badge: '🌀 Prévenu · 0', cls: 'arc' };
     if (r) return { kind: 'noeffect', badge: 'Aucun dégât', cls: 'blk' };
+    if (hasDef) return { kind: 'prevented', badge: '🌀 Prévenu', cls: 'arc' };
     return { kind: 'action', badge: 'joué', cls: 'blk' };
   }
 
@@ -651,22 +671,36 @@
     cardrow.appendChild(meta);
     div.appendChild(cardrow);
 
-    // Réponse : blocage adverse OU dégât direct
+    // Réponse de l'adversaire : blocage(s) et/ou prévention (carte jouée/activée).
+    const defSide = defender === myName ? 'me' : 'opp';
+    const defWho = defender === myName ? 'Tu' : escapeHtml(defender);
     if (ex.blocks.length) {
-      const blockWho = defender === myName ? 'Tu bloques' : (escapeHtml(defender) + ' bloque');
-      const div2 = document.createElement('div');
-      div2.className = 'ediv blk';
-      div2.innerHTML = '<span>🛡 ' + blockWho + '</span>';
-      div.appendChild(div2);
+      const d2 = document.createElement('div');
+      d2.className = 'ediv';
+      d2.innerHTML = '<span>🛡 ' + defWho + ' ' + (defender === myName ? 'bloques' : 'bloque') + '</span>';
+      div.appendChild(d2);
       const resp = document.createElement('div');
       resp.className = 'eresp';
-      ex.blocks.forEach(c => resp.appendChild(makeMini(c, defender === myName ? 'me' : 'opp')));
+      ex.blocks.forEach(c => resp.appendChild(makeMini(c, defSide)));
       const note = document.createElement('div');
       note.className = 'ecn';
       note.textContent = ex.blocks.length + (ex.blocks.length > 1 ? ' cartes en blocage' : ' carte en blocage');
       resp.appendChild(note);
       div.appendChild(resp);
-    } else if (v.kind === 'hit') {
+    }
+    const defs = defenseCards(ex);
+    if (defs.length) {
+      const verbP = v.kind === 'prevented' ? (defender === myName ? 'préviens' : 'prévient') : (defender === myName ? 'réponds' : 'répond');
+      const d2 = document.createElement('div');
+      d2.className = 'ediv prev';
+      d2.innerHTML = '<span>🌀 ' + defWho + ' ' + verbP + '</span>';
+      div.appendChild(d2);
+      const resp = document.createElement('div');
+      resp.className = 'eresp';
+      defs.forEach(d => resp.appendChild(makeMini(d.card, defSide)));
+      div.appendChild(resp);
+    }
+    if (!ex.blocks.length && !defs.length && v.kind === 'hit') {
       const note = document.createElement('div');
       note.className = 'enote';
       note.innerHTML = '🚀 Non bloqué — ' + (v.amount > 1 ? 'les ' + v.amount + ' dégâts passent' : 'le dégât passe');
