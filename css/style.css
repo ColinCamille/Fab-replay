@@ -1013,25 +1013,30 @@ footer a{color:var(--text-dim)}
 .br-tool:disabled{opacity:.35;cursor:default}
 .br-tool:focus-visible{outline:2px solid var(--accent,var(--gold));outline-offset:2px}
 .br-tool.br-play{font-size:1.05rem;color:#141414;background:var(--accent,var(--gold));border-color:var(--accent,var(--gold))}
-.br-table{background:radial-gradient(130% 60% at 50% 0%,var(--panel-2),var(--bg) 72%);border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.br-mat{position:relative;display:flex;flex-direction:column;gap:7px;
+  background:radial-gradient(150% 100% at 50% 42%,#16223b,#0a0e18 82%);
+  border:1px solid var(--line);border-radius:14px;padding:9px 8px;
+  box-shadow:inset 0 0 90px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.02)}
 .br-hand{display:flex;gap:4px;justify-content:center;min-height:46px;align-items:center;flex-wrap:nowrap;overflow-x:auto;padding:2px}
 .br-handempty{font:.6rem 'JetBrains Mono',monospace;color:var(--text-faint)}
 .br-back{width:34px;height:46px;flex:0 0 auto;border-radius:5px;border:1px solid #5b1e22;background:linear-gradient(160deg,#7a2a2f,#3c1417);position:relative;box-shadow:inset 0 0 0 2px #0000002e}
 .br-back::after{content:"FaB";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99;letter-spacing:.05em}
-.br-zone{background:radial-gradient(120% 120% at 50% 50%,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;gap:10px;align-items:center}
-.br-zone.br-active.br-opp{box-shadow:inset 0 0 0 1px #8b6bff40}
-.br-zone.br-active.br-me{box-shadow:inset 0 0 0 1px rgba(201,162,39,.25)}
-.br-equip{display:grid;grid-template-columns:repeat(2,46px);grid-auto-rows:64px;gap:5px;flex:0 0 auto}
-.br-equip .p-head{grid-column:1;grid-row:1} .br-equip .p-chest{grid-column:1;grid-row:2}
-.br-equip .p-arms{grid-column:2;grid-row:2} .br-equip .p-legs{grid-column:1;grid-row:3}
-.br-heroblk{display:grid;grid-template-columns:repeat(2,48px);grid-auto-rows:66px;gap:5px;flex:0 0 auto}
-.br-heroblk .br-hero{grid-column:1;grid-row:1} .br-heroblk .br-wpn{grid-column:2;grid-row:1} .br-heroblk .br-arsenal{grid-column:1;grid-row:2}
-.br-heroblk.br-mir .br-arsenal{grid-row:1} .br-heroblk.br-mir .br-hero{grid-row:2} .br-heroblk.br-mir .br-wpn{grid-row:2}
-.br-deckrail{display:grid;grid-template-columns:42px 46px;grid-auto-rows:minmax(58px,auto);gap:5px;flex:0 0 auto;align-content:center}
-.br-deckrail .p-grave{grid-column:2;grid-row:1} .br-deckrail .p-pitch{grid-column:1;grid-row:2}
-.br-deckrail.br-mir .p-grave{grid-row:3} .br-deckrail.br-mir .p-banish{grid-row:1}
-.br-deckrail .p-deck{grid-column:2;grid-row:2} .br-deckrail .p-banish{grid-column:2;grid-row:3}
-.br-deckrail .br-slot{min-height:58px}
+/* Champ d'un joueur : rail (cimetière·deck·pitch) | héros+équipement | arsenal.
+   Rails empilés en colonne sur mobile (compact) ; passent en rangée sur desktop. */
+.br-field{position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;
+  background:radial-gradient(120% 120% at 50% 50%,rgba(20,26,41,.72),rgba(10,14,24,.72));
+  border:1px solid var(--line);border-radius:12px;padding:7px 10px}
+.br-field.br-active.br-opp{box-shadow:inset 0 0 0 1px #8b6bff55,0 0 20px rgba(139,107,255,.12)}
+.br-field.br-active.br-me{box-shadow:inset 0 0 0 1px rgba(201,162,39,.42),0 0 20px rgba(201,162,39,.12)}
+.br-rail{display:flex;flex-direction:column;gap:5px;align-items:center;flex:0 0 auto}
+.br-rail.br-right{justify-self:end}
+.br-cluster{display:flex;align-items:center;justify-content:center;gap:6px}
+.br-equip{display:grid;grid-template-columns:repeat(2,40px);grid-auto-rows:56px;gap:4px}
+/* Dimensions des tuiles — mobile (compact). */
+.br-rail .br-slot,.br-rail .br-deck{width:42px;aspect-ratio:5/7;min-height:0;height:auto}
+.br-equip .br-gcard{width:40px;aspect-ratio:5/7}
+.br-cluster>.br-gcard{width:46px;aspect-ratio:5/7}
+.br-cluster>.br-gcard.br-hero{width:54px}
 .br-gcard{border-radius:6px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel));position:relative}
 /* La vignette EST la carte : l'image remplit toute la tuile (portrait), le nom
    est en surimpression en bas. Fini la fine bande mal cadrée. */
@@ -1066,18 +1071,23 @@ footer a{color:var(--text-dim)}
 .br-badge{position:absolute;bottom:-4px;right:-4px;font:700 .52rem/1 'JetBrains Mono',monospace;color:#fff;background:#111a;border:1px solid var(--line);border-radius:6px;padding:1px 4px;z-index:2}
 .br-bump{animation:brBump .45s ease}
 @keyframes brBump{0%{transform:scale(1)}35%{transform:scale(1.18);box-shadow:0 0 10px #0006}100%{transform:scale(1)}}
-.br-mid{display:flex;gap:8px;align-items:stretch}
-.br-stage{flex:1;min-height:132px;background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 10px;overflow:hidden}
-.br-lifecol{flex:0 0 84px;display:flex;flex-direction:column;gap:6px;justify-content:center}
-.br-lifebox{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:6px 4px;text-align:center}
-.br-lifebox.br-opp{border-color:#8b6bff44} .br-lifebox.br-me{border-color:rgba(201,162,39,.27)}
-.br-lifebox .br-who{font-size:.54rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.br-lifebox.br-opp .br-who{color:var(--violet)} .br-lifebox.br-me .br-who{color:var(--accent,var(--gold))}
-.br-lifebox .br-n{font:700 1.35rem/1.1 'JetBrains Mono',monospace;transition:transform .2s,color .2s}
-.br-lifebox.br-hit .br-n{animation:brHit .55s ease}
-@keyframes brHit{0%{transform:scale(1)}30%{transform:scale(1.25);color:var(--red)}100%{transform:scale(1)}}
-.br-turnchip{text-align:center}
-.br-turnchip span{display:inline-block;font:700 .58rem/1 'JetBrains Mono',monospace;color:#141414;background:var(--green);border-radius:5px;padding:3px 8px}
+/* Bande centrale : la piste de combat, où l'action se joue entre les deux camps. */
+.br-mid{position:relative;display:flex;justify-content:center}
+.br-turnchip{position:absolute;top:-4px;left:50%;transform:translateX(-50%);z-index:4;
+  font:700 .56rem/1 'JetBrains Mono',monospace;color:#141414;background:var(--green);
+  border-radius:6px;padding:3px 9px;white-space:nowrap}
+.br-lane{position:relative;width:100%;min-height:150px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;padding:16px 12px 12px;overflow:hidden;
+  background:radial-gradient(80% 120% at 50% 50%,rgba(255,255,255,.04),transparent 72%)}
+/* Jeton de vie posé sur le héros (toujours visible, se met à jour à chaque étape). */
+.br-gcard.br-hero{overflow:visible}
+.br-lifetok{position:absolute;right:-9px;top:-9px;width:30px;height:30px;border-radius:50%;z-index:5;
+  display:flex;align-items:center;justify-content:center;font:800 .82rem 'JetBrains Mono',monospace;
+  background:radial-gradient(circle at 35% 30%,#26314c,#0c1019);transition:transform .2s}
+.br-lifetok.br-opp{color:var(--violet);box-shadow:0 2px 7px rgba(0,0,0,.55),0 0 0 2px var(--violet)}
+.br-lifetok.br-me{color:var(--accent,var(--gold));box-shadow:0 2px 7px rgba(0,0,0,.55),0 0 0 2px var(--accent,var(--gold))}
+.br-lifetok.br-hit{animation:brHit .55s ease}
+@keyframes brHit{0%{transform:scale(1)}30%{transform:scale(1.32);color:var(--red)}100%{transform:scale(1)}}
 .br-phase{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);font-weight:700;margin-bottom:9px}
 .br-banner{text-align:center}
 .br-big{font-size:1rem;font-weight:700;font-family:'Cinzel',serif;letter-spacing:.02em}
@@ -1123,64 +1133,43 @@ footer a{color:var(--text-dim)}
 #boardReplay input[type=range]:focus-visible{outline:2px solid var(--accent,var(--gold));outline-offset:3px;border-radius:4px}
 .br-ticks{display:flex;justify-content:space-between;font:.58rem 'JetBrains Mono',monospace;color:var(--text-faint);margin-top:1px;padding:0 2px}
 
-/* ---- Desktop : la table sort de la colonne 720 px et occupe l'écran ----
-   Le plateau est le seul contenu qui gagne à être large (récap tour-à-tour) ;
-   le reste (Déroulé/Stats) garde sa colonne lisible. « Full-bleed » centré sur
-   le viewport (borné à 1280 px) + cellules/cartes agrandies proportionnellement. */
+/* ---- Desktop : le tapis miroir sort de la colonne 720 px et occupe l'écran,
+   centré et agrandi. Rails à l'horizontale (on a la largeur), cartes plus
+   grandes. Le combat reste au centre entre les deux camps. Le reste
+   (Déroulé/Stats) garde sa colonne lisible. */
 @media (min-width: 900px) {
   #boardReplay{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px))}
-  /* ===== Desktop : plateau « paysage » — tout tient dans l'écran =====
-     .br-table en 2 colonnes : aire de jeu (mains + zones) à gauche, panneau
-     récap (PV + tour + action) collant à droite. Zones étalées en RANGÉES
-     (équipement | héros | pioche) → moins haut, remplit la largeur. */
-  #boardReplay .br-table{
-    display:grid;
-    grid-template-columns:1fr minmax(300px,360px);
-    grid-template-areas:"oh side" "oz side" "mz side" "mh side";
-    column-gap:16px;row-gap:8px;align-items:start;
-  }
-  #boardReplay #br-oppHand{grid-area:oh}
-  #boardReplay #br-zOpp{grid-area:oz}
-  #boardReplay #br-zMe{grid-area:mz}
-  #boardReplay #br-myHand{grid-area:mh}
-  #boardReplay .br-mid{grid-area:side;flex-direction:column;gap:10px;position:sticky;top:12px;align-self:start;min-width:0}
-  /* PV en haut du panneau : Adv | Toi côte à côte, tour en dessous. */
-  #boardReplay .br-lifecol{flex:0 0 auto;order:-1;display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  #boardReplay .br-lifecol .br-opp{grid-column:1;grid-row:1}
-  #boardReplay .br-lifecol .br-me{grid-column:2;grid-row:1}
-  #boardReplay .br-turnchip{grid-column:1 / -1;grid-row:2}
-  #boardReplay .br-lifebox{padding:8px 6px}
-  #boardReplay .br-lifebox .br-who{font-size:.6rem}
-  #boardReplay .br-lifebox .br-n{font-size:1.8rem}
-  /* flex:none → la hauteur figée par JS est respectée (en colonne flex, flex:1
-     mapperait la hauteur sur flex-basis:0 et l'ignorerait). */
-  #boardReplay .br-stage{flex:0 0 auto;min-height:300px;padding:16px 12px}
+  #boardReplay .br-mat{max-width:1060px;margin:0 auto;gap:10px;padding:16px 22px}
+  #boardReplay .br-field{gap:26px;padding:12px 26px}
+  #boardReplay .br-rail{flex-direction:row;gap:9px}
+  #boardReplay .br-cluster{gap:10px}
+  /* Équipement en RANGÉE à côté du héros : on a la largeur, ça économise la
+     hauteur (les deux mains tiennent alors à l'écran sans scroller). */
+  #boardReplay .br-equip{display:flex;flex-direction:row;gap:6px;grid-template-columns:none;grid-auto-rows:auto}
+  #boardReplay .br-equip .br-gcard{width:56px}
+  #boardReplay .br-rail .br-slot,#boardReplay .br-rail .br-deck{width:70px}
+  #boardReplay .br-cluster>.br-gcard{width:70px}
+  #boardReplay .br-cluster>.br-gcard.br-hero{width:88px}
+  #boardReplay .br-lifetok{width:38px;height:38px;font-size:1rem;right:-11px;top:-11px}
+  #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
+
+  /* Piste de combat centrale, un peu plus haute et lisible. */
+  #boardReplay .br-lane{min-height:210px}
+  #boardReplay .br-lane .br-pcard{width:78px}
+  #boardReplay .br-lane .br-pcard.br-lg{width:120px}
   #boardReplay .br-playone{max-width:100%}
   #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}
-  #boardReplay .br-big{font-size:1.3rem}
-  #boardReplay .br-sub{font-size:.86rem}
+  #boardReplay .br-big{font-size:1.35rem}
+  #boardReplay .br-sub{font-size:.9rem}
   #boardReplay .br-cardrow{max-width:none}
 
-  /* Zones en rangées : équipement / héros / pioche répartis sur la largeur. */
-  #boardReplay .br-zone{justify-content:space-around;gap:14px;padding:12px 20px}
-  #boardReplay .br-equip,#boardReplay .br-heroblk,#boardReplay .br-deckrail{
-    display:flex;flex-direction:row;gap:8px;grid-template-columns:none}
-  #boardReplay .br-equip .br-gcard,
-  #boardReplay .br-heroblk .br-gcard,
-  #boardReplay .br-heroblk .br-slot,
-  #boardReplay .br-deckrail .br-slot,
-  #boardReplay .br-deckrail .br-deck{width:76px;height:auto;aspect-ratio:5/7;min-height:0}
-  #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
-  #boardReplay .br-slot-t{font-size:.54rem}
-
-  /* Mains : cartes calibrées pour que l'ensemble tienne en hauteur. */
+  /* Mains agrandies. */
   #boardReplay .br-hand{min-height:0;gap:8px;padding:2px}
-  #boardReplay .br-pcard{width:74px}
-  #boardReplay .br-pcard.br-inhand{width:72px}
-  #boardReplay .br-pcard.br-lg{width:150px}
-  #boardReplay .br-back{width:54px;height:76px}
-  /* Contrôles de lecture : rail vertical flottant, centré verticalement à droite
-     → toujours accessibles sans remonter, même quand on regarde le centre du plateau. */
+  #boardReplay .br-hand .br-pcard{width:66px}
+  #boardReplay .br-hand .br-pcard.br-inhand{width:64px}
+  #boardReplay .br-hand .br-back{width:52px;height:auto;aspect-ratio:5/7}
+
+  /* Contrôles : rail vertical flottant à droite → toujours accessibles. */
   #boardReplay .br-toolbar{position:fixed;right:14px;top:50%;transform:translateY(-50%);
     flex-direction:column;gap:8px;margin:0;z-index:60;padding:8px;border-radius:14px;
     background:rgba(12,15,23,.85);border:1px solid var(--line-2);box-shadow:0 8px 28px rgba(0,0,0,.55)}

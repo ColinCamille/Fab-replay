@@ -155,30 +155,37 @@
   // ============================================================
   // RENDU
   // ============================================================
-  function gcard(side, slot, label, name, hero) {
+  function gcard(side, slot, name, hero) {
     return '<div class="br-gcard br-' + side + ' p-' + slot + (hero ? ' br-hero' : '') + '">' +
-      '<span class="br-slot-t">' + esc(label) + '</span>' +
       '<div class="br-art" data-card="' + esc(name) + '"' + (hero ? ' data-hero' : '') + '></div>' +
-      '<div class="br-lab">' + esc(name) + '</div></div>';
+      '<div class="br-lab">' + esc(name) + '</div>' +
+      (hero ? '<span class="br-lifetok br-' + side + '" id="br-' + (side === 'me' ? 'm' : 'o') + 'LifeTok">0</span>' : '') +
+      '</div>';
   }
-  function buildZone(side, pl, mirror) {
+  // Champ d'un joueur (tapis miroir) : rail cimetière·deck·pitch | héros entouré
+  // de son équipement + arme | arsenal. Les IDs des emplacements dynamiques
+  // (cimetière/pitch/arsenal) sont conservés pour que render() les remplisse.
+  function buildZone(side, pl) {
     const e = pl.equipment || {};
     const nm = k => (e[k] && e[k].name) || '—';
-    const equip = '<div class="br-equip">' + gcard(side, 'head', 'Tête', nm('head')) + gcard(side, 'chest', 'Torse', nm('chest')) +
-      gcard(side, 'arms', 'Bras', nm('arms')) + gcard(side, 'legs', 'Jambes', nm('legs')) + '</div>';
-    const arsId = side === 'me' ? 'mArsenal' : 'oArsenal';
-    const arsenal = '<div class="br-slot br-arsenal" id="br-' + arsId + '">Arsenal</div>';
-    const hero = '<div class="br-heroblk' + (mirror ? ' br-mir' : '') + '">' + (mirror ? arsenal : '') +
-      gcard(side, 'hero', 'Héros', pl.hero || '?', true) +
-      '<div class="br-gcard br-' + side + ' br-wpn"><span class="br-slot-t">Arme</span><div class="br-art" data-card="' + esc(nm('weaponL')) + '"></div><div class="br-lab">' + esc(nm('weaponL')) + '</div></div>' +
-      (mirror ? '' : arsenal) + '</div>';
     const gId = side === 'me' ? 'mGrave' : 'oGrave', pId = side === 'me' ? 'mPitch' : 'oPitch';
-    const deck = '<div class="br-deckrail' + (mirror ? ' br-mir' : '') + '">' +
+    const arsId = side === 'me' ? 'mArsenal' : 'oArsenal';
+    const leftRail = '<div class="br-rail br-left">' +
       '<div class="br-slot p-grave" id="br-' + gId + '">Cimetière</div>' +
-      '<div class="br-slot p-pitch" id="br-' + pId + '">Pitch</div>' +
       '<div class="br-deck p-deck" title="Deck"></div>' +
-      '<div class="br-slot p-banish">Banish</div></div>';
-    return equip + hero + deck;
+      '<div class="br-slot p-pitch" id="br-' + pId + '">Pitch</div>' +
+      '</div>';
+    const equip = '<div class="br-equip">' +
+      gcard(side, 'head', nm('head')) + gcard(side, 'chest', nm('chest')) +
+      gcard(side, 'arms', nm('arms')) + gcard(side, 'legs', nm('legs')) + '</div>';
+    const cluster = '<div class="br-cluster">' + equip +
+      gcard(side, 'hero', pl.hero || '?', true) +
+      '<div class="br-gcard br-' + side + ' br-wpn"><div class="br-art" data-card="' + esc(nm('weaponL')) + '"></div><div class="br-lab">' + esc(nm('weaponL')) + '</div></div>' +
+      '</div>';
+    const rightRail = '<div class="br-rail br-right">' +
+      '<div class="br-slot br-arsenal" id="br-' + arsId + '">Arsenal</div>' +
+      '</div>';
+    return leftRail + cluster + rightRail;
   }
 
   function mount(container, GAME) {
@@ -194,18 +201,14 @@
           '<button class="br-tool br-play" data-act="play" title="Lecture automatique" aria-label="Lecture automatique">▶</button>' +
           '<button class="br-tool" data-act="next" title="Étape suivante" aria-label="Étape suivante">›</button>' +
         '</div>' +
-        '<div class="br-table">' +
+        '<div class="br-mat">' +
           '<div class="br-hand br-opp" id="br-oppHand"></div>' +
-          '<div class="br-zone br-opp" id="br-zOpp">' + buildZone('opp', P.opp, true) + '</div>' +
+          '<div class="br-field br-opp" id="br-fOpp">' + buildZone('opp', P.opp) + '</div>' +
           '<div class="br-mid">' +
-            '<div class="br-stage" id="br-stage"></div>' +
-            '<div class="br-lifecol">' +
-              '<div class="br-lifebox br-opp" id="br-oLife"><div class="br-who">' + esc(data.hero.opp) + '</div><div class="br-n" id="br-oLifeN">0</div></div>' +
-              '<div class="br-turnchip"><span id="br-turnPill"> </span></div>' +
-              '<div class="br-lifebox br-me" id="br-mLife"><div class="br-who">' + esc(data.hero.me) + ' · toi</div><div class="br-n" id="br-mLifeN">0</div></div>' +
-            '</div>' +
+            '<span class="br-turnchip" id="br-turnPill"> </span>' +
+            '<div class="br-lane" id="br-stage"></div>' +
           '</div>' +
-          '<div class="br-zone br-me br-active" id="br-zMe">' + buildZone('me', P.me, false) + '</div>' +
+          '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me) + '</div>' +
           '<div class="br-hand br-me" id="br-myHand"></div>' +
         '</div>' +
         '<div class="br-timeline">' +
@@ -263,7 +266,7 @@
     function render(prev) {
       const s = steps[i], stt = s.state;
       stage.innerHTML = buildStage(s.stage);
-      $('#br-mLifeN').textContent = stt.life.me; $('#br-oLifeN').textContent = stt.life.opp;
+      $('#br-mLifeTok').textContent = stt.life.me; $('#br-oLifeTok').textContent = stt.life.opp;
       $('#br-turnPill').textContent = s.turn;
       renderHands(stt);
       fillSlot('#br-mPitch', 'Pitch', stt.mePitch, 'me', 'up');
@@ -272,13 +275,13 @@
       fillSlot('#br-oArsenal', 'Arsenal', stt.oppArsenalCount > 0 ? ['?'] : [], 'opp', 'back');
       fillSlot('#br-mGrave', 'Cimetière', stt.meGrave, 'me', 'grave');
       fillSlot('#br-oGrave', 'Cimetière', stt.oppGrave, 'opp', 'grave');
-      $('#br-zMe').classList.toggle('br-active', s.actor === 'me');
-      $('#br-zOpp').classList.toggle('br-active', s.actor === 'opp');
+      $('#br-fMe').classList.toggle('br-active', s.actor === 'me');
+      $('#br-fOpp').classList.toggle('br-active', s.actor === 'opp');
       slider.value = i; slider.style.setProperty('--pct', (steps.length > 1 ? i / (steps.length - 1) * 100 : 0) + '%');
       $('#br-stepN').textContent = i + 1; $('#br-turnLbl').textContent = s.turn;
       container.querySelector('[data-act="prev"]').disabled = (i === 0);
       container.querySelector('[data-act="next"]').disabled = (i === steps.length - 1);
-      if (s.hit && prev != null && prev < i) { const el = $(s.hit === 'me' ? '#br-mLife' : '#br-oLife'); el.classList.remove('br-hit'); void el.offsetWidth; el.classList.add('br-hit'); }
+      if (s.hit && prev != null && prev < i) { const el = $(s.hit === 'me' ? '#br-mLifeTok' : '#br-oLifeTok'); if (el) { el.classList.remove('br-hit'); void el.offsetWidth; el.classList.add('br-hit'); } }
       paintArt(container);
     }
     function go(n, prev) { i = Math.max(0, Math.min(steps.length - 1, n)); render(prev); container.__brIndex = i; }
