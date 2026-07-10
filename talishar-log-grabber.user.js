@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.12.0
+// @version      1.12.1
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. Export texte / téléchargement + localStorage.
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
@@ -858,6 +858,18 @@
     }
     if (!captured.length) { flash('Rien à envoyer'); if (!silent) alert('Aucune ligne de log capturée pour cette partie.'); return; }
     const id = gameName;
+    // Garde-fou anti-doublon fantôme : sans numéro de partie dans l'URL
+    // (page fermée/périmée, /game/ sans id → gameName === 'unknown'), on
+    // refuse d'envoyer. Une telle capture crée un enregistrement « unknown »
+    // aux données corrompues qui se ré-injecte à chaque synchro et ne peut
+    // pas être supprimé proprement par gameId. En auto (silencieux) on ignore
+    // sans bruit ; en manuel on explique.
+    if (!id || !/^\d+$/.test(String(id))) {
+      if (silent) return;
+      flash('Partie sans id — envoi ignoré');
+      alert('Impossible d’identifier la partie : aucun numéro dans l’URL Talishar.\n\nOuvre la partie depuis talishar.net/game/play/<numéro> (partie en cours), puis réessaie. Une page fermée ou le lobby ne permettent pas un envoi fiable.');
+      return;
+    }
     const text = logText();
     flash('Envoi au dépôt…');
     console.log('[TLG] envoi: début — partie ' + id + ', dépôt ' + cfg(SYNC.owner) + '/' + cfg(SYNC.repo));
