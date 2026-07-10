@@ -3034,29 +3034,32 @@ footer a{color:var(--text-dim)}
       });
     }
 
-    // Aperçu grande carte au survol de l'équipement / des héros du bandeau (desktop).
-    const banner = $('#matchBanner');
-    if (banner) {
+    // Aperçu grande carte au survol (desktop) : couvre TOUT le déroulé —
+    // équipement/héros du bandeau, cartes des tours, cartes vues et miniatures
+    // d'événement (blocs multi-cartes). Délégué sur #replayView pour capter
+    // aussi les éléments créés dynamiquement à chaque tour.
+    const rv = $('#replayView');
+    if (rv) {
       const prev = document.createElement('div');
       prev.className = 'br-preview';
       document.body.appendChild(prev);
       const PW = 224, PH = 313;
-      const sel = '.eq-slot[data-card], .hero-avatar[data-hero]';
-      banner.addEventListener('mouseover', e => {
+      const sel = '.eq-slot[data-card], .hero-avatar[data-hero], .card-chip, .ev-thumb';
+      rv.addEventListener('mouseover', e => {
         const el = e.target.closest(sel);
         const img = el && el.querySelector('img');
-        if (!img || !img.src) return;
+        if (!img || !img.src) { prev.classList.remove('show'); return; }
         prev.style.backgroundImage = "url('" + img.src + "')";
         const r = el.getBoundingClientRect();
         let left = r.left + r.width / 2 - PW / 2;
-        let top = r.bottom + 10;
-        if (top + PH > window.innerHeight - 8) top = Math.max(8, r.top - PH - 10);
+        let top = r.top - PH - 10;                          // au-dessus par défaut
+        if (top < 8) top = Math.min(r.bottom + 10, window.innerHeight - PH - 8);
         left = Math.max(8, Math.min(left, window.innerWidth - PW - 8));
         prev.style.left = left + 'px';
-        prev.style.top = top + 'px';
+        prev.style.top = Math.max(8, top) + 'px';
         prev.classList.add('show');
       });
-      banner.addEventListener('mouseout', e => { if (e.target.closest(sel)) prev.classList.remove('show'); });
+      rv.addEventListener('mouseout', e => { if (e.target.closest(sel)) prev.classList.remove('show'); });
     }
   }
 

@@ -143,7 +143,14 @@
         // garde ce qu'il lui reste après ses blocs, et ne repioche qu'à la fin.
         // L'arsenal adverse n'est pas connu de façon fiable → on ne l'invente pas.
         if (actor === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.oppHandCount = 4; }
-        else { st.meFaceUp = false; st.meHandCount = 4; st.oppArsenalCount = 0; }
+        else {
+          // Tour adverse : MA main m'est connue (instantané capté au début de
+          // son tour) → je l'affiche face visible plutôt que des dos de cartes.
+          // Repli sur un compteur (dos) seulement si l'instantané manque.
+          if (t.hand && t.hand.length) { st.meFaceUp = true; st.meHandCards = t.hand.slice(); }
+          else { st.meFaceUp = false; st.meHandCount = 4; }
+          st.oppArsenalCount = 0;
+        }
         push(label, atkSide, { type: 'banner', side: atkSide, big: actor === MY ? 'Ton tour' : 'Tour adverse',
           sub: HERO[atkSide] + ' attaque · ' + HERO.me + ' ' + st.life.me + ' PV · ' + HERO.opp + ' ' + st.life.opp + ' PV' });
       }
