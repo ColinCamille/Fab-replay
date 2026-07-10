@@ -21,13 +21,18 @@ Va sur **https://github.com/signup** et suis les étapes (email, mot de passe,
 pseudo). C'est gratuit.
 
 ### 2) Créer ta propre copie de l'appli
-1. Ouvre la page du modèle : **https://github.com/ColinCamille/Fab-replay**
+1. Ouvre la page du **modèle vierge** : **https://github.com/ColinCamille/fab-replay-template**
 2. Clique le bouton vert **« Use this template »** (en haut à droite) →
    **« Create a new repository »**.
 3. Donne un nom (ex. `fab-replay`), laisse **Public**, clique
    **« Create repository »**.
 
-✅ Tu as maintenant **ta** copie, à `github.com/<ton-pseudo>/fab-replay`.
+✅ Tu as maintenant **ta** copie **vierge** (aucune partie d'un autre joueur), à
+`github.com/<ton-pseudo>/fab-replay`.
+
+> ⚠️ Copie bien depuis **`fab-replay-template`** et non depuis une instance
+> personnelle : un dépôt personnel contient déjà des parties, qui se
+> retrouveraient alors dans **ta** bibliothèque.
 
 ### 3) Allumer ton site (GitHub Pages)
 1. Dans **ton** dépôt : onglet **Settings** (en haut) → menu de gauche **Pages**.
@@ -40,15 +45,22 @@ pseudo). C'est gratuit.
 > À ce stade l'appli marche déjà (tu peux importer des `.txt` à la main). Les
 > étapes suivantes **automatisent** l'envoi des parties depuis Talishar.
 
-### 4) Installer l'extension de capture (Tampermonkey)
+### 4) Installer un gestionnaire de userscripts (Tampermonkey **ou** Violentmonkey)
 Un petit script (« grabber ») lit tes parties sur Talishar. Il lui faut d'abord
-un **gestionnaire de userscripts**. Ce guide utilise **Tampermonkey** (le plus
-simple), mais **Violentmonkey** ou **Greasemonkey** (Firefox) marchent aussi à
-l'identique — le script est standard (`@grant none`). Prends-en **un seul** :
-- **PC (Chrome / Edge / Firefox)** : installe **Tampermonkey** →
-  **https://www.tampermonkey.net** (clique le bouton de ton navigateur).
-- **Android** : installe l'appli **Firefox**, puis **Tampermonkey** dedans (ou le
-  navigateur **Kiwi**).
+un **gestionnaire de userscripts**. Le script est standard (`@grant none`), donc
+**les deux marchent à l'identique** — installes-en **un seul** :
+
+- **Tampermonkey** (le plus répandu) → **https://www.tampermonkey.net**
+  (Chrome, Edge, Firefox, Safari).
+- **Violentmonkey** (libre/open-source, plus léger) → **https://violentmonkey.github.io**
+  (Chrome, Edge, Firefox).
+- **Greasemonkey** (Firefox uniquement) → depuis les modules Firefox.
+
+Selon l'appareil :
+- **PC (Chrome / Edge / Firefox)** : ajoute l'extension **Tampermonkey** *ou*
+  **Violentmonkey** depuis le lien ci-dessus.
+- **Android** : installe l'appli **Firefox**, puis **Tampermonkey** *ou*
+  **Violentmonkey** dedans (ou le navigateur **Kiwi** avec l'un des deux).
 - *iPhone : l'automatique n'est pas garanti ; tu peux quand même utiliser l'appli
   en important les `.txt` à la main.*
 
@@ -56,12 +68,13 @@ l'identique — le script est standard (`@grant none`). Prends-en **un seul** :
 1. Sur GitHub, ouvre **ton** dépôt → clique le fichier
    **`talishar-log-grabber.user.js`**.
 2. Clique le bouton **« Raw »** (en haut à droite du fichier).
-3. Tampermonkey ouvre une page **« Installer »** → clique **Installer**. ✅
+3. Ton gestionnaire (Tampermonkey ou Violentmonkey) ouvre une page
+   **« Installer »** → clique **Installer**. ✅
 
 > 🔄 **Mettre à jour plus tard** : le script ne se met **pas** à jour tout seul.
-> Pour prendre une nouvelle version, refais **Raw → Installer** (Tampermonkey
-> propose alors « Réinstaller/Mettre à jour »). Tu peux vérifier la version en
-> cours dans le titre du widget : **« 📜 Log Grabber v1.x.x »**.
+> Pour prendre une nouvelle version, refais **Raw → Installer** (Tampermonkey /
+> Violentmonkey propose alors « Réinstaller/Mettre à jour »). Tu peux vérifier la
+> version en cours dans le titre du widget : **« 📜 Log Grabber v1.x.x »**.
 
 ### 6) Créer ta clé d'accès (token) — pour publier tes parties
 Cette clé autorise le script à écrire **dans ton dépôt, et seulement lui**.
