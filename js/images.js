@@ -12,11 +12,11 @@
   'use strict';
 
   const cardMetaCache = (function () {
-    try { return JSON.parse(localStorage.getItem('fabCardMetaCacheV1') || '{}'); }
+    try { return JSON.parse(localStorage.getItem('fabCardMetaCacheV2') || '{}'); }
     catch (e) { return {}; }
   })();
   function saveMetaCache() {
-    try { localStorage.setItem('fabCardMetaCacheV1', JSON.stringify(cardMetaCache)); } catch (e) {}
+    try { localStorage.setItem('fabCardMetaCacheV2', JSON.stringify(cardMetaCache)); } catch (e) {}
   }
 
   function findImageUrl(obj, depth) {
