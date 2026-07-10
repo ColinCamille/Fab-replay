@@ -226,9 +226,15 @@
     const equip = '<div class="br-equip">' +
       gcard(side, 'head', nm('head')) + gcard(side, 'chest', nm('chest')) +
       gcard(side, 'arms', nm('arms')) + gcard(side, 'legs', nm('legs')) + '</div>';
+    // Arme(s) : on affiche weaponL ET weaponR (main + main gauche/off-hand, ex.
+    // « Arcane Lantern »), en sautant les slots vides — sinon la 2e arme adverse
+    // n'apparaissait pas sur le plateau.
+    const wpnTile = wnm => (wnm && wnm !== '—')
+      ? '<div class="br-gcard br-' + side + ' br-wpn"><div class="br-art" data-card="' + esc(wnm) + '"></div><div class="br-lab">' + esc(wnm) + '</div></div>'
+      : '';
     const cluster = '<div class="br-cluster">' + equip +
       gcard(side, 'hero', pl.hero || '?', true) +
-      '<div class="br-gcard br-' + side + ' br-wpn"><div class="br-art" data-card="' + esc(nm('weaponL')) + '"></div><div class="br-lab">' + esc(nm('weaponL')) + '</div></div>' +
+      wpnTile(nm('weaponL')) + wpnTile(nm('weaponR')) +
       '</div>';
     const rightRail = '<div class="br-rail br-right">' +
       '<div class="br-zpair"><span class="br-zlbl">Arsenal</span>' +
