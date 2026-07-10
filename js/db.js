@@ -90,9 +90,12 @@
   }
 
   // Construit l'entrée stockée à partir d'un record parsé + txt brut.
-  function toEntry(record, raw) {
+  // `extra` fusionne des champs additionnels (ex. syncStamp : l'horodatage
+  // `uploadedAt` du manifeste du dépôt, utilisé par la synchro pour détecter
+  // qu'une partie a été corrigée en amont et doit être re-téléchargée).
+  function toEntry(record, raw, extra) {
     const src = record.source || {};
-    return {
+    const entry = {
       gameId: keyFor(record, raw),
       record: record,
       raw: raw || null,
@@ -104,12 +107,14 @@
       format: record.format || null,
       savedAt: new Date().toISOString()
     };
+    if (extra) Object.keys(extra).forEach(k => { entry[k] = extra[k]; });
+    return entry;
   }
 
   // Upsert (put) : ré-importer la même partie écrase proprement.
-  async function putGame(record, raw) {
+  async function putGame(record, raw, extra) {
     const store = await tx('readwrite');
-    const entry = toEntry(record, raw);
+    const entry = toEntry(record, raw, extra);
     await wrap(store.put(entry));
     return entry.gameId;
   }

@@ -2511,9 +2511,12 @@ footer a{color:var(--text-dim)}
   }
 
   // Construit l'entrée stockée à partir d'un record parsé + txt brut.
-  function toEntry(record, raw) {
+  // `extra` fusionne des champs additionnels (ex. syncStamp : l'horodatage
+  // `uploadedAt` du manifeste du dépôt, utilisé par la synchro pour détecter
+  // qu'une partie a été corrigée en amont et doit être re-téléchargée).
+  function toEntry(record, raw, extra) {
     const src = record.source || {};
-    return {
+    const entry = {
       gameId: keyFor(record, raw),
       record: record,
       raw: raw || null,
@@ -2525,12 +2528,14 @@ footer a{color:var(--text-dim)}
       format: record.format || null,
       savedAt: new Date().toISOString()
     };
+    if (extra) Object.keys(extra).forEach(k => { entry[k] = extra[k]; });
+    return entry;
   }
 
   // Upsert (put) : ré-importer la même partie écrase proprement.
-  async function putGame(record, raw) {
+  async function putGame(record, raw, extra) {
     const store = await tx('readwrite');
-    const entry = toEntry(record, raw);
+    const entry = toEntry(record, raw, extra);
     await wrap(store.put(entry));
     return entry.gameId;
   }
@@ -2783,15 +2788,26 @@ footer a{color:var(--text-dim)}
 
     // --- 2. Logs bruts du grabber (nécessite le parseur chargé) ---
     const parser = root.TalisharParser;
+    let updated = 0;
     if (parser) {
       const idx = await fetchRawIndex();
       if (idx.length) {
         sawData = true;
         const local = await root.FabDB.getAllEntries();
-        const have = new Set(local.map(e => String(e.gameId)));
+        // Map id → entrée : on a besoin du syncStamp local pour repérer une
+        // partie corrigée en amont (même gameId, contenu du .txt différent).
+        const byId = new Map(local.map(e => [String(e.gameId), e]));
         for (const it of idx) {
           const id = String((it && (it.gameId || it.id)) || it || '');
-          if (!id || have.has(id) || dead.has(id)) continue;
+          if (!id || dead.has(id)) continue;
+          const stamp = (it && it.uploadedAt) || null;   // horodatage du dépôt
+          const existing = byId.get(id);
+          // Déjà en local : on ne re-télécharge QUE si le dépôt annonce une
+          // version plus récente que celle qu'on a stockée (uploadedAt).
+          // syncStamp absent = partie stockée avant cette fonctionnalité →
+          // on rafraîchit une fois pour récupérer les corrections amont.
+          const isUpdate = !!existing;
+          if (isUpdate && !(stamp && (!existing.syncStamp || stamp > existing.syncStamp))) continue;
           try {
             const r = await fetch(rawFileUrl(id), { cache: 'no-store' });
             if (!r.ok) continue;
@@ -2800,16 +2816,16 @@ footer a{color:var(--text-dim)}
             if (!rec || (!rec.myName && (!rec.playersList || rec.playersList.length < 2))) continue;
             const gid = String((rec.source && rec.source.gameId) || id);
             if (dead.has(gid)) continue;   // supprimée volontairement → ne pas ré-injecter
-            await root.FabDB.putGame(rec, txt);   // stocke avec le raw en local
-            have.add(gid);
-            added++;
+            await root.FabDB.putGame(rec, txt, { syncStamp: stamp });   // stocke le raw + l'horodatage dépôt
+            byId.set(gid, { gameId: gid, syncStamp: stamp });
+            if (isUpdate) updated++; else added++;
           } catch (err) { console.error(err); }
         }
       }
     }
 
-    if (!sawData) return { added: 0, removed: removed, offline: true };
-    return { added: added, removed: removed };
+    if (!sawData) return { added: 0, removed: removed, updated: updated, offline: true };
+    return { added: added, removed: removed, updated: updated };
   }
 
   // ---------- Écriture (avec token) ----------
@@ -5258,7 +5274,7 @@ footer a{color:var(--text-dim)}
     // (lecture statique, sans token) et les fusionne dans le cache local.
     try {
       const r = await window.FabSync.pull();
-      if (r.added || r.removed) await reloadDashboard();
+      if (r.added || r.removed || r.updated) await reloadDashboard();
     } catch (e) { console.error(e); }
 
     // Reprise d'un lien profond #game=<id> (après la synchro, la partie

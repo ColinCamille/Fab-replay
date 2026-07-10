@@ -141,15 +141,26 @@
 
     // --- 2. Logs bruts du grabber (nécessite le parseur chargé) ---
     const parser = root.TalisharParser;
+    let updated = 0;
     if (parser) {
       const idx = await fetchRawIndex();
       if (idx.length) {
         sawData = true;
         const local = await root.FabDB.getAllEntries();
-        const have = new Set(local.map(e => String(e.gameId)));
+        // Map id → entrée : on a besoin du syncStamp local pour repérer une
+        // partie corrigée en amont (même gameId, contenu du .txt différent).
+        const byId = new Map(local.map(e => [String(e.gameId), e]));
         for (const it of idx) {
           const id = String((it && (it.gameId || it.id)) || it || '');
-          if (!id || have.has(id) || dead.has(id)) continue;
+          if (!id || dead.has(id)) continue;
+          const stamp = (it && it.uploadedAt) || null;   // horodatage du dépôt
+          const existing = byId.get(id);
+          // Déjà en local : on ne re-télécharge QUE si le dépôt annonce une
+          // version plus récente que celle qu'on a stockée (uploadedAt).
+          // syncStamp absent = partie stockée avant cette fonctionnalité →
+          // on rafraîchit une fois pour récupérer les corrections amont.
+          const isUpdate = !!existing;
+          if (isUpdate && !(stamp && (!existing.syncStamp || stamp > existing.syncStamp))) continue;
           try {
             const r = await fetch(rawFileUrl(id), { cache: 'no-store' });
             if (!r.ok) continue;
@@ -158,16 +169,16 @@
             if (!rec || (!rec.myName && (!rec.playersList || rec.playersList.length < 2))) continue;
             const gid = String((rec.source && rec.source.gameId) || id);
             if (dead.has(gid)) continue;   // supprimée volontairement → ne pas ré-injecter
-            await root.FabDB.putGame(rec, txt);   // stocke avec le raw en local
-            have.add(gid);
-            added++;
+            await root.FabDB.putGame(rec, txt, { syncStamp: stamp });   // stocke le raw + l'horodatage dépôt
+            byId.set(gid, { gameId: gid, syncStamp: stamp });
+            if (isUpdate) updated++; else added++;
           } catch (err) { console.error(err); }
         }
       }
     }
 
-    if (!sawData) return { added: 0, removed: removed, offline: true };
-    return { added: added, removed: removed };
+    if (!sawData) return { added: 0, removed: removed, updated: updated, offline: true };
+    return { added: added, removed: removed, updated: updated };
   }
 
   // ---------- Écriture (avec token) ----------
