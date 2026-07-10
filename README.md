@@ -42,7 +42,9 @@ pseudo). C'est gratuit.
 
 ### 4) Installer l'extension de capture (Tampermonkey)
 Un petit script (« grabber ») lit tes parties sur Talishar. Il lui faut d'abord
-un gestionnaire de scripts :
+un **gestionnaire de userscripts**. Ce guide utilise **Tampermonkey** (le plus
+simple), mais **Violentmonkey** ou **Greasemonkey** (Firefox) marchent aussi à
+l'identique — le script est standard (`@grant none`). Prends-en **un seul** :
 - **PC (Chrome / Edge / Firefox)** : installe **Tampermonkey** →
   **https://www.tampermonkey.net** (clique le bouton de ton navigateur).
 - **Android** : installe l'appli **Firefox**, puis **Tampermonkey** dedans (ou le
