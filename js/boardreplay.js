@@ -135,7 +135,7 @@
         if (st.meFaceUp) st.meHandCards = (t.hand || []).slice();
         if (actor === MY) st.oppHandCount = 4;
         push(t.label || 'Ouverture', atkSide, { type: 'banner', side: 'me', big: 'Début de la partie', sub: HERO.me + ' vs ' + HERO.opp });
-        if (!actor || !(t.events || []).some(e => e.type === 'played')) return;   // ouverture sans action → juste la bannière
+        if (!actor || !(t.events || []).some(e => e.type === 'played' || e.type === 'activated')) return;   // ouverture sans action → juste la bannière
       } else {
         // Règle FaB : on repioche à la FIN de son tour, pas au début. La main
         // adverse est donc remise à 4 au début de MON tour (l'adversaire a
@@ -172,6 +172,16 @@
             curReactions.push({ card: e.card, owner: side });
             push(label, side, { type: 'play', side, card: { nm: e.card }, reaction: true, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt });
           }
+        } else if (e.type === 'activated') {
+          // Activation d'une capacité (arme, héros, item/permanent, ex. Grasp of
+          // the Arknight) : la carte reste en jeu → pas de removeCard ni toGrave.
+          // Ce n'est pas une attaque → on l'affiche en carte seule immédiatement,
+          // sans passer par le différé de combat (openAtk).
+          const side = sideOf(e.player);
+          const pitches = [];
+          for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
+          const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
+          push(label, side, { type: 'play', side, card: { nm: e.card }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
         } else if (e.type === 'pitched') {
           const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
         } else if (e.type === 'blocked') {
@@ -300,7 +310,7 @@
     const pcard = (c, side, lg) => '<div class="br-pcard br-' + side + (lg ? ' br-lg' : '') + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"></div><div class="br-nm">' + esc(c.nm) + '</div></div>';
     function buildStage(s) {
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
-      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
+      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
         return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div></div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
