@@ -1092,8 +1092,8 @@ footer a{color:var(--text-dim)}
 .br-turnchip{position:absolute;top:-4px;left:50%;transform:translateX(-50%);z-index:4;
   font:700 .56rem/1 'JetBrains Mono',monospace;color:#141414;background:var(--green);
   border-radius:6px;padding:3px 9px;white-space:nowrap}
-.br-lane{position:relative;flex:1 1 auto;min-width:0;min-height:150px;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:8px;padding:16px 12px 12px;overflow:hidden;
+.br-lane{position:relative;flex:1 1 auto;min-width:0;min-height:120px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;padding:10px 10px;overflow:hidden;
   background:radial-gradient(80% 120% at 50% 50%,rgba(255,255,255,.04),transparent 72%)}
 /* PV : petit tableau de score sur le CÔTÉ de la piste de combat (plus sur le
    héros). Adversaire en haut, toi en bas → les deux PV encadrent le centre,
@@ -1125,7 +1125,7 @@ footer a{color:var(--text-dim)}
   padding:8px 2px 2px;color:#e9e6da;text-align:center;text-shadow:0 1px 2px #000;
   background:linear-gradient(to top,rgba(0,0,0,.92),transparent);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.br-phase{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);font-weight:700;margin-bottom:9px}
+.br-phase{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);font-weight:700;margin-bottom:4px}
 .br-banner{text-align:center}
 .br-big{font-size:1rem;font-weight:700;font-family:'Cinzel',serif;letter-spacing:.02em}
 .br-banner.br-me .br-big{color:var(--accent,var(--gold))} .br-banner.br-opp .br-big{color:var(--violet)}
@@ -1133,7 +1133,7 @@ footer a{color:var(--text-dim)}
 .br-duel{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
 .br-side{display:flex;flex-direction:column;align-items:center;gap:5px}
 .br-duel-who{font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);font-weight:700}
-.br-cardrow{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;max-width:180px}
+.br-cardrow{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;max-width:214px}
 .br-noblock{font:.62rem 'Inter',sans-serif;color:var(--red);font-weight:600}
 .br-pcard{width:56px;aspect-ratio:5/7;border-radius:6px;overflow:hidden;border:1px solid var(--line);position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));animation:brPop .3s ease}
 .br-pcard.br-inhand{width:54px}
@@ -1150,7 +1150,11 @@ footer a{color:var(--text-dim)}
 .br-playone{display:flex;flex-direction:column;align-items:center;gap:9px}
 /* Cartes de la piste de combat (centre) — agrandies. */
 .br-lane .br-pcard{width:66px}
-.br-lane .br-pcard.br-lg{width:114px}
+/* Cartes de DÉFENSE (dans l'échange) plus petites → elles tiennent sur une
+   seule rangée à côté de l'attaque, au lieu de passer à la ligne et de gonfler
+   la hauteur de la bande. L'attaque, elle, reste grande. */
+.br-lane .br-cardrow .br-pcard{width:50px}
+.br-lane .br-pcard.br-lg{width:100px}
 .br-pcard.br-lg{width:92px;border-width:2px}
 .br-pcard.br-lg.br-me{border-color:var(--accent,var(--gold));box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}
 .br-pcard.br-lg.br-opp{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,107,255,.22)}
