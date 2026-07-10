@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.12.1
+// @version      1.12.2
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. Export texte / téléchargement + localStorage.
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
@@ -744,7 +744,70 @@
     return s;
   }
 
+  // Réconcilie les HÉROS depuis les stats officielles de fin de partie
+  // (endStats), source faisant AUTORITÉ. `gameInfo.heroName` peut rester figé
+  // sur une partie PRÉCÉDENTE quand la SPA Talishar ne réinitialise pas bien
+  // son store entre deux parties : on a vu « Arakni » ressortir sur une partie
+  // Oscilio. Les stats donnent le slot du joueur local (myPlayerID), l'id de
+  // héros (yourHero/opponentHero) et un tableau character[] avec les noms
+  // lisibles. On écrase donc meta.myHero (et oppHero si le nom est connu).
+  function reconcileHeroesFromStats() {
+    if (!endStats || !endStats.byPlayer) return;
+    const bp = endStats.byPlayer;
+    const mine = bp[endStats.myPlayerID] || bp[1] || bp[Object.keys(bp)[0]];
+    if (!mine) return;
+    const nameOfId = (stats, id) => {
+      if (!id || !stats || !Array.isArray(stats.character)) return null;
+      const hit = stats.character.find(c => c && c.cardId === id);
+      return hit ? hit.cardName : null;
+    };
+    const label = (name, id) => name ? (id ? name + ' (' + id + ')' : name) : null;
+    // Mon héros : id yourHero + nom lisible depuis MON character[] (1re entrée).
+    const myId = mine.yourHero;
+    const myName = nameOfId(mine, myId) || (mine.character && mine.character[0] && mine.character[0].cardName) || null;
+    const myLabel = label(myName, myId);
+    if (myLabel) meta.myHero = myLabel;
+    // Héros adverse : on n'écrase QUE si on a un vrai nom lisible (le camp
+    // adverse a été capté) — sinon on garde meta.oppHero déjà résolu (gi),
+    // pour ne pas régresser sur un simple id brut.
+    const oppId = mine.opponentHero;
+    const otherPid = Object.keys(bp).find(k => String(k) !== String(endStats.myPlayerID));
+    const oppName = nameOfId(otherPid ? bp[otherPid] : null, oppId)
+      || (otherPid && bp[otherPid] && bp[otherPid].character && bp[otherPid].character[0] && bp[otherPid].character[0].cardName) || null;
+    if (oppName) meta.oppHero = label(oppName, oppId);
+  }
+
+  // Réconcilie les PSEUDOS quand l'ancre fiable (le jet de dé « you rolled »)
+  // est absente du log : dans ce cas resolveNamesFromLog n'a rien pu fixer et
+  // on est retombé sur Redux, dont la perspective peut être inversée (on a vu
+  // « me » = l'adversaire). La main capturée (DOM) est TOUJOURS la nôtre : le
+  // joueur dont les cartes « played » figurent dans notre main est « moi ».
+  function reconcileNamesFromHand() {
+    if (captured.some(l => /rolled \d+/.test(l))) return;   // jet de dé présent → déjà fiable
+    const headerNames = [];
+    const played = {};
+    for (const line of captured) {
+      let m = line.match(/^(.+?)'s turn \d+ has begun\.$/);
+      if (m && headerNames.indexOf(m[1].trim()) < 0) headerNames.push(m[1].trim());
+      m = line.match(/^(.+?) played (.+?)(?: from arsenal)?$/);
+      if (m) { const n = m[1].trim(); (played[n] = played[n] || []).push(m[2].trim().toLowerCase()); }
+    }
+    if (headerNames.length < 2) return;
+    const myCards = new Set();
+    Object.keys(handSnapshots).forEach(k => (handSnapshots[k] || []).forEach(c => myCards.add(String(c).toLowerCase())));
+    if (!myCards.size) return;
+    const score = n => (played[n] || []).reduce((s, c) => s + (myCards.has(c) ? 1 : 0), 0);
+    const ranked = headerNames.slice().sort((a, b) => score(b) - score(a));
+    const meName = ranked[0], oppName = ranked.find(n => n !== meName);
+    if (meName && score(meName) > score(oppName)) {   // « moi » sans ambiguïté
+      meta.myName = meName;
+      if (oppName) meta.oppName = oppName;
+    }
+  }
+
   function logText() {
+    reconcileHeroesFromStats();
+    reconcileNamesFromHand();
     return '=== Talishar game ' + gameName + ' — ' + new Date().toLocaleString() + ' ===\n\n'
       + captured.join('\n') + '\n'
       + snapshotBlockText('HAND SNAPSHOTS (ta main, captée depuis le DOM — jamais celle de l\'adversaire)', handSnapshots,
