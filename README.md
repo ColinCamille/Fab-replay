@@ -56,6 +56,11 @@ un gestionnaire de scripts :
 2. Clique le bouton **« Raw »** (en haut à droite du fichier).
 3. Tampermonkey ouvre une page **« Installer »** → clique **Installer**. ✅
 
+> 🔄 **Mettre à jour plus tard** : le script ne se met **pas** à jour tout seul.
+> Pour prendre une nouvelle version, refais **Raw → Installer** (Tampermonkey
+> propose alors « Réinstaller/Mettre à jour »). Tu peux vérifier la version en
+> cours dans le titre du widget : **« 📜 Log Grabber v1.x.x »**.
+
 ### 6) Créer ta clé d'accès (token) — pour publier tes parties
 Cette clé autorise le script à écrire **dans ton dépôt, et seulement lui**.
 1. Va sur **https://github.com/settings/tokens?type=beta** →
@@ -85,14 +90,22 @@ Cette clé autorise le script à écrire **dans ton dépôt, et seulement lui**.
 3. Ta partie **s'envoie toute seule** dans ton dépôt.
 4. Ouvre **ton site** (`https://<ton-pseudo>.github.io/fab-replay/`) sur PC ou
    téléphone → onglet **🗒 Historique** → clique une partie pour la revivre. 🎉
+   Chaque partie s'ouvre sur deux vues : **⚔ Déroulé** (tour par tour) et
+   **🎴 Table** (le plateau de jeu). Sur PC, **survole une carte** pour l'agrandir.
 
 ### En cas de pépin
 - **« Token refusé »** → ton token a expiré : régénère-en un (étape 6) et
   recolle-le via **⚙**.
 - **Une partie ne remonte pas** → tu n'as pas ouvert le **Game Summary** à la fin
   (c'est ce qui déclenche l'envoi). Tu peux forcer avec le bouton **☁ Dépôt** du widget.
+- **« Partie sans id — envoi ignoré »** → tu as cliqué ☁ Dépôt sur une page sans
+  numéro de partie (partie fermée, lobby). Ouvre la partie depuis
+  `talishar.net/game/play/<numéro>` puis réessaie.
 - **Je ne vois pas mes parties tout de suite** → attends ~1 min (le site se met à
   jour) puis recharge la page.
+- **Une partie affiche un mauvais héros / de vieilles infos** → recharge la page :
+  la synchro re-télécharge automatiquement une partie corrigée en amont (même
+  après qu'elle a déjà été enregistrée sur l'appareil).
 
 ### Partager tes parties
 Ton site est **public** : donne simplement ton adresse
@@ -112,7 +125,9 @@ pour consulter**.
 | `js/sync.js` | **Synchro GitHub** — dépôt = base : lecture de `data/library.json` sans token, écriture par token perso (auto-détection du dépôt). |
 | `data/library.json` | Bibliothèque **publiée** (servie en statique par Pages) — vierge dans le dépôt modèle. |
 | `data/raw/` | Logs **bruts** déposés par le grabber (`<id>.txt` + `index.json`) — ingérés/parsés par le viewer (Phase 3). |
-| `js/replay.js` | **Replay** d'une partie (extrait du standalone, comportement identique). |
+| `data/deleted.json` | Liste **partagée** des `gameId` supprimés — évite qu'une partie effacée sur un appareil ne réapparaisse ailleurs à la synchro. |
+| `js/replay.js` | **Replay** d'une partie (onglet **Déroulé**, extrait du standalone, comportement identique). |
+| `js/boardreplay.js` | Vue **Table** (« tapis miroir ») : rejoue le combat sur un plateau, tour par tour. |
 | `js/dashboard.js` | **Agrégations** multi-parties + rendu (cœur pur testable en Node). |
 | `css/style.css` | Styles (mobile-first). |
 | `talishar-log-grabber.user.js` | **Grabber** (userscript Tampermonkey/Violentmonkey) — installe la partie dans le dépôt. |
@@ -193,6 +208,7 @@ npm run build # régénère build/standalone.html
 - **Phase 1** (fait) : hébergement Pages, refactor dé-inliné, import multi + persistance, tableau de bord.
 - **Phase 2** (fait) : synchro auto entre appareils via le dépôt GitHub (lecture sans token, écriture par token), export/import `.json`, modèle « 2 dépôts » pour le partage.
 - **Phase 3** (fait, validé en conditions réelles) : envoi direct de la partie dans le dépôt depuis le grabber (bouton `☁ Dépôt` / `Alt+Shift+S`, ou auto en fin de partie, avec re-envoi après le swap pour les stats adverses). Le `.txt` brut est déposé dans `data/raw/`, le viewer l'ingère et le parse au chargement. Voir `docs/PHASE3-grabber.md`.
+- **Phase 4** (fait) : vue **Table** (« tapis miroir ») rejouant le combat sur un plateau (mains, arsenal, cimetière, banni, pitch, permanents/tokens des 2 camps, activations) ; capture des terrains/héros fiabilisée côté grabber (héros issus des stats officielles) ; synchro qui **met à jour** une partie déjà en cache quand elle est corrigée en amont.
 
 ---
 Données non affiliées à Legend Story Studios. Images via goagain.dev.
