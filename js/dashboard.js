@@ -494,10 +494,12 @@
       '<div class="info"><div class="htag">' + (kind === 'best' ? '✅ Meilleur' : '⚠️ Pire') + '</div><div class="hnm">' + esc2(r.hero) + '</div></div>' +
       '<div class="hrt"><div class="hpc">' + r.winrate + '%</div><div class="hvl">' + r.wins + '/' + r.decided + '</div></div></div>';
     const highlight = (best && worst && best.hero !== worst.hero) ? '<div class="muhl">' + hl(best, 'best') + hl(worst, 'worst') + '</div>' : '';
+    const hasLow = rows.some(r => r.decided < 2);
+    const note = hasLow ? '<div class="note">Les matchups à <b>une seule partie décidée</b> sont grisés : un seul résultat (0 % ou 100 %) n\'est pas un vrai winrate. Ils se « réveillent » dès la 2<sup>e</sup> partie contre ce héros.</div>' : '';
     host.innerHTML = highlight + rows.map(r =>
       '<div class="mu-row' + (r.decided < 2 ? ' mu-low' : '') + '">' + avatarHTML(r.hero, 'mu-av') +
       '<div class="mu-nm">' + esc2(r.hero) + '</div><div class="mu-track"><div class="fill" style="width:' + r.winrate + '%"></div><div class="mid"></div></div>' +
-      '<div class="mu-pc ' + wrCls(r.winrate) + '">' + r.winrate + '%</div><div class="mu-vl">' + r.wins + '/' + r.decided + '</div></div>').join('');
+      '<div class="mu-pc ' + wrCls(r.winrate) + '">' + r.winrate + '%</div><div class="mu-vl">' + r.wins + '/' + r.decided + '</div></div>').join('') + note;
     hydrateBg(host);
   }
 
