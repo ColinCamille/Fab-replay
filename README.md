@@ -71,10 +71,13 @@ Selon l'appareil :
 3. Ton gestionnaire (Tampermonkey ou Violentmonkey) ouvre une page
    **« Installer »** → clique **Installer**. ✅
 
-> 🔄 **Mettre à jour plus tard** : le script ne se met **pas** à jour tout seul.
-> Pour prendre une nouvelle version, refais **Raw → Installer** (Tampermonkey /
-> Violentmonkey propose alors « Réinstaller/Mettre à jour »). Tu peux vérifier la
-> version en cours dans le titre du widget : **« 📜 Log Grabber v1.x.x »**.
+> 🔄 **Mises à jour** : à partir de la v1.12.4, le script **se met à jour tout
+> seul** (Tampermonkey / Violentmonkey vérifient périodiquement `@updateURL`).
+> Tu peux forcer via le menu de l'extension → « Rechercher des mises à jour ».
+> *Une seule fois*, si tu es sur une version antérieure, refais **Raw →
+> Installer** pour passer à la version auto-actualisée — ensuite c'est
+> automatique. Version en cours affichée dans le widget : **« 📜 Log Grabber
+> v1.x.x »**.
 
 ### 6) Créer ta clé d'accès (token) — pour publier tes parties
 Cette clé autorise le script à écrire **dans ton dépôt, et seulement lui**.

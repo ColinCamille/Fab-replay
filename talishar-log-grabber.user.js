@@ -1,18 +1,21 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.12.3
+// @version      1.12.4
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. Export texte / téléchargement + localStorage.
+// @author       ColinCamille
 // @match        *://talishar.net/game/*
 // @match        *://www.talishar.net/game/*
 // @run-at       document-idle
 // @grant        none
+// @downloadURL  https://raw.githubusercontent.com/ColinCamille/Fab-replay/main/talishar-log-grabber.user.js
+// @updateURL    https://raw.githubusercontent.com/ColinCamille/Fab-replay/main/talishar-log-grabber.user.js
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  const VERSION = '1.12.3';
+  const VERSION = '1.12.4';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
