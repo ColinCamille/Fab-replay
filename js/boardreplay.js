@@ -366,7 +366,14 @@
       fillSlot('#br-oGrave', 'Cimetière', stt.oppGrave, 'opp', 'grave');
       fillSlot('#br-mBanish', 'Banni', stt.meBanish, 'me', 'grave');
       fillSlot('#br-oBanish', 'Banni', stt.oppBanish, 'opp', 'grave');
-      const tokHtml = (cards, side) => (cards || []).map(c => '<div class="br-tok br-' + side + '" data-card="' + esc(c) + '"><div class="br-art" data-card="' + esc(c) + '"></div><div class="br-nm">' + esc(c) + '</div></div>').join('');
+      // Tokens/permanents : on regroupe les exemplaires identiques en UNE tuile
+      // avec un badge « ×N » (ordre de 1ʳᵉ apparition), au lieu d'empiler N
+      // copies côte à côte (ex. Oscilio : plusieurs « Seismic Surge »).
+      const tokHtml = (cards, side) => {
+        const order = [], count = {};
+        (cards || []).forEach(c => { const k = norm(c); if (count[k] == null) { count[k] = 0; order.push({ k: k, nm: c }); } count[k]++; });
+        return order.map(o => '<div class="br-tok br-' + side + '" data-card="' + esc(o.nm) + '"><div class="br-art" data-card="' + esc(o.nm) + '"></div><div class="br-nm">' + esc(o.nm) + '</div>' + (count[o.k] > 1 ? '<span class="br-badge">×' + count[o.k] + '</span>' : '') + '</div>').join('');
+      };
       const otk = $('#br-oppTok'); if (otk) otk.innerHTML = tokHtml(stt.oppTokens, 'opp');
       const mtk = $('#br-meTok'); if (mtk) mtk.innerHTML = tokHtml(stt.meTokens, 'me');
       $('#br-fMe').classList.toggle('br-active', s.actor === 'me');
