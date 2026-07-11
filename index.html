@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=83">
+<link rel="stylesheet" href="css/style.css?v=84">
 </head>
 <body>
 
@@ -122,13 +122,13 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=83"></script>
-<script src="js/images.js?v=83"></script>
-<script src="js/db.js?v=83"></script>
-<script src="js/sync.js?v=83"></script>
-<script src="js/replay.js?v=83"></script>
-<script src="js/boardreplay.js?v=83"></script>
-<script src="js/dashboard.js?v=83"></script>
+<script src="talishar-parser.js?v=84"></script>
+<script src="js/images.js?v=84"></script>
+<script src="js/db.js?v=84"></script>
+<script src="js/sync.js?v=84"></script>
+<script src="js/replay.js?v=84"></script>
+<script src="js/boardreplay.js?v=84"></script>
+<script src="js/dashboard.js?v=84"></script>
 
 <script>
 // ============================================================
@@ -180,9 +180,21 @@
     $('#dashEmpty').style.display = hasGames ? 'none' : 'block';
     $('#dashboardBody').style.display = hasGames ? 'block' : 'none';
     if (hasGames) {
-      window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame });
+      window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onMeta: updateMeta });
     }
     return entries;
+  }
+
+  // Persiste une modification de méta (tags / favori) posée dans le dashboard,
+  // puis la publie dans le dépôt si la synchro est connectée sur cet appareil
+  // (fusion descendante gérée par FabSync.pull via metaUpdatedAt).
+  async function updateMeta(id, patch) {
+    const entry = await window.FabDB.setMeta(id, patch);
+    if (entry && window.FabSync.canWrite()) {
+      try { await window.FabSync.push([entry]); }
+      catch (e) { console.error(e); }
+    }
+    return entry;
   }
 
   // ---------- Onglets du replay (Déroulé / Table / Stats) ----------
@@ -452,7 +464,7 @@
     // (lecture statique, sans token) et les fusionne dans le cache local.
     try {
       const r = await window.FabSync.pull();
-      if (r.added || r.removed || r.updated) await reloadDashboard();
+      if (r.added || r.removed || r.updated || r.metaUpdated) await reloadDashboard();
     } catch (e) { console.error(e); }
 
     // Reprise d'un lien profond #game=<id> (après la synchro, la partie

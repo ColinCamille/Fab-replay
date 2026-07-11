@@ -169,11 +169,37 @@ assert(baWL && baWL.gamesWon === 1 && baWL.gamesLost === 1 && baWL.winrate === 5
 // Tendance : un point par partie décidée (4 hors IA).
 eq(agg.trend.length, 4, 'tendance : 4 points');
 
+// ---------- Tags (métadonnées d'entrée, filtre dashboard) ----------
+console.log('Tags —');
+const tagEntries = [
+  { gameId: 't1', tags: ['gone'],  record: mkRec({ iWon: true,  oppHero: 'Kano', first: true,  date: '2026-07-01T10:00:00Z' }) },
+  { gameId: 't2', tags: ['Gone'],  record: mkRec({ iWon: false, oppHero: 'Kano', first: false, date: '2026-07-02T10:00:00Z' }) },
+  { gameId: 't3', tags: ['spell'], record: mkRec({ iWon: true,  oppHero: 'Kano', first: true,  date: '2026-07-03T10:00:00Z' }) },
+  { gameId: 't4',                  record: mkRec({ iWon: true,  oppHero: 'Kano', first: true,  date: '2026-07-04T10:00:00Z' }) }
+];
+const tagAll = Dashboard.aggregate(tagEntries, {});
+eq(tagAll.global.games, 4, 'tags: sans filtre → 4 parties');
+// Facette : « gone » (dédup insensible casse) + « spell » = 2 tags.
+eq(tagAll.facets.tags.length, 2, 'facette tags dédupliquée (2)');
+// Filtre tag « gone » insensible à la casse → t1 + t2 (1 victoire sur 2).
+const goneAgg = Dashboard.aggregate(tagEntries, { tag: 'gone' });
+eq(goneAgg.global.games, 2, 'filtre tag « gone » (insensible casse) → 2 parties');
+eq(goneAgg.global.wins, 1, 'filtre tag « gone » → 1 victoire');
+eq(Dashboard.aggregate(tagEntries, { tag: 'spell' }).global.games, 1, 'filtre tag « spell » → 1 partie');
+eq(Dashboard.aggregate(tagEntries, { tag: 'inexistant' }).global.games, 0, 'filtre tag inconnu → 0 partie');
+
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;
 console.log('DB —');
 eq(DB.keyFor(rec, raw), '908070', 'clé DB = gameId');
 eq(DB.keyFor({ source: {} }, 'abc'), DB.keyFor({ source: {} }, 'abc'), 'clé de repli déterministe');
+
+// normalizeTags : trim, dédup insensible à la casse (1ʳᵉ graphie gardée), tolérant.
+eq(DB.normalizeTags(['  gone ', 'gone', 'GONE', 'spell']).join(','), 'gone,spell', 'normalizeTags: trim + dédup casse');
+eq(DB.normalizeTags('mono').length, 1, 'normalizeTags: chaîne unique → 1 tag');
+eq(DB.normalizeTags(null).length, 0, 'normalizeTags: null → []');
+eq(DB.normalizeTags(['', '   ']).length, 0, 'normalizeTags: entrées vides ignorées');
+assert(typeof DB.setMeta === 'function', 'DB.setMeta exposé');
 
 // ---------- 4. Export / Import (sauvegarde multi-appareils) ----------
 console.log('Export/Import —');

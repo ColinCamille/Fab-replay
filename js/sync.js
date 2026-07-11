@@ -106,7 +106,7 @@
   //   2. data/raw/*.txt      : logs bruts déposés par le grabber, parsés ici
   //      (chaque brut n'est récupéré qu'une fois par appareil).
   async function pull() {
-    let added = 0, removed = 0, sawData = false;
+    let added = 0, removed = 0, metaUpdated = 0, sawData = false;
 
     // --- 0. Suppressions PARTAGÉES (inter-appareil) ---
     // On applique d'abord la liste du dépôt : on retire localement les parties
@@ -131,9 +131,21 @@
       const cloud = root.FabDB.normalizeImport(lib);
       if (cloud.length) {
         const local = await root.FabDB.getAllEntries();
-        const have = new Set(local.map(e => String(e.gameId)));
+        const localById = new Map(local.map(e => [String(e.gameId), e]));
         for (const e of cloud) {
-          if (have.has(String(e.gameId)) || dead.has(String(e.gameId))) continue;
+          const id = String(e.gameId);
+          if (dead.has(id)) continue;
+          const localE = localById.get(id);
+          if (localE) {
+            // Déjà en local : on ne réécrit pas la partie, mais on fusionne les
+            // métadonnées utilisateur (tags/favori) si le nuage porte une version
+            // plus récente (metaUpdatedAt) → propagation des étiquettes/favoris.
+            if (e.metaUpdatedAt && (!localE.metaUpdatedAt || e.metaUpdatedAt > localE.metaUpdatedAt) && root.FabDB.setMeta) {
+              try { await root.FabDB.setMeta(id, { tags: e.tags || [], favorite: !!e.favorite }); metaUpdated++; }
+              catch (err) { console.error(err); }
+            }
+            continue;
+          }
           try { await root.FabDB.putEntry(e); added++; } catch (err) { console.error(err); }
         }
       }
@@ -177,8 +189,8 @@
       }
     }
 
-    if (!sawData) return { added: 0, removed: removed, updated: updated, offline: true };
-    return { added: added, removed: removed, updated: updated };
+    if (!sawData) return { added: 0, removed: removed, updated: updated, metaUpdated: metaUpdated, offline: true };
+    return { added: added, removed: removed, updated: updated, metaUpdated: metaUpdated };
   }
 
   // ---------- Écriture (avec token) ----------

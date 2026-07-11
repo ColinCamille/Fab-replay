@@ -39,6 +39,29 @@
     return (h >>> 0).toString(36);
   }
 
+  // ---------- Métadonnées utilisateur (tags libres, favori) ----------
+  // Rangées AU NIVEAU DE L'ENTRÉE (à côté de gameId), pas dans le record :
+  //   - elles se synchronisent « gratuitement » (cloudEntry recopie l'entrée),
+  //   - elles survivent à un re-parsing du record (le record peut être régénéré).
+  // Nettoie une liste de tags : chaîne(s) → tableau trimé, sans doublon
+  // (comparaison insensible à la casse, on garde la 1ʳᵉ graphie vue), bornes
+  // raisonnables. Pur → testable en Node.
+  function normalizeTags(arr) {
+    if (arr == null) arr = [];
+    if (!Array.isArray(arr)) arr = [arr];
+    const out = [], seen = new Set();
+    for (const raw of arr) {
+      const t = String(raw == null ? '' : raw).trim().replace(/\s+/g, ' ').slice(0, 40);
+      if (!t) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+      if (out.length >= 20) break;
+    }
+    return out;
+  }
+
   // ---------- Pierres tombales (suppressions persistantes) ----------
   // La suppression est locale, mais la synchro (sync.js pull) ré-injecte
   // sinon toute partie absente depuis le dépôt (library.json + data/raw du
@@ -112,11 +135,38 @@
   }
 
   // Upsert (put) : ré-importer la même partie écrase proprement.
+  // On PRÉSERVE les métadonnées utilisateur (tags, favori) déjà posées :
+  // un ré-import manuel ou un re-téléchargement d'une partie corrigée en amont
+  // (synchro grabber) ne doit jamais effacer les étiquettes/favoris locaux —
+  // sauf si l'appelant fournit explicitement ces champs via `extra`.
   async function putGame(record, raw, extra) {
-    const store = await tx('readwrite');
     const entry = toEntry(record, raw, extra);
+    const prev = await getEntry(entry.gameId);          // tx séparée (évite un tx inactif)
+    if (prev) {
+      if (!(extra && 'tags' in extra) && prev.tags != null) entry.tags = prev.tags;
+      if (!(extra && 'favorite' in extra) && prev.favorite != null) entry.favorite = prev.favorite;
+      if (!(extra && 'metaUpdatedAt' in extra) && prev.metaUpdatedAt != null) entry.metaUpdatedAt = prev.metaUpdatedAt;
+    }
+    const store = await tx('readwrite');
     await wrap(store.put(entry));
     return entry.gameId;
+  }
+
+  // Met à jour les métadonnées utilisateur d'une partie (tags et/ou favori),
+  // en conservant le reste de l'entrée intacte. `patch` : { tags?, favorite? }.
+  // Estampille `metaUpdatedAt` (ISO) → sert à la synchro pour propager la
+  // dernière modification entre appareils. Renvoie l'entrée mise à jour (ou null).
+  async function setMeta(id, patch) {
+    const prev = await getEntry(id);
+    if (!prev) return null;
+    patch = patch || {};
+    const entry = Object.assign({}, prev);
+    if ('tags' in patch) entry.tags = normalizeTags(patch.tags);
+    if ('favorite' in patch) entry.favorite = !!patch.favorite;
+    entry.metaUpdatedAt = new Date().toISOString();
+    const store = await tx('readwrite');
+    await wrap(store.put(entry));
+    return entry;
   }
 
   async function getAllEntries() {
@@ -218,6 +268,7 @@
   root.FabDB = {
     open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
     putEntry, buildExport, normalizeImport, exportAll, importEntries,
-    markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted
+    markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted,
+    normalizeTags, setMeta
   };
 })(typeof self !== 'undefined' ? self : this);

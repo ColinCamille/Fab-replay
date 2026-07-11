@@ -1000,6 +1000,47 @@ footer a{color:var(--text-dim)}
 #dashboardBody .crow .cv{font-family:'Cinzel',serif;font-size:.72rem;font-weight:700;width:1.1rem;text-align:center;flex-shrink:0}
 #dashboardBody .crow.win .cv{color:var(--green)} #dashboardBody .crow.loss .cv{color:var(--red)} #dashboardBody .crow.pending .cv{color:var(--text-faint)}
 
+/* ---------- Favori + tags (historique) ---------- */
+/* Filtre « favoris » dans la barre de résultats. */
+#dashboardBody .chip.fav[aria-pressed="true"]{border-color:rgba(201,162,39,.55);color:var(--accent)}
+/* Actions à droite d'une carte (favori · tags · suppression). */
+#dashboardBody .gacts{display:flex;align-items:center;gap:1px;flex-shrink:0}
+#dashboardBody .crow .gacts{gap:0}
+/* Étoile favori. */
+#dashboardBody .gfav{background:transparent;border:0;color:var(--text-faint);font-size:.95rem;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:.14s}
+#dashboardBody .gfav:hover{color:var(--accent);background:rgba(201,162,39,.12)}
+#dashboardBody .gfav.on{color:var(--accent)}
+#dashboardBody .gcard.isfav{border-color:rgba(201,162,39,.4)}
+#dashboardBody .gcard.isfav::after{content:'★';position:absolute;top:5px;right:7px;font-size:.6rem;color:var(--accent);opacity:.5}
+/* Bouton édition des tags. */
+#dashboardBody .gtagbtn{background:transparent;border:0;color:var(--text-faint);font-size:.82rem;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:.14s;filter:grayscale(.5);opacity:.75}
+#dashboardBody .gtagbtn:hover{background:rgba(255,255,255,.07);filter:none;opacity:1}
+#dashboardBody .gtagbtn.has{filter:none;opacity:1}
+/* Chips de tags affichés sur les cartes. */
+#dashboardBody .gtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+#dashboardBody .gtag{font-size:.6rem;font-weight:600;color:var(--accent);background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.28);border-radius:999px;padding:1px 8px;line-height:1.5;letter-spacing:.02em}
+#dashboardBody .crow .ctags{display:inline-flex;gap:4px;margin-left:7px;vertical-align:middle}
+#dashboardBody .crow .ctags .gtag{font-size:.56rem;padding:0 6px}
+
+/* Éditeur de tags (fenêtre modale globale, hors #dashboardBody). */
+.taged-back{position:fixed;inset:0;background:rgba(6,8,14,.6);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:300;padding:18px}
+.taged{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--accent-dim);border-radius:14px;padding:16px;box-shadow:0 14px 40px rgba(0,0,0,.6)}
+.taged-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:'Cinzel',serif;font-size:.9rem;color:var(--text);margin-bottom:12px}
+.taged-hd i{color:var(--text-faint);font-style:normal;font-size:.8rem;margin:0 2px}
+.taged-x{background:transparent;border:0;color:var(--text-faint);font-size:1rem;cursor:pointer;padding:2px 6px;border-radius:6px;line-height:1}
+.taged-x:hover{color:var(--red);background:rgba(224,85,90,.12)}
+.taged-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:30px;margin-bottom:12px}
+.taged-empty{font-size:.74rem;color:var(--text-faint);font-style:italic}
+.taged-chip{display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:600;color:var(--accent);background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.35);border-radius:999px;padding:3px 10px;cursor:pointer;font-family:'Inter',sans-serif;transition:.14s}
+.taged-chip:hover{border-color:var(--red);color:var(--red);background:rgba(224,85,90,.12)}
+.taged-chip .x{font-size:.66rem;opacity:.8}
+.taged-add{display:flex;gap:8px}
+.taged-add input{flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 12px;font-size:.82rem;font-family:'Inter',sans-serif}
+.taged-add input:focus{outline:none;border-color:var(--accent-dim)}
+.taged-add button{background:var(--accent);border:0;color:#1a1508;font-weight:700;border-radius:9px;padding:8px 14px;font-size:.8rem;cursor:pointer;font-family:'Inter',sans-serif;flex-shrink:0}
+.taged-add button:hover{filter:brightness(1.08)}
+.taged-hint{font-size:.66rem;color:var(--text-faint);margin-top:10px;text-align:center}
+
 /* toast (global, hors #dashboardBody) */
 .hx-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(10px);background:var(--panel-2);border:1px solid var(--accent-dim);color:var(--text);padding:10px 16px;border-radius:10px;font-size:.8rem;opacity:0;pointer-events:none;transition:.2s;z-index:200;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 .hx-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}

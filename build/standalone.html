@@ -1007,6 +1007,47 @@ footer a{color:var(--text-dim)}
 #dashboardBody .crow .cv{font-family:'Cinzel',serif;font-size:.72rem;font-weight:700;width:1.1rem;text-align:center;flex-shrink:0}
 #dashboardBody .crow.win .cv{color:var(--green)} #dashboardBody .crow.loss .cv{color:var(--red)} #dashboardBody .crow.pending .cv{color:var(--text-faint)}
 
+/* ---------- Favori + tags (historique) ---------- */
+/* Filtre « favoris » dans la barre de résultats. */
+#dashboardBody .chip.fav[aria-pressed="true"]{border-color:rgba(201,162,39,.55);color:var(--accent)}
+/* Actions à droite d'une carte (favori · tags · suppression). */
+#dashboardBody .gacts{display:flex;align-items:center;gap:1px;flex-shrink:0}
+#dashboardBody .crow .gacts{gap:0}
+/* Étoile favori. */
+#dashboardBody .gfav{background:transparent;border:0;color:var(--text-faint);font-size:.95rem;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:.14s}
+#dashboardBody .gfav:hover{color:var(--accent);background:rgba(201,162,39,.12)}
+#dashboardBody .gfav.on{color:var(--accent)}
+#dashboardBody .gcard.isfav{border-color:rgba(201,162,39,.4)}
+#dashboardBody .gcard.isfav::after{content:'★';position:absolute;top:5px;right:7px;font-size:.6rem;color:var(--accent);opacity:.5}
+/* Bouton édition des tags. */
+#dashboardBody .gtagbtn{background:transparent;border:0;color:var(--text-faint);font-size:.82rem;cursor:pointer;padding:4px 6px;border-radius:6px;line-height:1;transition:.14s;filter:grayscale(.5);opacity:.75}
+#dashboardBody .gtagbtn:hover{background:rgba(255,255,255,.07);filter:none;opacity:1}
+#dashboardBody .gtagbtn.has{filter:none;opacity:1}
+/* Chips de tags affichés sur les cartes. */
+#dashboardBody .gtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+#dashboardBody .gtag{font-size:.6rem;font-weight:600;color:var(--accent);background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.28);border-radius:999px;padding:1px 8px;line-height:1.5;letter-spacing:.02em}
+#dashboardBody .crow .ctags{display:inline-flex;gap:4px;margin-left:7px;vertical-align:middle}
+#dashboardBody .crow .ctags .gtag{font-size:.56rem;padding:0 6px}
+
+/* Éditeur de tags (fenêtre modale globale, hors #dashboardBody). */
+.taged-back{position:fixed;inset:0;background:rgba(6,8,14,.6);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:300;padding:18px}
+.taged{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--accent-dim);border-radius:14px;padding:16px;box-shadow:0 14px 40px rgba(0,0,0,.6)}
+.taged-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:'Cinzel',serif;font-size:.9rem;color:var(--text);margin-bottom:12px}
+.taged-hd i{color:var(--text-faint);font-style:normal;font-size:.8rem;margin:0 2px}
+.taged-x{background:transparent;border:0;color:var(--text-faint);font-size:1rem;cursor:pointer;padding:2px 6px;border-radius:6px;line-height:1}
+.taged-x:hover{color:var(--red);background:rgba(224,85,90,.12)}
+.taged-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:30px;margin-bottom:12px}
+.taged-empty{font-size:.74rem;color:var(--text-faint);font-style:italic}
+.taged-chip{display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:600;color:var(--accent);background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.35);border-radius:999px;padding:3px 10px;cursor:pointer;font-family:'Inter',sans-serif;transition:.14s}
+.taged-chip:hover{border-color:var(--red);color:var(--red);background:rgba(224,85,90,.12)}
+.taged-chip .x{font-size:.66rem;opacity:.8}
+.taged-add{display:flex;gap:8px}
+.taged-add input{flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 12px;font-size:.82rem;font-family:'Inter',sans-serif}
+.taged-add input:focus{outline:none;border-color:var(--accent-dim)}
+.taged-add button{background:var(--accent);border:0;color:#1a1508;font-weight:700;border-radius:9px;padding:8px 14px;font-size:.8rem;cursor:pointer;font-family:'Inter',sans-serif;flex-shrink:0}
+.taged-add button:hover{filter:brightness(1.08)}
+.taged-hint{font-size:.66rem;color:var(--text-faint);margin-top:10px;text-align:center}
+
 /* toast (global, hors #dashboardBody) */
 .hx-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(10px);background:var(--panel-2);border:1px solid var(--accent-dim);color:var(--text);padding:10px 16px;border-radius:10px;font-size:.8rem;opacity:0;pointer-events:none;transition:.2s;z-index:200;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 .hx-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -2460,6 +2501,29 @@ footer a{color:var(--text-dim)}
     return (h >>> 0).toString(36);
   }
 
+  // ---------- Métadonnées utilisateur (tags libres, favori) ----------
+  // Rangées AU NIVEAU DE L'ENTRÉE (à côté de gameId), pas dans le record :
+  //   - elles se synchronisent « gratuitement » (cloudEntry recopie l'entrée),
+  //   - elles survivent à un re-parsing du record (le record peut être régénéré).
+  // Nettoie une liste de tags : chaîne(s) → tableau trimé, sans doublon
+  // (comparaison insensible à la casse, on garde la 1ʳᵉ graphie vue), bornes
+  // raisonnables. Pur → testable en Node.
+  function normalizeTags(arr) {
+    if (arr == null) arr = [];
+    if (!Array.isArray(arr)) arr = [arr];
+    const out = [], seen = new Set();
+    for (const raw of arr) {
+      const t = String(raw == null ? '' : raw).trim().replace(/\s+/g, ' ').slice(0, 40);
+      if (!t) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+      if (out.length >= 20) break;
+    }
+    return out;
+  }
+
   // ---------- Pierres tombales (suppressions persistantes) ----------
   // La suppression est locale, mais la synchro (sync.js pull) ré-injecte
   // sinon toute partie absente depuis le dépôt (library.json + data/raw du
@@ -2533,11 +2597,38 @@ footer a{color:var(--text-dim)}
   }
 
   // Upsert (put) : ré-importer la même partie écrase proprement.
+  // On PRÉSERVE les métadonnées utilisateur (tags, favori) déjà posées :
+  // un ré-import manuel ou un re-téléchargement d'une partie corrigée en amont
+  // (synchro grabber) ne doit jamais effacer les étiquettes/favoris locaux —
+  // sauf si l'appelant fournit explicitement ces champs via `extra`.
   async function putGame(record, raw, extra) {
-    const store = await tx('readwrite');
     const entry = toEntry(record, raw, extra);
+    const prev = await getEntry(entry.gameId);          // tx séparée (évite un tx inactif)
+    if (prev) {
+      if (!(extra && 'tags' in extra) && prev.tags != null) entry.tags = prev.tags;
+      if (!(extra && 'favorite' in extra) && prev.favorite != null) entry.favorite = prev.favorite;
+      if (!(extra && 'metaUpdatedAt' in extra) && prev.metaUpdatedAt != null) entry.metaUpdatedAt = prev.metaUpdatedAt;
+    }
+    const store = await tx('readwrite');
     await wrap(store.put(entry));
     return entry.gameId;
+  }
+
+  // Met à jour les métadonnées utilisateur d'une partie (tags et/ou favori),
+  // en conservant le reste de l'entrée intacte. `patch` : { tags?, favorite? }.
+  // Estampille `metaUpdatedAt` (ISO) → sert à la synchro pour propager la
+  // dernière modification entre appareils. Renvoie l'entrée mise à jour (ou null).
+  async function setMeta(id, patch) {
+    const prev = await getEntry(id);
+    if (!prev) return null;
+    patch = patch || {};
+    const entry = Object.assign({}, prev);
+    if ('tags' in patch) entry.tags = normalizeTags(patch.tags);
+    if ('favorite' in patch) entry.favorite = !!patch.favorite;
+    entry.metaUpdatedAt = new Date().toISOString();
+    const store = await tx('readwrite');
+    await wrap(store.put(entry));
+    return entry;
   }
 
   async function getAllEntries() {
@@ -2639,7 +2730,8 @@ footer a{color:var(--text-dim)}
   root.FabDB = {
     open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
     putEntry, buildExport, normalizeImport, exportAll, importEntries,
-    markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted
+    markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted,
+    normalizeTags, setMeta
   };
 })(typeof self !== 'undefined' ? self : this);
 
@@ -2753,7 +2845,7 @@ footer a{color:var(--text-dim)}
   //   2. data/raw/*.txt      : logs bruts déposés par le grabber, parsés ici
   //      (chaque brut n'est récupéré qu'une fois par appareil).
   async function pull() {
-    let added = 0, removed = 0, sawData = false;
+    let added = 0, removed = 0, metaUpdated = 0, sawData = false;
 
     // --- 0. Suppressions PARTAGÉES (inter-appareil) ---
     // On applique d'abord la liste du dépôt : on retire localement les parties
@@ -2778,9 +2870,21 @@ footer a{color:var(--text-dim)}
       const cloud = root.FabDB.normalizeImport(lib);
       if (cloud.length) {
         const local = await root.FabDB.getAllEntries();
-        const have = new Set(local.map(e => String(e.gameId)));
+        const localById = new Map(local.map(e => [String(e.gameId), e]));
         for (const e of cloud) {
-          if (have.has(String(e.gameId)) || dead.has(String(e.gameId))) continue;
+          const id = String(e.gameId);
+          if (dead.has(id)) continue;
+          const localE = localById.get(id);
+          if (localE) {
+            // Déjà en local : on ne réécrit pas la partie, mais on fusionne les
+            // métadonnées utilisateur (tags/favori) si le nuage porte une version
+            // plus récente (metaUpdatedAt) → propagation des étiquettes/favoris.
+            if (e.metaUpdatedAt && (!localE.metaUpdatedAt || e.metaUpdatedAt > localE.metaUpdatedAt) && root.FabDB.setMeta) {
+              try { await root.FabDB.setMeta(id, { tags: e.tags || [], favorite: !!e.favorite }); metaUpdated++; }
+              catch (err) { console.error(err); }
+            }
+            continue;
+          }
           try { await root.FabDB.putEntry(e); added++; } catch (err) { console.error(err); }
         }
       }
@@ -2824,8 +2928,8 @@ footer a{color:var(--text-dim)}
       }
     }
 
-    if (!sawData) return { added: 0, removed: removed, updated: updated, offline: true };
-    return { added: added, removed: removed, updated: updated };
+    if (!sawData) return { added: 0, removed: removed, updated: updated, metaUpdated: metaUpdated, offline: true };
+    return { added: added, removed: removed, updated: updated, metaUpdated: metaUpdated };
   }
 
   // ---------- Écriture (avec token) ----------
@@ -4297,6 +4401,15 @@ footer a{color:var(--text-dim)}
     return null;
   }
 
+  // Clé de comparaison d'un tag (insensible à la casse/espaces).
+  const tagKey = t => String(t == null ? '' : t).trim().toLowerCase();
+  function entryTags(e) { return Array.isArray(e && e.tags) ? e.tags : []; }
+  function entryHasTag(e, tag) {
+    if (!tag) return true;
+    const k = tagKey(tag);
+    return entryTags(e).some(t => tagKey(t) === k);
+  }
+
   function passesFilters(rec, f) {
     if (!f.includeAI && isVsAI(rec)) return false;
     if (f.format && (rec.format || null) !== f.format) return false;
@@ -4320,17 +4433,19 @@ footer a{color:var(--text-dim)}
   // ---------- Cœur d'agrégation ----------
   // entries : [{ gameId, record }] ; filters : { includeAI, format, oppHero, period }
   function aggregate(entries, filters) {
-    const f = Object.assign({ includeAI: false, format: null, myHero: null, oppHero: null, period: 'all' }, filters || {});
+    const f = Object.assign({ includeAI: false, format: null, myHero: null, oppHero: null, period: 'all', tag: null }, filters || {});
 
     // Facettes (listes de valeurs) calculées sur TOUT, pour peupler les filtres.
     const formats = new Set(), oppHeroes = new Set(), myHeroes = new Set();
+    const tagMap = new Map();   // clé insensible à la casse → 1ʳᵉ graphie vue
     entries.forEach(e => {
       if (e.record.format) formats.add(e.record.format);
       const oh = oppHeroOf(e.record); if (oh) oppHeroes.add(oh);
       const mh = myHeroOf(e.record); if (mh) myHeroes.add(mh);
+      entryTags(e).forEach(t => { const k = tagKey(t); if (k && !tagMap.has(k)) tagMap.set(k, t); });
     });
 
-    const kept = entries.filter(e => passesFilters(e.record, f));
+    const kept = entries.filter(e => passesFilters(e.record, f) && entryHasTag(e, f.tag));
 
     // Tri chronologique (ancien → récent) pour la tendance ;
     // l'affichage de la liste se fait ensuite en ordre inverse.
@@ -4467,7 +4582,7 @@ footer a{color:var(--text-dim)}
 
     return {
       filters: f,
-      facets: { formats: Array.from(formats).sort(), myHeroes: Array.from(myHeroes).sort(), oppHeroes: Array.from(oppHeroes).sort() },
+      facets: { formats: Array.from(formats).sort(), myHeroes: Array.from(myHeroes).sort(), oppHeroes: Array.from(oppHeroes).sort(), tags: Array.from(tagMap.values()).sort((a, b) => a.localeCompare(b)) },
       kept,                                   // ordre chrono (ancien → récent)
       global: { games: kept.length, decided, wins, losses: decided - wins, winrate: winrate(wins, decided) },
       byMatchup, byMyHero, firstSecond, bestMatchups, worstMatchups, cardWinLoss, cardWinLossAll, cwlMin, trend, cardPerf, offAverages
@@ -4480,11 +4595,11 @@ footer a{color:var(--text-dim)}
   // sous #dashboardBody pour ne jamais entrer en collision avec le
   // reste de l'app (replay, header…).
   // ============================================================
-  let _entries = [], _onOpen = null, _onDelete = null, _built = false, _A = null, _L = null, _trendGeom = null;
+  let _entries = [], _onOpen = null, _onDelete = null, _onMeta = null, _built = false, _A = null, _L = null, _trendGeom = null;
   const DEFAULT_ACCENT = '#c9a227';
   const state = {
-    hero: null, format: '', opp: '', period: 'all', includeAI: false,
-    tab: 'stats', sub: 'overview', histView: 'detailed', res: 'all', q: '',
+    hero: null, format: '', opp: '', period: 'all', includeAI: false, tag: '',
+    tab: 'stats', sub: 'overview', histView: 'detailed', res: 'all', fav: false, q: '',
     cardQ: '', cardMode: 'total', cardCap: 20, cardSort: { key: 'played', dir: 'desc' }, cwlMin: 1
   };
   const CARD_COLS = [
@@ -4557,7 +4672,7 @@ footer a{color:var(--text-dim)}
   function themeHero() { themeFor(state.hero); }
 
   // ---------- Agrégations ----------
-  function statsAgg() { return aggregate(_entries, { includeAI: state.includeAI, format: state.format || null, myHero: state.hero || null, oppHero: state.opp || null, period: state.period }); }
+  function statsAgg() { return aggregate(_entries, { includeAI: state.includeAI, format: state.format || null, myHero: state.hero || null, oppHero: state.opp || null, period: state.period, tag: state.tag || null }); }
   function lifeAgg() { return aggregate(_entries, { includeAI: state.includeAI }); }
 
   // ---------- Squelette ----------
@@ -4569,6 +4684,7 @@ footer a{color:var(--text-dim)}
       '<div class="filters-row">' +
         '<span class="fchip"><select id="hxFormat"></select></span>' +
         '<span class="fchip"><select id="hxOpp"></select></span>' +
+        '<span class="fchip" id="hxTagChip" hidden><select id="hxTag"></select></span>' +
         '<div class="pseg" id="hxPeriod">' +
           '<button data-p="all" aria-pressed="true">Tout</button>' +
           '<button data-p="30d" aria-pressed="false">30 j</button>' +
@@ -4624,7 +4740,8 @@ footer a{color:var(--text-dim)}
         '<div class="resfilter" id="hxRes">' +
           '<button class="chip" data-res="all" aria-pressed="true">Toutes</button>' +
           '<button class="chip win" data-res="win" aria-pressed="false">Victoires</button>' +
-          '<button class="chip loss" data-res="loss" aria-pressed="false">Défaites</button></div>' +
+          '<button class="chip loss" data-res="loss" aria-pressed="false">Défaites</button>' +
+          '<button class="chip fav" id="hxFav" aria-pressed="false" title="N\'afficher que les parties en favori">☆ Favoris</button></div>' +
         '<div class="listmeta" id="hxMeta"></div>' +
         '<div id="hxList" class="grouped"></div>' +
       '</section>' +
@@ -4807,21 +4924,33 @@ footer a{color:var(--text-dim)}
   // ---------- Historique ----------
   function verdictCls(o) { return o == null ? 'pending' : (o ? 'win' : 'loss'); }
   function verdictLbl(o) { return o == null ? 'En cours' : (o ? 'Victoire' : 'Défaite'); }
+  const favBtnHTML = e => '<button class="gfav' + (e.favorite ? ' on' : '') + '" data-fav="' + esc2(e.gameId) + '" title="' + (e.favorite ? 'Retirer des favoris' : 'Mettre en favori') + '" aria-pressed="' + (!!e.favorite) + '" aria-label="Favori">' + (e.favorite ? '★' : '☆') + '</button>';
+  const tagBtnHTML = e => '<button class="gtagbtn' + (entryTags(e).length ? ' has' : '') + '" data-tag="' + esc2(e.gameId) + '" title="Modifier les tags" aria-label="Modifier les tags">🏷</button>';
+  function tagsRowHTML(e) {
+    const tags = entryTags(e);
+    if (!tags.length) return '';
+    return '<div class="gtags">' + tags.map(t => '<span class="gtag">' + esc2(t) + '</span>').join('') + '</div>';
+  }
   function gcardHTML(e) {
     const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
     const sub = [rec.format, fmtDate(dateOf(rec)), turnsOf(rec) + ' t', firstPlayerOf(rec) === false ? '2e' : (firstPlayerOf(rec) ? 'init.' : null)].filter(Boolean).concat(isVsAI(rec) ? ['🤖'] : []).join(' · ');
-    return '<div class="gcard ' + cls + '" data-id="' + esc2(e.gameId) + '"><div class="duo">' + avatarHTML(me, 'mini') + avatarHTML(op, 'mini opp') + '</div>' +
+    return '<div class="gcard ' + cls + (e.favorite ? ' isfav' : '') + '" data-id="' + esc2(e.gameId) + '"><div class="duo">' + avatarHTML(me, 'mini') + avatarHTML(op, 'mini opp') + '</div>' +
       '<div class="body"><div class="mu"><span class="me">' + esc2(me) + '</span><span class="vs">vs</span><span>' + esc2(op) + '</span></div>' +
-      '<div class="gsub">' + esc2(sub) + '</div></div><div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
-      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
+      '<div class="gsub">' + esc2(sub) + '</div>' + tagsRowHTML(e) + '</div>' +
+      '<div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
+      '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
+      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div></div>';
   }
   function crowHTML(e) {
     const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
-    return '<div class="crow ' + cls + '" data-id="' + esc2(e.gameId) + '"><span class="cdot"></span>' +
-      '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + '</span>' +
+    const tags = entryTags(e);
+    const tagMini = tags.length ? '<span class="ctags">' + tags.map(t => '<span class="gtag">' + esc2(t) + '</span>').join('') + '</span>' : '';
+    return '<div class="crow ' + cls + (e.favorite ? ' isfav' : '') + '" data-id="' + esc2(e.gameId) + '"><span class="cdot"></span>' +
+      '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + tagMini + '</span>' +
       '<span class="cmeta">' + fmtDate(dateOf(rec)) + ' · ' + turnsOf(rec) + 't</span>' +
       '<span class="cv">' + (o == null ? '·' : (o ? 'V' : 'D')) + '</span>' +
-      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
+      '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
+      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div></div>';
   }
   function histList() {
     const qn = norm(state.q);
@@ -4829,12 +4958,15 @@ footer a{color:var(--text-dim)}
       const o = outcome(e.record);
       if (state.res === 'win' && o !== true) return false;
       if (state.res === 'loss' && o !== false) return false;
-      if (qn) { const hay = norm([myHeroOf(e.record), oppHeroOf(e.record), e.record.format].filter(Boolean).join(' ')); if (hay.indexOf(qn) < 0) return false; }
+      if (state.fav && !e.favorite) return false;
+      if (qn) { const hay = norm([myHeroOf(e.record), oppHeroOf(e.record), e.record.format].concat(entryTags(e)).filter(Boolean).join(' ')); if (hay.indexOf(qn) < 0) return false; }
       return true;
     });
   }
   function renderHistory() {
     const list = D.getElementById('hxList'), gs = histList();
+    const favBtn = D.getElementById('hxFav');
+    if (favBtn) { favBtn.setAttribute('aria-pressed', state.fav); favBtn.textContent = (state.fav ? '★' : '☆') + ' Favoris'; }
     list.className = state.histView === 'compact' ? 'compact' : 'grouped';
     const w = gs.filter(e => outcome(e.record) === true).length, l = gs.filter(e => outcome(e.record) === false).length, ong = gs.filter(e => outcome(e.record) == null).length;
     D.getElementById('hxMeta').textContent = gs.length + ' partie' + (gs.length > 1 ? 's' : '') + (gs.length ? '  ·  ' + w + 'V / ' + l + 'D' + (ong ? ' · ' + ong + ' en cours' : '') : '');
@@ -4867,12 +4999,28 @@ footer a{color:var(--text-dim)}
     sel.innerHTML = '<option value="">Tous formats</option>' + fmts.map(f => '<option value="' + esc2(f) + '">' + esc2(f) + '</option>').join('');
     sel.value = state.format;
   }
+  // Filtre « tag » : masqué tant qu'aucune partie n'est étiquetée (n'encombre
+  // pas les filtres pour qui n'utilise pas les tags). Le <datalist> partagé
+  // alimente l'auto-complétion de l'éditeur de tags.
+  function updateTagFacets() {
+    const chip = D.getElementById('hxTagChip'), sel = D.getElementById('hxTag'); if (!sel || !chip) return;
+    const tags = _L.facets.tags || [];
+    chip.hidden = tags.length === 0;
+    if (state.tag && tags.map(tagKey).indexOf(tagKey(state.tag)) < 0) state.tag = '';
+    sel.innerHTML = '<option value="">Tous tags</option>' + tags.map(t => '<option value="' + esc2(t) + '">' + esc2(t) + '</option>').join('');
+    sel.value = state.tag;
+    chip.classList.toggle('active', !!state.tag);
+    let dl = D.getElementById('hxTagList');
+    if (!dl) { dl = D.createElement('datalist'); dl.id = 'hxTagList'; D.body.appendChild(dl); }
+    dl.innerHTML = tags.map(t => '<option value="' + esc2(t) + '"></option>').join('');
+  }
   function syncFilters() {
     const ff = D.getElementById('hxFormat'); if (ff) { ff.value = state.format; ff.parentElement.classList.toggle('active', !!state.format); }
     const fo = D.getElementById('hxOpp'); if (fo) fo.parentElement.classList.toggle('active', !!state.opp);
+    const ft = D.getElementById('hxTag'); if (ft) { ft.value = state.tag; const chip = D.getElementById('hxTagChip'); if (chip) chip.classList.toggle('active', !!state.tag); }
     D.getElementById('hxPeriod').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x.dataset.p === state.period));
     const ai = D.getElementById('hxAI'); if (ai) { ai.setAttribute('aria-pressed', state.includeAI); ai.textContent = '🤖 IA ' + (state.includeAI ? 'incluse' : 'exclue'); }
-    const active = !!state.format || !!state.opp || state.period !== 'all' || state.includeAI;
+    const active = !!state.format || !!state.opp || !!state.tag || state.period !== 'all' || state.includeAI;
     const r = D.getElementById('hxReset'); if (r) r.hidden = !active;
   }
 
@@ -4883,8 +5031,89 @@ footer a{color:var(--text-dim)}
     const heroes = _L.byMyHero.filter(m => m.hero !== '(inconnu)' && m.games > 0).map(m => m.hero);
     if (state.hero && heroes.indexOf(state.hero) < 0) state.hero = null;
     _A = statsAgg();
-    themeHero(); updateFormatFacets(); updateOppFacets(); syncFilters();
+    themeHero(); updateFormatFacets(); updateOppFacets(); updateTagFacets(); syncFilters();
     renderCarousel(); renderStats(); renderHistory();
+  }
+
+  // ---------- Métadonnées : favori + tags (édition depuis l'historique) ----------
+  const normTags = arr => (root.FabDB && root.FabDB.normalizeTags) ? root.FabDB.normalizeTags(arr) : (Array.isArray(arr) ? arr.slice() : []);
+
+  // Applique une modification de méta EN LOCAL (optimiste) puis délègue la
+  // persistance + synchro au conteneur via _onMeta. On mute l'objet d'entrée
+  // en place (même référence que la DB au prochain reload) et on re-rend :
+  //   - tags → renderAll (peut changer les facettes et les stats filtrées) ;
+  //   - favori → historique seul (n'entre dans aucune agrégation de stats).
+  function applyMeta(id, patch) {
+    const e = _entries.find(x => String(x.gameId) === String(id));
+    if (!e) return;
+    if ('tags' in patch) e.tags = normTags(patch.tags);
+    if ('favorite' in patch) e.favorite = !!patch.favorite;
+    try { e.metaUpdatedAt = new Date().toISOString(); } catch (err) { /* env sans Date */ }
+    if ('tags' in patch) renderAll(); else renderHistory();
+    if (_onMeta) {
+      try { const r = _onMeta(id, { tags: e.tags || [], favorite: !!e.favorite }); if (r && typeof r.catch === 'function') r.catch(err => console.error(err)); }
+      catch (err) { console.error(err); }
+    }
+  }
+  function toggleFav(id) {
+    const e = _entries.find(x => String(x.gameId) === String(id));
+    if (!e) return;
+    const willFav = !e.favorite;
+    applyMeta(id, { favorite: willFav });
+    toast(willFav ? '★ Ajouté aux favoris' : 'Favori retiré');
+  }
+
+  // Éditeur de tags : petite fenêtre modale (overlay hors #dashboardBody, donc
+  // survit à un renderAll). Auto-complétion via le <datalist> partagé #hxTagList.
+  let _tagEscHandler = null;
+  function closeTagEditor() {
+    const b = D.getElementById('tagedBack'); if (b) b.remove();
+    if (_tagEscHandler) { D.removeEventListener('keydown', _tagEscHandler); _tagEscHandler = null; }
+  }
+  function openTagEditor(id) {
+    const e = _entries.find(x => String(x.gameId) === String(id));
+    if (!e) return;
+    const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?';
+    let tags = normTags(entryTags(e));
+    closeTagEditor();
+    const back = D.createElement('div');
+    back.className = 'taged-back'; back.id = 'tagedBack';
+    back.innerHTML =
+      '<div class="taged" role="dialog" aria-modal="true" aria-label="Modifier les tags">' +
+        '<div class="taged-hd"><span>🏷 Tags — ' + esc2(me) + ' <i>vs</i> ' + esc2(op) + '</span>' +
+        '<button class="taged-x" aria-label="Fermer">✕</button></div>' +
+        '<div class="taged-chips" id="tagedChips"></div>' +
+        '<form class="taged-add" id="tagedForm">' +
+          '<input id="tagedInput" list="hxTagList" placeholder="Ajouter un tag… (ex. gone, spell)" maxlength="40" autocomplete="off">' +
+          '<button type="submit">Ajouter</button></form>' +
+        '<div class="taged-hint">Entrée pour ajouter · clique un tag pour le retirer.</div>' +
+      '</div>';
+    D.body.appendChild(back);
+    const chipsEl = back.querySelector('#tagedChips'), input = back.querySelector('#tagedInput');
+    function renderChips() {
+      chipsEl.innerHTML = tags.length
+        ? tags.map(t => '<button type="button" class="taged-chip" data-t="' + esc2(t) + '">' + esc2(t) + ' <span class="x">✕</span></button>').join('')
+        : '<span class="taged-empty">Aucun tag pour l\'instant.</span>';
+    }
+    const commit = () => applyMeta(id, { tags: tags.slice() });
+    renderChips();
+    setTimeout(() => { try { input.focus(); } catch (e) { /* ignore */ } }, 30);
+    chipsEl.addEventListener('click', ev => {
+      const c = ev.target.closest('[data-t]'); if (!c) return;
+      const k = tagKey(c.dataset.t);
+      tags = tags.filter(t => tagKey(t) !== k);
+      renderChips(); commit();
+    });
+    back.querySelector('#tagedForm').addEventListener('submit', ev => {
+      ev.preventDefault();
+      const v = input.value.trim();
+      if (v) { tags = normTags(tags.concat(v)); renderChips(); commit(); }
+      input.value = ''; input.focus();
+    });
+    back.querySelector('.taged-x').addEventListener('click', closeTagEditor);
+    back.addEventListener('click', ev => { if (ev.target === back) closeTagEditor(); });
+    _tagEscHandler = ev => { if (ev.key === 'Escape') closeTagEditor(); };
+    D.addEventListener('keydown', _tagEscHandler);
   }
 
   // ---------- Câblage (une seule fois) ----------
@@ -4907,9 +5136,10 @@ footer a{color:var(--text-dim)}
     });
     host.querySelector('#hxFormat').addEventListener('change', e => { state.format = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
     host.querySelector('#hxOpp').addEventListener('change', e => { state.opp = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
+    host.querySelector('#hxTag').addEventListener('change', e => { state.tag = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
     host.querySelector('#hxPeriod').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.period = b.dataset.p; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); }));
     host.querySelector('#hxAI').addEventListener('click', () => { state.includeAI = !state.includeAI; renderAll(); });
-    host.querySelector('#hxReset').addEventListener('click', () => { state.format = ''; state.opp = ''; state.period = 'all'; state.includeAI = false; renderAll(); });
+    host.querySelector('#hxReset').addEventListener('click', () => { state.format = ''; state.opp = ''; state.tag = ''; state.period = 'all'; state.includeAI = false; renderAll(); });
     host.querySelector('#hxCardSearch').addEventListener('input', e => { state.cardQ = e.target.value; renderCardPerf(); });
     host.querySelector('#hxCardMode').addEventListener('change', e => { state.cardMode = e.target.value; renderCardPerf(); });
     host.querySelector('#hxCardCap').addEventListener('change', e => { state.cardCap = Number(e.target.value) || 0; renderCardPerf(); });
@@ -4929,9 +5159,14 @@ footer a{color:var(--text-dim)}
       th.addEventListener('touchend', trendLeave);
     }
     host.querySelector('#hxHistView').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.histView = b.dataset.hv; host.querySelector('#hxHistView').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
-    host.querySelector('#hxRes').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.res = b.dataset.res; host.querySelector('#hxRes').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
+    host.querySelector('#hxRes').querySelectorAll('button[data-res]').forEach(b => b.addEventListener('click', () => { state.res = b.dataset.res; host.querySelectorAll('#hxRes button[data-res]').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
+    host.querySelector('#hxFav').addEventListener('click', () => { state.fav = !state.fav; renderHistory(); });
     host.querySelector('#hxSearch').addEventListener('input', e => { state.q = e.target.value; renderHistory(); });
     host.querySelector('#hxList').addEventListener('click', e => {
+      const fav = e.target.closest('[data-fav]');
+      if (fav) { e.stopPropagation(); toggleFav(fav.dataset.fav); return; }
+      const tag = e.target.closest('[data-tag]');
+      if (tag) { e.stopPropagation(); openTagEditor(tag.dataset.tag); return; }
       const del = e.target.closest('[data-del]');
       if (del) { e.stopPropagation(); if (_onDelete) _onDelete(del.dataset.del); return; }
       const item = e.target.closest('[data-id]');
@@ -4943,6 +5178,7 @@ footer a{color:var(--text-dim)}
     _entries = (opts && opts.entries) || [];
     _onOpen = (opts && opts.onOpen) || null;
     _onDelete = (opts && opts.onDelete) || null;
+    _onMeta = (opts && opts.onMeta) || null;
     const host = D.getElementById('dashboardBody');
     if (!host) return;
     if (!_built) { buildSkeleton(host); wire(host); ensureToast(); _built = true; }
@@ -5007,9 +5243,21 @@ footer a{color:var(--text-dim)}
     $('#dashEmpty').style.display = hasGames ? 'none' : 'block';
     $('#dashboardBody').style.display = hasGames ? 'block' : 'none';
     if (hasGames) {
-      window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame });
+      window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onMeta: updateMeta });
     }
     return entries;
+  }
+
+  // Persiste une modification de méta (tags / favori) posée dans le dashboard,
+  // puis la publie dans le dépôt si la synchro est connectée sur cet appareil
+  // (fusion descendante gérée par FabSync.pull via metaUpdatedAt).
+  async function updateMeta(id, patch) {
+    const entry = await window.FabDB.setMeta(id, patch);
+    if (entry && window.FabSync.canWrite()) {
+      try { await window.FabSync.push([entry]); }
+      catch (e) { console.error(e); }
+    }
+    return entry;
   }
 
   // ---------- Onglets du replay (Déroulé / Table / Stats) ----------
@@ -5279,7 +5527,7 @@ footer a{color:var(--text-dim)}
     // (lecture statique, sans token) et les fusionne dans le cache local.
     try {
       const r = await window.FabSync.pull();
-      if (r.added || r.removed || r.updated) await reloadDashboard();
+      if (r.added || r.removed || r.updated || r.metaUpdated) await reloadDashboard();
     } catch (e) { console.error(e); }
 
     // Reprise d'un lien profond #game=<id> (après la synchro, la partie

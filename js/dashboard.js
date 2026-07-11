@@ -41,6 +41,15 @@
     return null;
   }
 
+  // Clé de comparaison d'un tag (insensible à la casse/espaces).
+  const tagKey = t => String(t == null ? '' : t).trim().toLowerCase();
+  function entryTags(e) { return Array.isArray(e && e.tags) ? e.tags : []; }
+  function entryHasTag(e, tag) {
+    if (!tag) return true;
+    const k = tagKey(tag);
+    return entryTags(e).some(t => tagKey(t) === k);
+  }
+
   function passesFilters(rec, f) {
     if (!f.includeAI && isVsAI(rec)) return false;
     if (f.format && (rec.format || null) !== f.format) return false;
@@ -64,17 +73,19 @@
   // ---------- Cœur d'agrégation ----------
   // entries : [{ gameId, record }] ; filters : { includeAI, format, oppHero, period }
   function aggregate(entries, filters) {
-    const f = Object.assign({ includeAI: false, format: null, myHero: null, oppHero: null, period: 'all' }, filters || {});
+    const f = Object.assign({ includeAI: false, format: null, myHero: null, oppHero: null, period: 'all', tag: null }, filters || {});
 
     // Facettes (listes de valeurs) calculées sur TOUT, pour peupler les filtres.
     const formats = new Set(), oppHeroes = new Set(), myHeroes = new Set();
+    const tagMap = new Map();   // clé insensible à la casse → 1ʳᵉ graphie vue
     entries.forEach(e => {
       if (e.record.format) formats.add(e.record.format);
       const oh = oppHeroOf(e.record); if (oh) oppHeroes.add(oh);
       const mh = myHeroOf(e.record); if (mh) myHeroes.add(mh);
+      entryTags(e).forEach(t => { const k = tagKey(t); if (k && !tagMap.has(k)) tagMap.set(k, t); });
     });
 
-    const kept = entries.filter(e => passesFilters(e.record, f));
+    const kept = entries.filter(e => passesFilters(e.record, f) && entryHasTag(e, f.tag));
 
     // Tri chronologique (ancien → récent) pour la tendance ;
     // l'affichage de la liste se fait ensuite en ordre inverse.
@@ -211,7 +222,7 @@
 
     return {
       filters: f,
-      facets: { formats: Array.from(formats).sort(), myHeroes: Array.from(myHeroes).sort(), oppHeroes: Array.from(oppHeroes).sort() },
+      facets: { formats: Array.from(formats).sort(), myHeroes: Array.from(myHeroes).sort(), oppHeroes: Array.from(oppHeroes).sort(), tags: Array.from(tagMap.values()).sort((a, b) => a.localeCompare(b)) },
       kept,                                   // ordre chrono (ancien → récent)
       global: { games: kept.length, decided, wins, losses: decided - wins, winrate: winrate(wins, decided) },
       byMatchup, byMyHero, firstSecond, bestMatchups, worstMatchups, cardWinLoss, cardWinLossAll, cwlMin, trend, cardPerf, offAverages
@@ -224,11 +235,11 @@
   // sous #dashboardBody pour ne jamais entrer en collision avec le
   // reste de l'app (replay, header…).
   // ============================================================
-  let _entries = [], _onOpen = null, _onDelete = null, _built = false, _A = null, _L = null, _trendGeom = null;
+  let _entries = [], _onOpen = null, _onDelete = null, _onMeta = null, _built = false, _A = null, _L = null, _trendGeom = null;
   const DEFAULT_ACCENT = '#c9a227';
   const state = {
-    hero: null, format: '', opp: '', period: 'all', includeAI: false,
-    tab: 'stats', sub: 'overview', histView: 'detailed', res: 'all', q: '',
+    hero: null, format: '', opp: '', period: 'all', includeAI: false, tag: '',
+    tab: 'stats', sub: 'overview', histView: 'detailed', res: 'all', fav: false, q: '',
     cardQ: '', cardMode: 'total', cardCap: 20, cardSort: { key: 'played', dir: 'desc' }, cwlMin: 1
   };
   const CARD_COLS = [
@@ -301,7 +312,7 @@
   function themeHero() { themeFor(state.hero); }
 
   // ---------- Agrégations ----------
-  function statsAgg() { return aggregate(_entries, { includeAI: state.includeAI, format: state.format || null, myHero: state.hero || null, oppHero: state.opp || null, period: state.period }); }
+  function statsAgg() { return aggregate(_entries, { includeAI: state.includeAI, format: state.format || null, myHero: state.hero || null, oppHero: state.opp || null, period: state.period, tag: state.tag || null }); }
   function lifeAgg() { return aggregate(_entries, { includeAI: state.includeAI }); }
 
   // ---------- Squelette ----------
@@ -313,6 +324,7 @@
       '<div class="filters-row">' +
         '<span class="fchip"><select id="hxFormat"></select></span>' +
         '<span class="fchip"><select id="hxOpp"></select></span>' +
+        '<span class="fchip" id="hxTagChip" hidden><select id="hxTag"></select></span>' +
         '<div class="pseg" id="hxPeriod">' +
           '<button data-p="all" aria-pressed="true">Tout</button>' +
           '<button data-p="30d" aria-pressed="false">30 j</button>' +
@@ -368,7 +380,8 @@
         '<div class="resfilter" id="hxRes">' +
           '<button class="chip" data-res="all" aria-pressed="true">Toutes</button>' +
           '<button class="chip win" data-res="win" aria-pressed="false">Victoires</button>' +
-          '<button class="chip loss" data-res="loss" aria-pressed="false">Défaites</button></div>' +
+          '<button class="chip loss" data-res="loss" aria-pressed="false">Défaites</button>' +
+          '<button class="chip fav" id="hxFav" aria-pressed="false" title="N\'afficher que les parties en favori">☆ Favoris</button></div>' +
         '<div class="listmeta" id="hxMeta"></div>' +
         '<div id="hxList" class="grouped"></div>' +
       '</section>' +
@@ -551,21 +564,33 @@
   // ---------- Historique ----------
   function verdictCls(o) { return o == null ? 'pending' : (o ? 'win' : 'loss'); }
   function verdictLbl(o) { return o == null ? 'En cours' : (o ? 'Victoire' : 'Défaite'); }
+  const favBtnHTML = e => '<button class="gfav' + (e.favorite ? ' on' : '') + '" data-fav="' + esc2(e.gameId) + '" title="' + (e.favorite ? 'Retirer des favoris' : 'Mettre en favori') + '" aria-pressed="' + (!!e.favorite) + '" aria-label="Favori">' + (e.favorite ? '★' : '☆') + '</button>';
+  const tagBtnHTML = e => '<button class="gtagbtn' + (entryTags(e).length ? ' has' : '') + '" data-tag="' + esc2(e.gameId) + '" title="Modifier les tags" aria-label="Modifier les tags">🏷</button>';
+  function tagsRowHTML(e) {
+    const tags = entryTags(e);
+    if (!tags.length) return '';
+    return '<div class="gtags">' + tags.map(t => '<span class="gtag">' + esc2(t) + '</span>').join('') + '</div>';
+  }
   function gcardHTML(e) {
     const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
     const sub = [rec.format, fmtDate(dateOf(rec)), turnsOf(rec) + ' t', firstPlayerOf(rec) === false ? '2e' : (firstPlayerOf(rec) ? 'init.' : null)].filter(Boolean).concat(isVsAI(rec) ? ['🤖'] : []).join(' · ');
-    return '<div class="gcard ' + cls + '" data-id="' + esc2(e.gameId) + '"><div class="duo">' + avatarHTML(me, 'mini') + avatarHTML(op, 'mini opp') + '</div>' +
+    return '<div class="gcard ' + cls + (e.favorite ? ' isfav' : '') + '" data-id="' + esc2(e.gameId) + '"><div class="duo">' + avatarHTML(me, 'mini') + avatarHTML(op, 'mini opp') + '</div>' +
       '<div class="body"><div class="mu"><span class="me">' + esc2(me) + '</span><span class="vs">vs</span><span>' + esc2(op) + '</span></div>' +
-      '<div class="gsub">' + esc2(sub) + '</div></div><div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
-      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
+      '<div class="gsub">' + esc2(sub) + '</div>' + tagsRowHTML(e) + '</div>' +
+      '<div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
+      '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
+      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div></div>';
   }
   function crowHTML(e) {
     const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
-    return '<div class="crow ' + cls + '" data-id="' + esc2(e.gameId) + '"><span class="cdot"></span>' +
-      '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + '</span>' +
+    const tags = entryTags(e);
+    const tagMini = tags.length ? '<span class="ctags">' + tags.map(t => '<span class="gtag">' + esc2(t) + '</span>').join('') + '</span>' : '';
+    return '<div class="crow ' + cls + (e.favorite ? ' isfav' : '') + '" data-id="' + esc2(e.gameId) + '"><span class="cdot"></span>' +
+      '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + tagMini + '</span>' +
       '<span class="cmeta">' + fmtDate(dateOf(rec)) + ' · ' + turnsOf(rec) + 't</span>' +
       '<span class="cv">' + (o == null ? '·' : (o ? 'V' : 'D')) + '</span>' +
-      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
+      '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
+      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div></div>';
   }
   function histList() {
     const qn = norm(state.q);
@@ -573,12 +598,15 @@
       const o = outcome(e.record);
       if (state.res === 'win' && o !== true) return false;
       if (state.res === 'loss' && o !== false) return false;
-      if (qn) { const hay = norm([myHeroOf(e.record), oppHeroOf(e.record), e.record.format].filter(Boolean).join(' ')); if (hay.indexOf(qn) < 0) return false; }
+      if (state.fav && !e.favorite) return false;
+      if (qn) { const hay = norm([myHeroOf(e.record), oppHeroOf(e.record), e.record.format].concat(entryTags(e)).filter(Boolean).join(' ')); if (hay.indexOf(qn) < 0) return false; }
       return true;
     });
   }
   function renderHistory() {
     const list = D.getElementById('hxList'), gs = histList();
+    const favBtn = D.getElementById('hxFav');
+    if (favBtn) { favBtn.setAttribute('aria-pressed', state.fav); favBtn.textContent = (state.fav ? '★' : '☆') + ' Favoris'; }
     list.className = state.histView === 'compact' ? 'compact' : 'grouped';
     const w = gs.filter(e => outcome(e.record) === true).length, l = gs.filter(e => outcome(e.record) === false).length, ong = gs.filter(e => outcome(e.record) == null).length;
     D.getElementById('hxMeta').textContent = gs.length + ' partie' + (gs.length > 1 ? 's' : '') + (gs.length ? '  ·  ' + w + 'V / ' + l + 'D' + (ong ? ' · ' + ong + ' en cours' : '') : '');
@@ -611,12 +639,28 @@
     sel.innerHTML = '<option value="">Tous formats</option>' + fmts.map(f => '<option value="' + esc2(f) + '">' + esc2(f) + '</option>').join('');
     sel.value = state.format;
   }
+  // Filtre « tag » : masqué tant qu'aucune partie n'est étiquetée (n'encombre
+  // pas les filtres pour qui n'utilise pas les tags). Le <datalist> partagé
+  // alimente l'auto-complétion de l'éditeur de tags.
+  function updateTagFacets() {
+    const chip = D.getElementById('hxTagChip'), sel = D.getElementById('hxTag'); if (!sel || !chip) return;
+    const tags = _L.facets.tags || [];
+    chip.hidden = tags.length === 0;
+    if (state.tag && tags.map(tagKey).indexOf(tagKey(state.tag)) < 0) state.tag = '';
+    sel.innerHTML = '<option value="">Tous tags</option>' + tags.map(t => '<option value="' + esc2(t) + '">' + esc2(t) + '</option>').join('');
+    sel.value = state.tag;
+    chip.classList.toggle('active', !!state.tag);
+    let dl = D.getElementById('hxTagList');
+    if (!dl) { dl = D.createElement('datalist'); dl.id = 'hxTagList'; D.body.appendChild(dl); }
+    dl.innerHTML = tags.map(t => '<option value="' + esc2(t) + '"></option>').join('');
+  }
   function syncFilters() {
     const ff = D.getElementById('hxFormat'); if (ff) { ff.value = state.format; ff.parentElement.classList.toggle('active', !!state.format); }
     const fo = D.getElementById('hxOpp'); if (fo) fo.parentElement.classList.toggle('active', !!state.opp);
+    const ft = D.getElementById('hxTag'); if (ft) { ft.value = state.tag; const chip = D.getElementById('hxTagChip'); if (chip) chip.classList.toggle('active', !!state.tag); }
     D.getElementById('hxPeriod').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x.dataset.p === state.period));
     const ai = D.getElementById('hxAI'); if (ai) { ai.setAttribute('aria-pressed', state.includeAI); ai.textContent = '🤖 IA ' + (state.includeAI ? 'incluse' : 'exclue'); }
-    const active = !!state.format || !!state.opp || state.period !== 'all' || state.includeAI;
+    const active = !!state.format || !!state.opp || !!state.tag || state.period !== 'all' || state.includeAI;
     const r = D.getElementById('hxReset'); if (r) r.hidden = !active;
   }
 
@@ -627,8 +671,89 @@
     const heroes = _L.byMyHero.filter(m => m.hero !== '(inconnu)' && m.games > 0).map(m => m.hero);
     if (state.hero && heroes.indexOf(state.hero) < 0) state.hero = null;
     _A = statsAgg();
-    themeHero(); updateFormatFacets(); updateOppFacets(); syncFilters();
+    themeHero(); updateFormatFacets(); updateOppFacets(); updateTagFacets(); syncFilters();
     renderCarousel(); renderStats(); renderHistory();
+  }
+
+  // ---------- Métadonnées : favori + tags (édition depuis l'historique) ----------
+  const normTags = arr => (root.FabDB && root.FabDB.normalizeTags) ? root.FabDB.normalizeTags(arr) : (Array.isArray(arr) ? arr.slice() : []);
+
+  // Applique une modification de méta EN LOCAL (optimiste) puis délègue la
+  // persistance + synchro au conteneur via _onMeta. On mute l'objet d'entrée
+  // en place (même référence que la DB au prochain reload) et on re-rend :
+  //   - tags → renderAll (peut changer les facettes et les stats filtrées) ;
+  //   - favori → historique seul (n'entre dans aucune agrégation de stats).
+  function applyMeta(id, patch) {
+    const e = _entries.find(x => String(x.gameId) === String(id));
+    if (!e) return;
+    if ('tags' in patch) e.tags = normTags(patch.tags);
+    if ('favorite' in patch) e.favorite = !!patch.favorite;
+    try { e.metaUpdatedAt = new Date().toISOString(); } catch (err) { /* env sans Date */ }
+    if ('tags' in patch) renderAll(); else renderHistory();
+    if (_onMeta) {
+      try { const r = _onMeta(id, { tags: e.tags || [], favorite: !!e.favorite }); if (r && typeof r.catch === 'function') r.catch(err => console.error(err)); }
+      catch (err) { console.error(err); }
+    }
+  }
+  function toggleFav(id) {
+    const e = _entries.find(x => String(x.gameId) === String(id));
+    if (!e) return;
+    const willFav = !e.favorite;
+    applyMeta(id, { favorite: willFav });
+    toast(willFav ? '★ Ajouté aux favoris' : 'Favori retiré');
+  }
+
+  // Éditeur de tags : petite fenêtre modale (overlay hors #dashboardBody, donc
+  // survit à un renderAll). Auto-complétion via le <datalist> partagé #hxTagList.
+  let _tagEscHandler = null;
+  function closeTagEditor() {
+    const b = D.getElementById('tagedBack'); if (b) b.remove();
+    if (_tagEscHandler) { D.removeEventListener('keydown', _tagEscHandler); _tagEscHandler = null; }
+  }
+  function openTagEditor(id) {
+    const e = _entries.find(x => String(x.gameId) === String(id));
+    if (!e) return;
+    const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?';
+    let tags = normTags(entryTags(e));
+    closeTagEditor();
+    const back = D.createElement('div');
+    back.className = 'taged-back'; back.id = 'tagedBack';
+    back.innerHTML =
+      '<div class="taged" role="dialog" aria-modal="true" aria-label="Modifier les tags">' +
+        '<div class="taged-hd"><span>🏷 Tags — ' + esc2(me) + ' <i>vs</i> ' + esc2(op) + '</span>' +
+        '<button class="taged-x" aria-label="Fermer">✕</button></div>' +
+        '<div class="taged-chips" id="tagedChips"></div>' +
+        '<form class="taged-add" id="tagedForm">' +
+          '<input id="tagedInput" list="hxTagList" placeholder="Ajouter un tag… (ex. gone, spell)" maxlength="40" autocomplete="off">' +
+          '<button type="submit">Ajouter</button></form>' +
+        '<div class="taged-hint">Entrée pour ajouter · clique un tag pour le retirer.</div>' +
+      '</div>';
+    D.body.appendChild(back);
+    const chipsEl = back.querySelector('#tagedChips'), input = back.querySelector('#tagedInput');
+    function renderChips() {
+      chipsEl.innerHTML = tags.length
+        ? tags.map(t => '<button type="button" class="taged-chip" data-t="' + esc2(t) + '">' + esc2(t) + ' <span class="x">✕</span></button>').join('')
+        : '<span class="taged-empty">Aucun tag pour l\'instant.</span>';
+    }
+    const commit = () => applyMeta(id, { tags: tags.slice() });
+    renderChips();
+    setTimeout(() => { try { input.focus(); } catch (e) { /* ignore */ } }, 30);
+    chipsEl.addEventListener('click', ev => {
+      const c = ev.target.closest('[data-t]'); if (!c) return;
+      const k = tagKey(c.dataset.t);
+      tags = tags.filter(t => tagKey(t) !== k);
+      renderChips(); commit();
+    });
+    back.querySelector('#tagedForm').addEventListener('submit', ev => {
+      ev.preventDefault();
+      const v = input.value.trim();
+      if (v) { tags = normTags(tags.concat(v)); renderChips(); commit(); }
+      input.value = ''; input.focus();
+    });
+    back.querySelector('.taged-x').addEventListener('click', closeTagEditor);
+    back.addEventListener('click', ev => { if (ev.target === back) closeTagEditor(); });
+    _tagEscHandler = ev => { if (ev.key === 'Escape') closeTagEditor(); };
+    D.addEventListener('keydown', _tagEscHandler);
   }
 
   // ---------- Câblage (une seule fois) ----------
@@ -651,9 +776,10 @@
     });
     host.querySelector('#hxFormat').addEventListener('change', e => { state.format = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
     host.querySelector('#hxOpp').addEventListener('change', e => { state.opp = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
+    host.querySelector('#hxTag').addEventListener('change', e => { state.tag = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
     host.querySelector('#hxPeriod').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.period = b.dataset.p; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); }));
     host.querySelector('#hxAI').addEventListener('click', () => { state.includeAI = !state.includeAI; renderAll(); });
-    host.querySelector('#hxReset').addEventListener('click', () => { state.format = ''; state.opp = ''; state.period = 'all'; state.includeAI = false; renderAll(); });
+    host.querySelector('#hxReset').addEventListener('click', () => { state.format = ''; state.opp = ''; state.tag = ''; state.period = 'all'; state.includeAI = false; renderAll(); });
     host.querySelector('#hxCardSearch').addEventListener('input', e => { state.cardQ = e.target.value; renderCardPerf(); });
     host.querySelector('#hxCardMode').addEventListener('change', e => { state.cardMode = e.target.value; renderCardPerf(); });
     host.querySelector('#hxCardCap').addEventListener('change', e => { state.cardCap = Number(e.target.value) || 0; renderCardPerf(); });
@@ -673,9 +799,14 @@
       th.addEventListener('touchend', trendLeave);
     }
     host.querySelector('#hxHistView').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.histView = b.dataset.hv; host.querySelector('#hxHistView').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
-    host.querySelector('#hxRes').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.res = b.dataset.res; host.querySelector('#hxRes').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
+    host.querySelector('#hxRes').querySelectorAll('button[data-res]').forEach(b => b.addEventListener('click', () => { state.res = b.dataset.res; host.querySelectorAll('#hxRes button[data-res]').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
+    host.querySelector('#hxFav').addEventListener('click', () => { state.fav = !state.fav; renderHistory(); });
     host.querySelector('#hxSearch').addEventListener('input', e => { state.q = e.target.value; renderHistory(); });
     host.querySelector('#hxList').addEventListener('click', e => {
+      const fav = e.target.closest('[data-fav]');
+      if (fav) { e.stopPropagation(); toggleFav(fav.dataset.fav); return; }
+      const tag = e.target.closest('[data-tag]');
+      if (tag) { e.stopPropagation(); openTagEditor(tag.dataset.tag); return; }
       const del = e.target.closest('[data-del]');
       if (del) { e.stopPropagation(); if (_onDelete) _onDelete(del.dataset.del); return; }
       const item = e.target.closest('[data-id]');
@@ -687,6 +818,7 @@
     _entries = (opts && opts.entries) || [];
     _onOpen = (opts && opts.onOpen) || null;
     _onDelete = (opts && opts.onDelete) || null;
+    _onMeta = (opts && opts.onMeta) || null;
     const host = D.getElementById('dashboardBody');
     if (!host) return;
     if (!_built) { buildSkeleton(host); wire(host); ensureToast(); _built = true; }

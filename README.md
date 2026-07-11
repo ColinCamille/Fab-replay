@@ -227,6 +227,7 @@ npm run build # régénère build/standalone.html
 - **Phase 2** (fait) : synchro auto entre appareils via le dépôt GitHub (lecture sans token, écriture par token), export/import `.json`, modèle « 2 dépôts » pour le partage.
 - **Phase 3** (fait, validé en conditions réelles) : envoi direct de la partie dans le dépôt depuis le grabber (bouton `☁ Dépôt` / `Alt+Shift+S`, ou auto en fin de partie, avec re-envoi après le swap pour les stats adverses). Le `.txt` brut est déposé dans `data/raw/`, le viewer l'ingère et le parse au chargement. Voir `docs/PHASE3-grabber.md`.
 - **Phase 4** (fait) : vue **Table** (« tapis miroir ») rejouant le combat sur un plateau (mains, arsenal, cimetière, banni, pitch, permanents/tokens des 2 camps, activations) ; capture des terrains/héros fiabilisée côté grabber (héros issus des stats officielles) ; synchro qui **met à jour** une partie déjà en cache quand elle est corrigée en amont.
+- **Phase 5** (fait) : **tags libres** et **favoris** par partie (depuis l'onglet Historique — ⭐ + éditeur de tags avec auto-complétion). Un **filtre « tag »** dans le tableau de bord segmente toutes les stats par variante de deck (ex. Oscilio « gone » vs « spell ») ; un filtre **⭐ favoris** dans l'historique. Ces métadonnées sont rangées au niveau de l'entrée (à côté de `gameId`) → elles se **synchronisent** entre appareils via le dépôt (fusion par `metaUpdatedAt`), survivent aux ré-imports et au re-parsing du record.
 
 ---
 Données non affiliées à Legend Story Studios. Images via goagain.dev.
