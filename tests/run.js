@@ -264,6 +264,28 @@ const usedTl = BR.buildTimeline(usedGame);
 assert(usedTl.steps.some(s => (s.state.meEquipUsed || []).indexOf('lightning greaves') >= 0), 'équipement activé marqué « utilisé » ce tour');
 eq(usedTl.steps[usedTl.steps.length - 1].state.meEquipUsed.length, 0, '« utilisé » réarmé au tour suivant');
 
+// Arme activée → NON grisée (exclue du « utilisé »).
+const wpnTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: { weaponL: { name: 'Anothos' } } }, opp: { hero: 'Bravo', equipment: {} } },
+  lifeSeries: { me: [40], opp: [40] },
+  turns: [ { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], events: [ { type: 'activated', player: 'Me', card: 'Anothos' } ] } ]
+});
+assert(wpnTl.steps.every(s => (s.state.meEquipUsed || []).indexOf('anothos') < 0), 'arme activée NON grisée');
+
+// Crown of Providence : bloque → détruite en fin de tour (règle carte, non journalisée).
+const crownTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: { head: { name: 'Crown of Providence' } } }, opp: { hero: 'Bravo', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Opp', label: 'Opp — Tour 1', hand: [], arsenal: [], events: [ { type: 'played', player: 'Opp', card: 'Big Attack' }, { type: 'blocked', player: 'Me', cards: ['Crown of Providence'] }, { type: 'combatResult', hit: false } ] },
+    { player: 'Me', label: 'Me — Tour 2', hand: [], arsenal: [], events: [ { type: 'played', player: 'Me', card: 'Whatever' }, { type: 'combatResult', hit: false } ] }
+  ]
+});
+assert(crownTl.steps[0].state.meEquipGone.indexOf('crown of providence') < 0, 'Crown encore présente pendant le tour où elle bloque');
+assert(crownTl.steps[crownTl.steps.length - 1].state.meEquipGone.indexOf('crown of providence') >= 0, 'Crown retirée dès le tour suivant (cassée en bloquant)');
+
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;
 console.log('DB —');

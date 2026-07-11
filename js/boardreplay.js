@@ -33,6 +33,11 @@
     return HERO_TOKENS[k] || [];
   }
 
+  // Équipements qui se DÉTRUISENT en fin de tour lorsqu'ils bloquent (règle de
+  // la carte, NON journalisée par Talishar comme « was destroyed » → il faut
+  // l'appliquer nous-mêmes). Clé = nom normalisé. Étendre au besoin.
+  const BREAK_ON_BLOCK = { 'crown of providence': true };
+
   // ---------- Images (cache local ; CardImages cache déjà côté réseau) ----------
   const _img = {};
   function resolveImg(name, hero) {
@@ -64,12 +69,16 @@
   // RECONSTRUCTION — GAME parsé → liste d'étapes { turn, actor, stage, state }
   // ============================================================
   function equipSet(pl) { const s = {}; const e = (pl && pl.equipment) || {}; Object.keys(e).forEach(k => { if (e[k] && e[k].name) s[norm(e[k].name)] = 1; }); return s; }
+  // Noms normalisés des ARMES uniquement (slots weaponL/weaponR) — pour les
+  // exclure du grisé « utilisé » (une arme qui attaque n'est pas « épuisée »).
+  function weaponSet(pl) { const s = {}; const e = (pl && pl.equipment) || {}; ['weaponL', 'weaponR'].forEach(k => { if (e[k] && e[k].name) s[norm(e[k].name)] = 1; }); return s; }
 
   function buildTimeline(GAME) {
     const MY = GAME.myName, OPP = GAME.oppName;
     const HERO = { me: (GAME.players.me && GAME.players.me.hero) || MY, opp: (GAME.players.opp && GAME.players.opp.hero) || OPP };
     const HEROTOK = { me: tokensForHero(HERO.me), opp: tokensForHero(HERO.opp) };
     const EQ = { me: equipSet(GAME.players.me), opp: equipSet(GAME.players.opp) };
+    const WPN = { me: weaponSet(GAME.players.me), opp: weaponSet(GAME.players.opp) };
     const sideOf = p => (p === MY ? 'me' : 'opp');
     const isEquip = (side, card) => !!EQ[side][norm(card)];
     const ls = GAME.lifeSeries || { me: [], opp: [] };
@@ -162,6 +171,7 @@
       const evs = t.events || [], consumed = {};
       let openAtk = null, curBlocks = [], curReactions = [];
       let lastAction = null, ended = false;   // dernière carte jouée/activée (cause du coup fatal) ; fin de partie atteinte
+      let pendingBreak = [];   // équipements « casse en bloquant » à détruire en fin de CE tour
       // Affiche en carte SEULE une carte de l'attaquant restée sans combat
       // (action hors-combat). Une vraie carte d'ATTAQUE, elle, n'est montrée que
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
@@ -192,10 +202,11 @@
           // sans passer par le différé de combat (openAtk).
           lastAction = e.card;
           const side = sideOf(e.player);
-          // Si la carte activée EST une pièce d'équipement (armure/arme/item),
+          // Si la carte activée est une pièce d'équipement NON-ARME (armure/item),
           // on la marque « utilisée » pour ce tour → grisée sur le plateau
-          // (réarmée au tour suivant). Les activations de héros ne matchent pas.
-          if (EQ[side][norm(e.card)]) { const u = side === 'me' ? st.meEquipUsed : st.oppEquipUsed; if (u.indexOf(norm(e.card)) < 0) u.push(norm(e.card)); }
+          // (réarmée au tour suivant). Les armes et les activations de héros ne
+          // sont pas grisées (une arme qui attaque n'est pas « épuisée »).
+          if (EQ[side][norm(e.card)] && !WPN[side][norm(e.card)]) { const u = side === 'me' ? st.meEquipUsed : st.oppEquipUsed; if (u.indexOf(norm(e.card)) < 0) u.push(norm(e.card)); }
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
@@ -215,7 +226,12 @@
           const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
         } else if (e.type === 'blocked') {
           const s = sideOf(e.player);
-          (e.cards || []).forEach(c => { const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq }); });
+          (e.cards || []).forEach(c => {
+            const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq });
+            // Équipement « casse en bloquant » (ex. Crown of Providence) : programmé
+            // pour destruction en FIN de ce tour (reste visible pendant qu'il bloque).
+            if (eq && BREAK_ON_BLOCK[norm(c)]) pendingBreak.push({ side: s, key: norm(c) });
+          });
         } else if (e.type === 'damageTaken') {
           const s = sideOf(e.player); st.life[s] = Math.max(0, st.life[s] - (e.amount || 0));
         } else if (e.type === 'combatResult') {
@@ -252,6 +268,10 @@
         }
       });
       flushAtk();   // fin de tour : dernière action hors-combat affichée seule
+      // Destruction de fin de tour des équipements « casse en bloquant » : appliquée
+      // APRÈS les étapes du tour (l'équipement reste visible pendant le tour où il a
+      // bloqué), donc visible comme retiré dès le prochain tour (état cumulatif).
+      pendingBreak.forEach(b => { const arr = b.side === 'me' ? st.meEquipGone : st.oppEquipGone; if (arr.indexOf(b.key) < 0) arr.push(b.key); });
     });
     return { players: GAME.players, myName: MY, oppName: OPP, hero: HERO, steps };
   }
