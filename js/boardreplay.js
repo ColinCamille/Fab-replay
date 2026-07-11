@@ -159,6 +159,7 @@
 
       const evs = t.events || [], consumed = {};
       let openAtk = null, curBlocks = [], curReactions = [];
+      let lastAction = null, ended = false;   // dernière carte jouée/activée (cause du coup fatal) ; fin de partie atteinte
       // Affiche en carte SEULE une carte de l'attaquant restée sans combat
       // (action hors-combat). Une vraie carte d'ATTAQUE, elle, n'est montrée que
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
@@ -168,8 +169,9 @@
         openAtk = null;
       };
       evs.forEach((e, i) => {
-        if (consumed[i]) return;
+        if (consumed[i] || ended) return;
         if (e.type === 'played') {
+          lastAction = e.card;
           const side = sideOf(e.player); removeCard(side, e.card);
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
@@ -186,6 +188,7 @@
           // the Arknight) : la carte reste en jeu → pas de removeCard ni toGrave.
           // Ce n'est pas une attaque → on l'affiche en carte seule immédiatement,
           // sans passer par le différé de combat (openAtk).
+          lastAction = e.card;
           const side = sideOf(e.player);
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
@@ -224,6 +227,22 @@
             push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, who: openAtk.side }, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           openAtk = null; curBlocks = []; curReactions = [];
+        } else if (e.type === 'gameWon' || e.type === 'conceded') {
+          // Fin de partie : on pousse une étape TERMINALE explicite. Beaucoup de
+          // parties se finissent hors combat (dégâts d'arcane, effet, discard) —
+          // le coup fatal n'apparaissait alors nulle part. On affiche le vainqueur,
+          // les PV finaux (perdant à 0 sur une mort, PV réels sur un abandon) et
+          // la dernière carte jouée/activée comme « coup fatal ».
+          flushAtk();
+          const conceded = e.type === 'conceded';
+          const winnerSide = conceded ? (sideOf(e.player) === 'me' ? 'opp' : 'me') : (e.player ? sideOf(e.player) : null);
+          const meLife = (!conceded && winnerSide === 'opp') ? 0 : st.life.me;
+          const oppLife = (!conceded && winnerSide === 'me') ? 0 : st.life.opp;
+          const cause = conceded ? ' · abandon' : (lastAction ? ' · coup fatal : ' + lastAction : '');
+          const big = winnerSide ? ('🏆 ' + HERO[winnerSide] + ' gagne') : 'Fin de la partie';
+          const sub = HERO.me + ' ' + meLife + ' PV · ' + HERO.opp + ' ' + oppLife + ' PV' + cause;
+          push(label, winnerSide || atkSide, { type: 'end', side: winnerSide || 'me', big: big, sub: sub });
+          ended = true;
         }
       });
       flushAtk();   // fin de tour : dernière action hors-combat affichée seule
@@ -333,6 +352,7 @@
     const pcard = (c, side, lg) => '<div class="br-pcard br-' + side + (lg ? ' br-lg' : '') + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"></div><div class="br-nm">' + esc(c.nm) + '</div></div>';
     function buildStage(s) {
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
+      if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';

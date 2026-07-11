@@ -231,6 +231,25 @@ assert(eqLast.state.meEquipGone.indexOf('helm of might and magic') >= 0, 'équip
 eq(eqLast.state.oppEquipGone.length, 0, 'équipement adverse intact (non retiré)');
 eq(eqTl.steps[0].state.meEquipGone.length, 0, 'équipement présent avant sa destruction (bannière)');
 
+// Fin de partie hors combat (dégâts d'arcane via activation) → étape terminale.
+const winGame = {
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Bravo', equipment: {} } },
+  lifeSeries: { me: [40], opp: [3] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], events: [
+      { type: 'activated', player: 'Me', card: 'Volzar, Meteor Storm' },
+      { type: 'damageTaken', player: 'Opp', amount: 3 },
+      { type: 'gameWon', player: 'Me' }
+    ] }
+  ]
+};
+const winLast = BR.buildTimeline(winGame).steps.slice(-1)[0];
+eq(winLast.stage.type, 'end', 'étape terminale de victoire poussée');
+assert(/gagne/.test(winLast.stage.big) && /Oscilio/.test(winLast.stage.big), 'bannière de victoire nomme le vainqueur');
+assert(/coup fatal\s*:\s*Volzar/.test(winLast.stage.sub), 'coup fatal = dernière action (Volzar)');
+assert(/Bravo 0 PV/.test(winLast.stage.sub), 'perdant affiché à 0 PV');
+
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;
 console.log('DB —');

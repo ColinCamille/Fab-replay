@@ -1169,6 +1169,10 @@ footer a{color:var(--text-dim)}
 .br-banner{text-align:center}
 .br-big{font-size:1rem;font-weight:700;font-family:'Cinzel',serif;letter-spacing:.02em}
 .br-banner.br-me .br-big{color:var(--accent,var(--gold))} .br-banner.br-opp .br-big{color:var(--violet)}
+/* Étape terminale (victoire/abandon) : mise en avant nette pour que la fin de
+   partie — souvent hors combat (arcane, effet…) — soit toujours lisible. */
+.br-banner.br-end{padding:10px 12px;border:1px solid var(--accent,var(--gold));border-radius:10px;background:linear-gradient(160deg,rgba(201,162,39,.14),rgba(201,162,39,.04))}
+.br-banner.br-end .br-big{font-size:1.15rem}
 .br-sub{font-size:.76rem;color:var(--text-dim);margin-top:3px}
 .br-duel{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
 .br-side{display:flex;flex-direction:column;align-items:center;gap:5px}
