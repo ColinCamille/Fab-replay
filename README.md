@@ -5,136 +5,51 @@ Outil **personnel** d'analyse de parties de **Flesh and Blood** jouées sur
 agrège des **centaines** de parties dans un tableau de bord (winrate, matchups,
 performance des cartes…).
 
-Hébergé sur **GitHub Pages** → l'origine stable rend la persistance
-**IndexedDB** fiable (y compris sur mobile), contrairement à un fichier `file://`.
+Chaque joueur a un **compte privé** (connexion par email, sans mot de passe) :
+tes parties s'enregistrent toutes seules et **toi seul les vois**, consultables
+sur tous tes appareils.
 
 ---
 
-## 🎮 Guide d'installation pas à pas (aucune compétence technique requise)
+## 🎮 Installation (pour jouer) — ~5 minutes
 
-De zéro à « je joue et mes parties s'enregistrent toutes seules, consultables
-partout ». Compte ~15 min la première fois. Il te faut seulement un **compte
-GitHub** (gratuit) et le navigateur **Chrome**, **Edge** ou **Firefox**.
+Tes parties Talishar s'enregistrent toutes seules dans **ton compte privé**
+(toi seul les vois), consultables partout. Il te faut juste un **email** et le
+navigateur **Chrome**, **Edge** ou **Firefox** (sur Android : **Firefox**).
 
-### 1) Créer un compte GitHub (si tu n'en as pas)
-Va sur **https://github.com/signup** et suis les étapes (email, mot de passe,
-pseudo). C'est gratuit.
+### 1) Ouvrir l'app et se connecter
+1. Ouvre **https://colincamille.github.io/Fab-replay/** — **mets-la en favori** (PC **et** téléphone).
+2. En bas de page : **🔑 Se connecter** → entre ton **email**.
+3. Tu reçois un **lien de connexion** par email (vérifie les spams) → clique-le → tu reviens **connecté**. **Aucun mot de passe.**
 
-### 2) Créer ta propre copie de l'appli
-1. Ouvre la page du **modèle vierge** : **https://github.com/ColinCamille/fab-replay-template**
-2. Clique le bouton vert **« Use this template »** (en haut à droite) →
-   **« Create a new repository »**.
-3. Donne un nom (ex. `fab-replay`), laisse **Public**, clique
-   **« Create repository »**.
+### 2) Installer un gestionnaire de userscripts
+Un petit script (« grabber ») lit tes parties sur Talishar. Installe-en **un seul** :
+- **Tampermonkey** → **https://www.tampermonkey.net** (Chrome, Edge, Firefox)
+- **Violentmonkey** → **https://violentmonkey.github.io** (Chrome, Edge, Firefox)
+- **Android** : appli **Firefox**, puis l'un des deux dedans.
+- *iPhone : non garanti (les userscripts sont difficiles sur iOS).*
 
-✅ Tu as maintenant **ta** copie **vierge** (aucune partie d'un autre joueur), à
-`github.com/<ton-pseudo>/fab-replay`.
+### 3) Installer le grabber (un clic)
+1. Ouvre **https://raw.githubusercontent.com/ColinCamille/Fab-replay/main/talishar-log-grabber.user.js**
+2. Ton gestionnaire propose **Installer** → confirme. *(Il se met à jour tout seul ensuite.)*
 
-> ⚠️ Copie bien depuis **`fab-replay-template`** et non depuis une instance
-> personnelle : un dépôt personnel contient déjà des parties, qui se
-> retrouveraient alors dans **ta** bibliothèque.
+### 4) Connecter le grabber à ton compte (une fois)
+1. Dans l'app (connecté) → **🔗 Connecter le grabber** → **copie** le code affiché.
+2. Ouvre une **partie sur Talishar** → widget **📜 Log Grabber** (en bas à gauche) → **🔗 Compte** → **colle** le code.
 
-### 3) Allumer ton site (GitHub Pages)
-1. Dans **ton** dépôt : onglet **Settings** (en haut) → menu de gauche **Pages**.
-2. **Source** : choisis **« Deploy from a branch »**.
-3. **Branch** : choisis **`main`** puis **`/ (root)`**, et clique **Save**.
-4. Attends ~1 minute. Ton site est en ligne à :
-   **`https://<ton-pseudo>.github.io/fab-replay/`**
-5. Ouvre cette adresse et **mets-la en favori** (sur PC **et** téléphone) — c'est **ton** appli.
-
-> À ce stade l'appli marche déjà (tu peux importer des `.txt` à la main). Les
-> étapes suivantes **automatisent** l'envoi des parties depuis Talishar.
-
-### 4) Installer un gestionnaire de userscripts (Tampermonkey **ou** Violentmonkey)
-Un petit script (« grabber ») lit tes parties sur Talishar. Il lui faut d'abord
-un **gestionnaire de userscripts**. Le script est standard (`@grant none`), donc
-**les deux marchent à l'identique** — installes-en **un seul** :
-
-- **Tampermonkey** (le plus répandu) → **https://www.tampermonkey.net**
-  (Chrome, Edge, Firefox, Safari).
-- **Violentmonkey** (libre/open-source, plus léger) → **https://violentmonkey.github.io**
-  (Chrome, Edge, Firefox).
-- **Greasemonkey** (Firefox uniquement) → depuis les modules Firefox.
-
-Selon l'appareil :
-- **PC (Chrome / Edge / Firefox)** : ajoute l'extension **Tampermonkey** *ou*
-  **Violentmonkey** depuis le lien ci-dessus.
-- **Android** : installe l'appli **Firefox**, puis **Tampermonkey** *ou*
-  **Violentmonkey** dedans (ou le navigateur **Kiwi** avec l'un des deux).
-- *iPhone : l'automatique n'est pas garanti ; tu peux quand même utiliser l'appli
-  en important les `.txt` à la main.*
-
-### 5) Installer le script de capture (en un clic)
-1. Sur GitHub, ouvre **ton** dépôt → clique le fichier
-   **`talishar-log-grabber.user.js`**.
-2. Clique le bouton **« Raw »** (en haut à droite du fichier).
-3. Ton gestionnaire (Tampermonkey ou Violentmonkey) ouvre une page
-   **« Installer »** → clique **Installer**. ✅
-
-> 🔄 **Mises à jour** : à partir de la v1.12.4, le script **se met à jour tout
-> seul** (Tampermonkey / Violentmonkey vérifient périodiquement `@updateURL`).
-> Tu peux forcer via le menu de l'extension → « Rechercher des mises à jour ».
-> *Une seule fois*, si tu es sur une version antérieure, refais **Raw →
-> Installer** pour passer à la version auto-actualisée — ensuite c'est
-> automatique. Version en cours affichée dans le widget : **« 📜 Log Grabber
-> v1.x.x »**.
-
-### 6) Créer ta clé d'accès (token) — pour publier tes parties
-Cette clé autorise le script à écrire **dans ton dépôt, et seulement lui**.
-1. Va sur **https://github.com/settings/tokens?type=beta** →
-   **« Generate new token »**.
-2. **Token name** : ce que tu veux (ex. `fab-replay`).
-3. **Expiration** : une durée (ex. **1 an**).
-4. **Repository access** : coche **« Only select repositories »** → choisis **ton
-   dépôt** `fab-replay`.
-5. **Permissions** → **Repository permissions** → trouve **« Contents »** → mets
-   **« Read and write »**.
-6. Clique **« Generate token »**, puis **copie le token tout de suite**
-   (⚠️ il ne s'affiche **qu'une seule fois**).
-
-### 7) Connecter la capture à ton dépôt
-1. Ouvre une **partie sur Talishar** (n'importe laquelle). En bas à gauche
-   apparaît un widget **📜 Log Grabber**.
-2. Clique **⚙** et renseigne :
-   - **owner** = ton pseudo GitHub,
-   - **repo** = `fab-replay` (le nom de ton dépôt),
-   - **token** = colle celui de l'étape 6,
-   - puis choisis **« auto »** (envoi automatique en fin de partie).
-
-### 8) Jouer et consulter
+### 5) Jouer et consulter
 1. **Joue** normalement.
-2. À la fin, **ouvre le « Game Summary »** (le récap de fin). 💡 Clique aussi le
-   bouton pour voir **les stats de l'adversaire** → ça capte les deux camps.
-3. Ta partie **s'envoie toute seule** dans ton dépôt.
-4. Ouvre **ton site** (`https://<ton-pseudo>.github.io/fab-replay/`) sur PC ou
-   téléphone → onglet **🗒 Historique** → clique une partie pour la revivre. 🎉
-   Chaque partie s'ouvre sur deux vues : **⚔ Déroulé** (tour par tour) et
-   **🎴 Table** (le plateau de jeu). Sur PC, **survole une carte** pour l'agrandir.
+2. À la fin, **ouvre le « Game Summary »** (récap de fin) — 💡 clique aussi pour voir **les stats de l'adversaire** (capte les deux camps). Ta partie **part toute seule** dans ton compte.
+3. Reviens sur l'app → onglet **🗒 Historique** → clique une partie : **⚔ Déroulé** (tour par tour) et **🎴 Table** (le plateau). Sur PC, **survole une carte** pour l'agrandir.
 
 ### En cas de pépin
-- **« Token refusé »** → ton token a expiré : régénère-en un (étape 6) et
-  recolle-le via **⚙**.
-- **Une partie ne remonte pas** → tu n'as pas ouvert le **Game Summary** à la fin
-  (c'est ce qui déclenche l'envoi). Tu peux forcer avec le bouton **☁ Dépôt** du widget.
-- **« Partie sans id — envoi ignoré »** → tu as cliqué ☁ Dépôt sur une page sans
-  numéro de partie (partie fermée, lobby). Ouvre la partie depuis
-  `talishar.net/game/play/<numéro>` puis réessaie.
-- **Le gestionnaire dit « le script ne correspondait pas à l'URL » / « recharger
-  l'onglet »** (typiquement en ouvrant Talishar sur la page d'accueil) → corrigé
-  à partir de la **v1.13.0** : le script s'injecte désormais sur **tout le site**
-  (le widget n'apparaît toujours que sur une page de partie). Laisse-le se mettre
-  à jour tout seul, ou force via le menu de l'extension → « Rechercher des mises
-  à jour ». Plus besoin de lancer une partie contre l'IA pour le réveiller.
-- **Je ne vois pas mes parties tout de suite** → attends ~1 min (le site se met à
-  jour) puis recharge la page.
-- **Une partie affiche un mauvais héros / de vieilles infos** → recharge la page :
-  la synchro re-télécharge automatiquement une partie corrigée en amont (même
-  après qu'elle a déjà été enregistrée sur l'appareil).
+- **Le lien de connexion n'arrive pas** → vérifie les spams ; réessaie dans 1-2 min (limite d'envoi email).
+- **La partie ne remonte pas** → tu n'as pas ouvert le **Game Summary** (c'est ce qui déclenche l'envoi). Tu peux forcer avec **🔗 Compte** dans le widget.
+- **« Partie sans id — envoi ignoré »** → page sans partie en cours ; ouvre `talishar.net/game/play/<numéro>` puis réessaie.
+- **Version du grabber** : affichée dans le widget (**📜 Log Grabber vX.Y.Z**) ; il s'actualise seul, ou force via le menu de l'extension → « Rechercher des mises à jour ».
 
-### Partager tes parties
-Ton site est **public** : donne simplement ton adresse
-`https://<ton-pseudo>.github.io/fab-replay/` à qui tu veux — **aucun compte requis
-pour consulter**.
+### C'est privé
+Tes parties ne sont visibles **que par toi** (via ton compte). Rien n'est public. Tu peux tout effacer d'un clic : **🗑 Supprimer mon compte** (dans l'app).
 
 ---
 
@@ -146,22 +61,24 @@ pour consulter**.
 | `talishar-parser.js` | **Parser** — source de vérité : `.txt` → record normalisé versionné. |
 | `js/images.js` | Résolution des visuels de cartes ([goagain.dev](https://api.goagain.dev)), avec cache. |
 | `js/db.js` | Couche **IndexedDB** (base `fab`, store `games`, clé = `gameId`) + export/import `.json`. |
-| `js/sync.js` | **Synchro GitHub** — dépôt = base : lecture de `data/library.json` sans token, écriture par token perso (auto-détection du dépôt). |
-| `data/library.json` | Bibliothèque **publiée** (servie en statique par Pages) — vierge dans le dépôt modèle. |
-| `data/raw/` | Logs **bruts** déposés par le grabber (`<id>.txt` + `index.json`) — ingérés/parsés par le viewer (Phase 3). |
-| `data/deleted.json` | Liste **partagée** des `gameId` supprimés — évite qu'une partie effacée sur un appareil ne réapparaisse ailleurs à la synchro. |
+| `js/cloud.js` | **Backend Supabase** : login lien magique, lecture/écriture des parties (RLS), appairage grabber, migration, suppression RGPD. |
+| `js/cloud-config.js` | URL du projet Supabase + clé **publishable** (publiques). |
+| `supabase/functions/` | Edge Functions : **`ingest`** (réception grabber) et **`delete-account`** (RGPD). |
+| `js/sync.js` | Synchro GitHub — **héritage désactivé** (`LEGACY_GITHUB=false`), remplacé par Supabase. |
+| `data/` | Anciens fichiers de synchro GitHub (vidés) — plus utilisés dans le modèle Supabase. |
 | `js/replay.js` | **Replay** d'une partie (onglet **Déroulé**, extrait du standalone, comportement identique). |
 | `js/boardreplay.js` | Vue **Table** (« tapis miroir ») : rejoue le combat sur un plateau, tour par tour. |
 | `js/dashboard.js` | **Agrégations** multi-parties + rendu (cœur pur testable en Node). |
 | `css/style.css` | Styles (mobile-first). |
-| `talishar-log-grabber.user.js` | **Grabber** (userscript Tampermonkey/Violentmonkey) — installe la partie dans le dépôt. |
+| `talishar-log-grabber.user.js` | **Grabber** (userscript Tampermonkey/Violentmonkey) — envoie la partie dans **ton compte Supabase** (auto-update). |
 | `build/standalone.html` | Version fichier-unique régénérée (usage hors-ligne). |
 
 ## Utilisation
 
 1. **Capturer** : installer le userscript `talishar-log-grabber.user.js`, jouer,
-   puis (auto en fin de partie, ou export `.txt` via Alt+Shift+D) — ouvrir le Game
-   Summary pour capter les stats officielles.
+   ouvrir le **Game Summary** en fin de partie (capte les stats officielles) → la
+   partie part **automatiquement dans ton compte** (bouton `🔗 Compte` /
+   `Alt+Shift+S` pour un envoi manuel ; `Alt+Shift+D` pour un export `.txt`).
 2. **Importer** : ouvrir le site, déposer **un ou plusieurs** `.txt`.
    - 1 fichier → ouvre directement le **replay**.
    - N fichiers → alimente le **tableau de bord**.
@@ -171,49 +88,28 @@ pour consulter**.
    à un appareil**. **Exporter la bibliothèque** (`.json`) puis **Importer une
    sauvegarde** sur un autre appareil. L'import **fusionne** (dédup `gameId`).
 
-## Synchro automatique entre appareils (GitHub comme base)
+## Pour l'hébergeur — backend Supabase (option C)
 
-Le dépôt sert de base de données — **aucun service tiers**, données **publiques**.
+L'app est servie **une seule fois** (GitHub Pages) et tout le monde utilise la
+**même URL**. Les parties sont stockées dans **Supabase** (Postgres + Auth),
+privées par utilisateur grâce à la **Row-Level Security**. Avantages : install
+minimale pour les joueurs (pas de compte GitHub, pas de token), mises à jour de
+code **automatiques** pour tous, et données **privées**.
 
-- **Lecture** : `data/library.json` est servi en statique par Pages → chargé
-  au démarrage **sans token**. Tes parties publiées apparaissent sur tous tes
-  appareils, et se partagent par simple **URL**.
-- **Écriture** : à l'import d'un log, la partie est poussée dans le dépôt via
-  l'API GitHub avec **ton token** (bouton *☁ Connecter la synchro*, collé une
-  fois par appareil ; stocké en local, **jamais commité**). Après l'import, Pages
-  se redéploie (quelques dizaines de secondes) et les autres appareils voient la
-  partie au prochain chargement.
+Mise en place (une fois) :
+1. Créer un projet **Supabase** (région UE pour le RGPD).
+2. Coller le SQL (tables `games` + `device_tokens`, policies RLS).
+3. Déployer les Edge Functions **`ingest`** (réception des parties du grabber,
+   *Verify JWT désactivé*) et **`delete-account`** (RGPD). Voir
+   `supabase/functions/*/index.ts`.
+4. **Authentication → Email** (lien magique) + **URL Configuration** (Site URL =
+   l'URL de l'app).
+5. Renseigner l'URL du projet + la clé **publishable** dans `js/cloud-config.js`
+   (valeurs publiques ; la sécurité vient de la RLS).
 
-> Le token donne un accès **en écriture** à ton dépôt : ne le partage jamais.
-> Recommandé : un token **fine-grained** limité à ce seul dépôt, permission
-> **Contents = Read and write**.
-
-### Envoi direct depuis le grabber (Phase 3)
-
-Le userscript peut publier la partie **sans passer par l'import manuel** :
-- **⚙** (widget) → configurer le dépôt (`owner`, `repo`) + coller le token
-  (fine-grained, **Contents = Read and write**), et choisir l'envoi manuel ou auto.
-- **☁ Dépôt** / **Alt+Shift+S** → envoi manuel ; ou **auto** à l'ouverture du
-  Game Summary de fin de partie.
-- Le `.txt` brut est déposé dans `data/raw/<id>.txt` (+ `data/raw/index.json`).
-  Le viewer l'ingère et le parse au chargement (le parseur reste **la seule
-  source de vérité**, côté viewer). L'API GitHub est appelée en **CORS** (`fetch`),
-  donc le userscript garde `@grant none`.
-
-> Le token est stocké dans le `localStorage` de talishar.net : utilise un token
-> **fine-grained limité à ce seul dépôt** (Contents R/W). Sa fuite éventuelle ne
-> permettrait d'écrire que dans ce dépôt public, rien d'autre.
-
-### Partager l'app à d'autres joueurs — modèle « 2 dépôts »
-
-Ce dépôt est un **dépôt modèle** (Template repository) **vierge de parties**.
-Chaque joueur crée sa **propre instance indépendante** (ses données, son URL) :
-
-1. **Use this template** → dépôt neuf sous son compte (zéro partie).
-2. **Settings → Pages** : activer Pages (choisir la branche par défaut).
-3. Ouvrir son site → **☁ Connecter la synchro** → coller son token.
-4. Importer ses logs → **son URL** (`https://<son-pseudo>.github.io/<repo>/`),
-   qu'il peut partager. L'app **auto-détecte** son dépôt : rien à configurer.
+> L'ancienne synchro GitHub (dépôt = base) est conservée en code mais
+> **désactivée** (`LEGACY_GITHUB = false` dans `index.html`). Le grabber envoie
+> désormais **uniquement** au compte Supabase.
 
 ## Développement
 
@@ -233,7 +129,8 @@ npm run build # régénère build/standalone.html
 - **Phase 2** (fait) : synchro auto entre appareils via le dépôt GitHub (lecture sans token, écriture par token), export/import `.json`, modèle « 2 dépôts » pour le partage.
 - **Phase 3** (fait, validé en conditions réelles) : envoi direct de la partie dans le dépôt depuis le grabber (bouton `☁ Dépôt` / `Alt+Shift+S`, ou auto en fin de partie, avec re-envoi après le swap pour les stats adverses). Le `.txt` brut est déposé dans `data/raw/`, le viewer l'ingère et le parse au chargement. Voir `docs/PHASE3-grabber.md`.
 - **Phase 4** (fait) : vue **Table** (« tapis miroir ») rejouant le combat sur un plateau (mains, arsenal, cimetière, banni, pitch, permanents/tokens des 2 camps, activations) ; capture des terrains/héros fiabilisée côté grabber (héros issus des stats officielles) ; synchro qui **met à jour** une partie déjà en cache quand elle est corrigée en amont.
-- **Phase 5** (fait) : **tags libres** et **favoris** par partie (depuis l'onglet Historique — ⭐ + éditeur de tags avec auto-complétion). Un **filtre « tag »** dans le tableau de bord segmente toutes les stats par variante de deck (ex. Oscilio « gone » vs « spell ») ; un filtre **⭐ favoris** dans l'historique. Ces métadonnées sont rangées au niveau de l'entrée (à côté de `gameId`) → elles se **synchronisent** entre appareils via le dépôt (fusion par `metaUpdatedAt`), survivent aux ré-imports et au re-parsing du record.
+- **Phase 5** (fait) : **tags libres** et **favoris** par partie (depuis l'onglet Historique — ⭐ + éditeur de tags avec auto-complétion). Un **filtre « tag »** dans le tableau de bord segmente toutes les stats par variante de deck (ex. Oscilio « gone » vs « spell ») ; un filtre **⭐ favoris** dans l'historique. Ces métadonnées sont rangées au niveau de l'entrée (à côté de `gameId`).
+- **Phase 6** (fait) : **backend Supabase** (option C) — connexion par **lien magique** (email, sans mot de passe), parties **privées** par utilisateur (Row-Level Security), capture envoyée au compte via l'Edge Function `ingest` (appairage 1-code du grabber), migration des parties existantes, suppression RGPD (`delete-account`). L'app devient **centrale** (une URL, mises à jour auto pour tous) ; l'ancienne voie GitHub est désactivée. Install joueur réduite à : ouvrir l'app → se connecter → installer le grabber → coller le code.
 
 ---
 Données non affiliées à Legend Story Studios. Images via goagain.dev.
