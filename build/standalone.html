@@ -5232,8 +5232,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=97"></script>
-<script src="js/cloud.js?v=97"></script>
+<script src="js/cloud-config.js?v=98"></script>
+<script src="js/cloud.js?v=98"></script>
 
 <script>
 // ============================================================
@@ -5280,13 +5280,16 @@ footer a{color:var(--text-dim)}
 
   // ---------- Chargement / rendu du dashboard ----------
   async function reloadDashboard() {
+    if (_pairMode) return [];
     const entries = await window.FabDB.getAllEntries();
+    const dashEmpty = $('#dashEmpty'), dashBody = $('#dashboardBody');
+    if (_pairMode || !dashEmpty || !dashBody) return entries;   // body a pu être remplacé pendant l'await (pop-up)
     const hasGames = entries.length > 0;
-    $('#dashEmpty').style.display = hasGames ? 'none' : 'block';
-    $('#dashboardBody').style.display = hasGames ? 'block' : 'none';
+    dashEmpty.style.display = hasGames ? 'none' : 'block';
+    dashBody.style.display = hasGames ? 'block' : 'none';
     // Onboarding : pas de partie ET pas connecté → invite à se connecter.
     if (!hasGames && window.Cloud && window.Cloud.available() && !window.Cloud.getUser()) {
-      $('#dashEmpty').innerHTML = 'Bienvenue sur <strong>Chain Replay</strong> 👋<br>'
+      dashEmpty.innerHTML = 'Bienvenue sur <strong>Chain Replay</strong> 👋<br>'
         + 'Clique <strong>🔑 Se connecter</strong> en bas de page (lien magique par email, sans mot de passe) '
         + 'pour retrouver tes parties, puis <strong>🔗 Connecter le grabber</strong> pour qu’elles arrivent toutes seules.<br>'
         + '<span style="font-size:.8rem">Tes parties sont privées : toi seul les vois.</span>';
@@ -5693,12 +5696,35 @@ footer a{color:var(--text-dim)}
     } catch (e) { console.error(e); alert('Envoi impossible : ' + (e.message || e)); }
   });
 
+  // Appairage 1-clic : le grabber ouvre cette app dans une fenêtre pop-up avec
+  // #pair. Comme c'est la MÊME origine que l'app, la fenêtre partage ta session
+  // → on génère un code et on le renvoie au grabber par postMessage, sans que tu
+  // aies rien à copier. On n'agit QUE dans une pop-up (window.opener présent).
+  let _pairMode = false;
+  async function maybePairPopup() {
+    if (_pairMode || !window.opener) return false;
+    if (!/(^|[#&])pair\b/.test(location.hash)) return false;
+    if (!window.Cloud || !window.Cloud.getUser()) return false;   // pas connecté → onChange réessaiera après login
+    _pairMode = true;   // on devient la pop-up d'appairage : on n'affiche plus le dashboard
+    try {
+      const { token } = await window.Cloud.createPairing('grabber');
+      try { window.opener.postMessage({ fabPairToken: token }, '*'); } catch (e) {}
+      document.body.innerHTML = '<div style="padding:2rem;font:16px/1.5 system-ui,sans-serif;text-align:center;color:#e9e6da">✅ <strong>Grabber connecté à ton compte.</strong><br>Tes parties arriveront ici automatiquement.<br><br>Tu peux fermer cette fenêtre.</div>';
+      setTimeout(() => { try { window.close(); } catch (e) {} }, 1500);
+    } catch (e) {
+      console.error(e);
+      document.body.innerHTML = '<div style="padding:2rem;font:16px system-ui,sans-serif;color:#e9e6da">Erreur d’appairage : ' + (e.message || e) + '</div>';
+    }
+    return true;
+  }
+
   function setupCloud() {
     if (!window.Cloud || !window.Cloud.available()) { refreshCloudBtn(); return; }
     window.Cloud.init();
     window.Cloud.onChange(async (user) => {
       refreshCloudBtn();
       if (user) {
+        if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
         const n = await mergeCloudGames();
         if (n) { libHint.textContent = n + ' partie(s) récupérée(s) depuis ton compte.'; await reloadDashboard(); }
       }
@@ -5721,6 +5747,8 @@ footer a{color:var(--text-dim)}
       } catch (e) { console.error(e); }
     }
 
+    if (_pairMode) return;   // pop-up d'appairage : ne rien afficher d'autre
+
     // Reprise d'un lien profond #game=<id> (après la synchro, la partie
     // liée peut provenir du dépôt).
     const m = location.hash.match(/game=([^&]+)/);
@@ -5729,7 +5757,7 @@ footer a{color:var(--text-dim)}
       const entry = await window.FabDB.getEntry(id);
       if (entry) { openGame(entry); return; }
     }
-    showView('dashboard');
+    if (!_pairMode) showView('dashboard');
   })();
 })();
 </script>

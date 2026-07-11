@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.0
+// @version      1.14.1
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.0';
+  const VERSION = '1.14.1';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -640,8 +640,8 @@
     };
     btnRow.appendChild(mkBtn('Copier', copyLog));
     btnRow.appendChild(mkBtn('Télécharger', downloadLog));
-    btnRow.appendChild(mkBtn('🔗 Compte', () => pushGameToSupabase(false)));
-    btnRow.appendChild(mkBtn('⚙', configurePairing));
+    btnRow.appendChild(mkBtn('🔗 Compte', () => sbConfigured() ? pushGameToSupabase(false) : pairOneClick()));
+    btnRow.appendChild(mkBtn('⚙', () => sbConfigured() ? configurePairing() : pairOneClick()));
     btnRow.appendChild(mkBtn('Effacer', clearLog));
     fullBox.appendChild(btnRow);
 
@@ -894,6 +894,10 @@
   const SB_INGEST = 'https://alzldgpopmhxnlxafsrl.supabase.co/functions/v1/ingest';
   const SB = { token: 'tlg_sb_token' };
   function sbConfigured() { return !!cfg(SB.token); }
+  // Appairage 1-clic : on ouvre l'app (même origine que ta session) qui nous
+  // renvoie le code par postMessage. APP_ORIGIN sert à valider l'expéditeur.
+  const APP_ORIGIN = 'https://colincamille.github.io';
+  const APP_PAIR_URL = APP_ORIGIN + '/Fab-replay/#pair';
 
   function utf8ToBase64(str) {
     const bytes = new TextEncoder().encode(str);
@@ -1029,8 +1033,34 @@
     }
   }
 
-  // Appairage : on colle le code généré dans l'app (bouton « 🔗 Connecter le
-  // grabber »). Une fois par appareil. (La version 1-clic viendra ensuite.)
+  // Appairage 1-CLIC : ouvre l'app en pop-up (elle partage ta session) → elle
+  // génère un code et nous le renvoie par postMessage. Aucun copier-coller. Si
+  // la pop-up est bloquée, on retombe sur la saisie manuelle du code.
+  function pairOneClick() {
+    let popup = null, done = false;
+    const onMsg = (e) => {
+      if (e.origin !== APP_ORIGIN) return;
+      const t = e.data && e.data.fabPairToken;
+      if (!t) return;
+      done = true;
+      try { localStorage.setItem(SB.token, String(t)); } catch (err) {}
+      window.removeEventListener('message', onMsg);
+      try { popup && popup.close(); } catch (err) {}
+      flash('Compte connecté ✔ (envoi auto activé)');
+      updateUI();
+    };
+    window.addEventListener('message', onMsg);
+    popup = window.open(APP_PAIR_URL, 'fabPair', 'width=460,height=640');
+    if (!popup) { window.removeEventListener('message', onMsg); return configurePairing(); }   // bloqué → repli collage
+    flash('Fenêtre d’appairage ouverte…');
+    setTimeout(() => {   // filet : si rien reçu, on nettoie et on propose le collage
+      if (done || sbConfigured()) return;
+      window.removeEventListener('message', onMsg);
+      if (confirm('Appairage non reçu (fenêtre fermée ou non connecté ?).\n\nOK = coller le code à la main · Annuler = abandonner.')) configurePairing();
+    }, 90000);
+  }
+
+  // Appairage MANUEL (repli) : coller le code généré dans l'app.
   function configurePairing() {
     const has = !!cfg(SB.token);
     const code = prompt('Colle le CODE D’APPAIRAGE de ton compte.\n\nGénère-le dans l’app (une fois connecté) : bouton « 🔗 Connecter le grabber ».'
