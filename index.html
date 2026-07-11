@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=91">
+<link rel="stylesheet" href="css/style.css?v=92">
 </head>
 <body>
 
@@ -101,6 +101,7 @@
 <section class="tools" id="toolsBar">
   <div class="tools-row">
     <button class="lib-btn" id="importToggle" aria-expanded="false" aria-controls="importPanel" title="Importer un log .txt à la main (les parties arrivent normalement toutes seules)">⤒ Importer un log</button>
+    <button class="lib-btn" id="cloudBtn" hidden>🔑 Mon compte</button>
     <button class="lib-btn" id="syncBtn">☁ Synchro GitHub</button>
     <button class="lib-btn" id="exportBtn">⤓ Exporter la bibliothèque</button>
     <button class="lib-btn" id="importBtn">⤒ Importer une sauvegarde</button>
@@ -122,13 +123,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=91"></script>
-<script src="js/images.js?v=91"></script>
-<script src="js/db.js?v=91"></script>
-<script src="js/sync.js?v=91"></script>
-<script src="js/replay.js?v=91"></script>
-<script src="js/boardreplay.js?v=91"></script>
-<script src="js/dashboard.js?v=91"></script>
+<script src="talishar-parser.js?v=92"></script>
+<script src="js/images.js?v=92"></script>
+<script src="js/db.js?v=92"></script>
+<script src="js/sync.js?v=92"></script>
+<script src="js/replay.js?v=92"></script>
+<script src="js/boardreplay.js?v=92"></script>
+<script src="js/dashboard.js?v=92"></script>
+<!-- Backend Supabase (option C) : login lien magique + parties privées.
+     Additif : sans connexion, l'app fonctionne comme avant. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/cloud-config.js?v=92"></script>
+<script src="js/cloud.js?v=92"></script>
 
 <script>
 // ============================================================
@@ -455,9 +461,70 @@
     else if (!stagedFiles.length) analyzeBtn.disabled = true;
   });
 
+  // ---------- Compte cloud (Supabase — login par lien magique) ----------
+  // ADDITIF : tant que ce n'est pas configuré / connecté, l'app se comporte
+  // exactement comme avant (IndexedDB + éventuelle synchro GitHub).
+  const cloudBtn = $('#cloudBtn');
+  function refreshCloudBtn() {
+    if (!window.Cloud || !window.Cloud.available()) { if (cloudBtn) cloudBtn.hidden = true; return; }
+    cloudBtn.hidden = false;
+    const u = window.Cloud.getUser();
+    if (u) { cloudBtn.textContent = '🔑 ' + (u.email || 'Connecté'); cloudBtn.title = 'Cliquer pour te déconnecter.'; }
+    else { cloudBtn.textContent = '🔑 Se connecter'; cloudBtn.title = 'Recevoir un lien de connexion par email (sans mot de passe).'; }
+  }
+
+  // Récupère les parties du compte connecté et les fusionne dans le cache local
+  // (mêmes règles que la synchro : pas de doublon, respect des suppressions).
+  async function mergeCloudGames() {
+    if (!window.Cloud || !window.Cloud.getUser()) return 0;
+    let rows;
+    try { rows = await window.Cloud.fetchGames(); } catch (e) { console.error(e); return 0; }
+    const have = new Set((await window.FabDB.getAllEntries()).map(e => String(e.gameId)));
+    let added = 0;
+    for (const row of rows) {
+      if (!row || !row.raw) continue;
+      let rec;
+      try { rec = window.TalisharParser.parse(row.raw); } catch (e) { continue; }
+      const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
+      if (!gid || have.has(gid) || window.FabDB.isDeleted(gid)) continue;
+      try { await window.FabDB.putGame(rec, row.raw); have.add(gid); added++; } catch (e) { console.error(e); }
+    }
+    return added;
+  }
+
+  if (cloudBtn) cloudBtn.addEventListener('click', async () => {
+    if (!window.Cloud || !window.Cloud.available()) return;
+    const u = window.Cloud.getUser();
+    if (u) {
+      if (confirm('Te déconnecter de ' + (u.email || 'ton compte') + ' ?\n(Tes parties restent en local sur cet appareil.)')) {
+        try { await window.Cloud.signOut(); } catch (e) { console.error(e); }
+      }
+      return;
+    }
+    const email = prompt('Ton email pour recevoir un lien de connexion (sans mot de passe) :');
+    if (!email || !email.trim()) return;
+    try {
+      await window.Cloud.signIn(email.trim());
+      alert('Lien envoyé ! Ouvre ta boîte mail et clique le lien pour te connecter.\n(Pense à vérifier les spams.)');
+    } catch (e) { console.error(e); alert('Envoi impossible : ' + (e.message || e)); }
+  });
+
+  function setupCloud() {
+    if (!window.Cloud || !window.Cloud.available()) { refreshCloudBtn(); return; }
+    window.Cloud.init();
+    window.Cloud.onChange(async (user) => {
+      refreshCloudBtn();
+      if (user) {
+        const n = await mergeCloudGames();
+        if (n) { libHint.textContent = n + ' partie(s) récupérée(s) depuis ton compte.'; await reloadDashboard(); }
+      }
+    });
+  }
+
   // ---------- Démarrage ----------
   (async function boot() {
     refreshSyncBtn();
+    setupCloud();
     await reloadDashboard();
 
     // Synchro descendante : récupère les parties publiées dans le dépôt
