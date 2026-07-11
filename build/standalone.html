@@ -4673,7 +4673,14 @@ footer a{color:var(--text-dim)}
 
   // ---------- Agrégations ----------
   function statsAgg() { return aggregate(_entries, { includeAI: state.includeAI, format: state.format || null, myHero: state.hero || null, oppHero: state.opp || null, period: state.period, tag: state.tag || null }); }
-  function lifeAgg() { return aggregate(_entries, { includeAI: state.includeAI }); }
+  // Agrégat « contexte » : alimente le carrousel des héros et la liste « tes
+  // decks ». Il applique les filtres de TRANCHE (format · période · tag · IA)
+  // mais PAS la sélection héros/adversaire (le carrousel EST le sélecteur de
+  // héros ; l'adversaire est une dimension de matchup interne). Ainsi, filtrer
+  // p.ex. « Classic Constructed » retire du carrousel les héros non joués dans
+  // ce format. Les facettes (formats/tags) restent complètes : dans aggregate,
+  // elles sont calculées sur toutes les entrées, pas sur les parties filtrées.
+  function lifeAgg() { return aggregate(_entries, { includeAI: state.includeAI, format: state.format || null, period: state.period, tag: state.tag || null }); }
 
   // ---------- Squelette ----------
   function buildSkeleton(host) {
@@ -4986,8 +4993,12 @@ footer a{color:var(--text-dim)}
   // ---------- Facettes / synchro contrôles ----------
   function updateOppFacets() {
     const sel = D.getElementById('hxOpp'); if (!sel) return;
+    // Adversaires proposés = ceux présents dans la tranche courante (héros
+    // sélectionné + format + période + tag + IA), pour ne jamais offrir une
+    // combinaison qui donnerait 0 partie.
+    const f = { includeAI: state.includeAI, format: state.format || null, myHero: state.hero || null, period: state.period, tag: state.tag || null };
     const set = new Set();
-    _entries.forEach(e => { if ((!state.hero || myHeroOf(e.record) === state.hero) && (state.includeAI || !isVsAI(e.record))) { const o = oppHeroOf(e.record); if (o) set.add(o); } });
+    _entries.forEach(e => { if (passesFilters(e.record, f) && entryHasTag(e, f.tag)) { const o = oppHeroOf(e.record); if (o) set.add(o); } });
     const opps = Array.from(set).sort();
     if (state.opp && opps.indexOf(state.opp) < 0) state.opp = '';
     sel.innerHTML = '<option value="">Tous adversaires</option>' + opps.map(o => '<option value="' + esc2(o) + '">' + esc2(o) + '</option>').join('');
@@ -5134,10 +5145,13 @@ footer a{color:var(--text-dim)}
       const k = c.dataset.key; state.hero = (k === '__all__') ? null : (state.hero === k ? null : k);
       state.res = 'all'; renderAll();
     });
-    host.querySelector('#hxFormat').addEventListener('change', e => { state.format = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
+    // Format / période / tag = filtres de tranche : ils redéfinissent aussi le
+    // carrousel des héros et la liste des adversaires → re-rendu complet.
+    host.querySelector('#hxFormat').addEventListener('change', e => { state.format = e.target.value; renderAll(); });
+    // L'adversaire ne change ni le carrousel ni sa propre liste → re-rendu partiel.
     host.querySelector('#hxOpp').addEventListener('change', e => { state.opp = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
-    host.querySelector('#hxTag').addEventListener('change', e => { state.tag = e.target.value; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); });
-    host.querySelector('#hxPeriod').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.period = b.dataset.p; syncFilters(); _A = statsAgg(); renderStats(); renderHistory(); }));
+    host.querySelector('#hxTag').addEventListener('change', e => { state.tag = e.target.value; renderAll(); });
+    host.querySelector('#hxPeriod').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.period = b.dataset.p; renderAll(); }));
     host.querySelector('#hxAI').addEventListener('click', () => { state.includeAI = !state.includeAI; renderAll(); });
     host.querySelector('#hxReset').addEventListener('click', () => { state.format = ''; state.opp = ''; state.tag = ''; state.period = 'all'; state.includeAI = false; renderAll(); });
     host.querySelector('#hxCardSearch').addEventListener('input', e => { state.cardQ = e.target.value; renderCardPerf(); });

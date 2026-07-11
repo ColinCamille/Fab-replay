@@ -188,6 +188,18 @@ eq(goneAgg.global.wins, 1, 'filtre tag « gone » → 1 victoire');
 eq(Dashboard.aggregate(tagEntries, { tag: 'spell' }).global.games, 1, 'filtre tag « spell » → 1 partie');
 eq(Dashboard.aggregate(tagEntries, { tag: 'inexistant' }).global.games, 0, 'filtre tag inconnu → 0 partie');
 
+// ---------- Carrousel : le filtre format restreint la liste des héros joués ----------
+// (byMyHero alimente le carrousel ; la facette formats doit rester complète.)
+console.log('Carrousel/format —');
+const fmtHeroEntries = [
+  { gameId: 'f1', record: mkRec({ iWon: true, myHero: 'Briar',     oppHero: 'Kano', first: true, date: '2026-07-01T10:00:00Z', format: 'blitz' }) },
+  { gameId: 'f2', record: mkRec({ iWon: true, myHero: 'Dorinthea', oppHero: 'Kano', first: true, date: '2026-07-02T10:00:00Z', format: 'cc' }) }
+];
+const ccAgg = Dashboard.aggregate(fmtHeroEntries, { format: 'cc' });
+const ccHeroes = ccAgg.byMyHero.filter(m => m.hero !== '(inconnu)');
+assert(ccHeroes.length === 1 && ccHeroes[0].hero === 'Dorinthea', 'byMyHero restreint au format (Briar exclu en cc)');
+eq(ccAgg.facets.formats.length, 2, 'facette formats complète malgré le filtre (blitz + cc)');
+
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;
 console.log('DB —');
