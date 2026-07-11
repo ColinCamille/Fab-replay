@@ -131,11 +131,23 @@
     return done;
   }
 
+  // RGPD : supprime le compte + toutes les données (via l'Edge Function
+  // delete-account, qui appelle l'API admin ; cascade sur games/device_tokens).
+  async function deleteAccount() {
+    if (!client || !currentUser) throw new Error('Non connecté.');
+    const { data, error } = await client.functions.invoke('delete-account', { method: 'POST' });
+    if (error) throw error;
+    if (data && data.error) throw new Error(data.error + (data.detail ? ' — ' + data.detail : ''));
+    try { await client.auth.signOut(); } catch (e) {}
+    currentUser = null; notify();
+    return true;
+  }
+
   function randomToken() {
     const a = new Uint8Array(24);
     (root.crypto || {}).getRandomValues ? root.crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = (i * 40503) & 255);
     return 'dt_' + Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, createPairing, uploadGames };
+  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, createPairing, uploadGames, deleteAccount };
 })(typeof self !== 'undefined' ? self : this);

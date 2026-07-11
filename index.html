@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=95">
+<link rel="stylesheet" href="css/style.css?v=96">
 </head>
 <body>
 
@@ -104,6 +104,7 @@
     <button class="lib-btn" id="cloudBtn" hidden>🔑 Mon compte</button>
     <button class="lib-btn" id="pairBtn" hidden>🔗 Connecter le grabber</button>
     <button class="lib-btn" id="migrateBtn" hidden>⤴ Migrer vers le compte</button>
+    <button class="lib-btn" id="deleteAcctBtn" hidden>🗑 Supprimer mon compte</button>
     <button class="lib-btn" id="syncBtn">☁ Synchro GitHub</button>
     <button class="lib-btn" id="exportBtn">⤓ Exporter la bibliothèque</button>
     <button class="lib-btn" id="importBtn">⤒ Importer une sauvegarde</button>
@@ -125,18 +126,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=95"></script>
-<script src="js/images.js?v=95"></script>
-<script src="js/db.js?v=95"></script>
-<script src="js/sync.js?v=95"></script>
-<script src="js/replay.js?v=95"></script>
-<script src="js/boardreplay.js?v=95"></script>
-<script src="js/dashboard.js?v=95"></script>
+<script src="talishar-parser.js?v=96"></script>
+<script src="js/images.js?v=96"></script>
+<script src="js/db.js?v=96"></script>
+<script src="js/sync.js?v=96"></script>
+<script src="js/replay.js?v=96"></script>
+<script src="js/boardreplay.js?v=96"></script>
+<script src="js/dashboard.js?v=96"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=95"></script>
-<script src="js/cloud.js?v=95"></script>
+<script src="js/cloud-config.js?v=96"></script>
+<script src="js/cloud.js?v=96"></script>
 
 <script>
 // ============================================================
@@ -466,10 +467,10 @@
   // ---------- Compte cloud (Supabase — login par lien magique) ----------
   // ADDITIF : tant que ce n'est pas configuré / connecté, l'app se comporte
   // exactement comme avant (IndexedDB + éventuelle synchro GitHub).
-  const cloudBtn = $('#cloudBtn'), pairBtn = $('#pairBtn'), migrateBtn = $('#migrateBtn');
+  const cloudBtn = $('#cloudBtn'), pairBtn = $('#pairBtn'), migrateBtn = $('#migrateBtn'), deleteAcctBtn = $('#deleteAcctBtn');
   function refreshCloudBtn() {
     const ok = !!(window.Cloud && window.Cloud.available());
-    if (!ok) { [cloudBtn, pairBtn, migrateBtn].forEach(b => { if (b) b.hidden = true; }); return; }
+    if (!ok) { [cloudBtn, pairBtn, migrateBtn, deleteAcctBtn].forEach(b => { if (b) b.hidden = true; }); return; }
     cloudBtn.hidden = false;
     const u = window.Cloud.getUser();
     if (u) { cloudBtn.textContent = '🔑 ' + (u.email || 'Connecté'); cloudBtn.title = 'Cliquer pour te déconnecter.'; }
@@ -477,7 +478,25 @@
     // « Connecter le grabber » et « Migrer » : seulement une fois connecté.
     if (pairBtn) { pairBtn.hidden = !u; pairBtn.title = 'Générer un code à coller dans le grabber (bouton 🔗 Compte) pour envoyer tes parties ici.'; }
     if (migrateBtn) { migrateBtn.hidden = !u; migrateBtn.title = 'Envoyer une fois tes parties déjà présentes sur cet appareil vers ton compte.'; }
+    if (deleteAcctBtn) { deleteAcctBtn.hidden = !u; deleteAcctBtn.title = 'RGPD : effacer définitivement ton compte et toutes tes parties du serveur.'; }
   }
+
+  if (deleteAcctBtn) deleteAcctBtn.addEventListener('click', async () => {
+    if (!window.Cloud || !window.Cloud.getUser()) return;
+    if (!confirm('Supprimer DÉFINITIVEMENT ton compte et TOUTES tes parties du serveur ?\n\nCette action est irréversible. (Le cache local de cet appareil, lui, n’est pas touché.)')) return;
+    if (prompt('Pour confirmer, tape SUPPRIMER :') !== 'SUPPRIMER') { libHint.textContent = 'Suppression annulée.'; return; }
+    deleteAcctBtn.disabled = true;
+    libHint.textContent = 'Suppression du compte…';
+    try {
+      await window.Cloud.deleteAccount();
+      libHint.textContent = 'Compte et données supprimés du serveur. Tu es déconnecté.';
+      alert('Ton compte et toutes tes parties ont été supprimés du serveur.');
+    } catch (e) {
+      console.error(e);
+      alert('Suppression impossible : ' + (e.message || e) + '\n\n(Vérifie que l’Edge Function « delete-account » est déployée.)');
+      libHint.textContent = 'Suppression échouée (voir console).';
+    } finally { deleteAcctBtn.disabled = false; }
+  });
 
   if (migrateBtn) migrateBtn.addEventListener('click', async () => {
     if (!window.Cloud || !window.Cloud.getUser()) { alert('Connecte-toi d’abord (🔑 Se connecter).'); return; }
