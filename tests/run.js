@@ -273,18 +273,28 @@ const wpnTl = BR.buildTimeline({
 });
 assert(wpnTl.steps.every(s => (s.state.meEquipUsed || []).indexOf('anothos') < 0), 'arme activée NON grisée');
 
-// Crown of Providence : bloque → détruite en fin de tour (règle carte, non journalisée).
+// Détection AUTO d'un équipement détruit via le cimetière (sans liste de cartes) :
+// une pièce qui apparaît au cimetière est retirée du plateau (ex. Crown de bloc).
 const crownTl = BR.buildTimeline({
   myName: 'Me', oppName: 'Opp',
   players: { me: { hero: 'Oscilio', equipment: { head: { name: 'Crown of Providence' } } }, opp: { hero: 'Bravo', equipment: {} } },
   lifeSeries: { me: [40, 40], opp: [40, 40] },
   turns: [
-    { player: 'Opp', label: 'Opp — Tour 1', hand: [], arsenal: [], events: [ { type: 'played', player: 'Opp', card: 'Big Attack' }, { type: 'blocked', player: 'Me', cards: ['Crown of Providence'] }, { type: 'combatResult', hit: false } ] },
-    { player: 'Me', label: 'Me — Tour 2', hand: [], arsenal: [], events: [ { type: 'played', player: 'Me', card: 'Whatever' }, { type: 'combatResult', hit: false } ] }
+    { player: 'Opp', label: 'Opp — Tour 1', hand: [], arsenal: [], grave: { me: [], opp: [] }, events: [ { type: 'played', player: 'Opp', card: 'Big Attack' }, { type: 'blocked', player: 'Me', cards: ['Crown of Providence'] }, { type: 'combatResult', hit: false } ] },
+    { player: 'Me', label: 'Me — Tour 2', hand: [], arsenal: [], grave: { me: ['Crown of Providence'], opp: [] }, events: [ { type: 'played', player: 'Me', card: 'Whatever' }, { type: 'combatResult', hit: false } ] }
   ]
 });
-assert(crownTl.steps[0].state.meEquipGone.indexOf('crown of providence') < 0, 'Crown encore présente pendant le tour où elle bloque');
-assert(crownTl.steps[crownTl.steps.length - 1].state.meEquipGone.indexOf('crown of providence') >= 0, 'Crown retirée dès le tour suivant (cassée en bloquant)');
+assert(crownTl.steps[0].state.meEquipGone.indexOf('crown of providence') < 0, 'Crown présente tant qu\'elle n\'est pas au cimetière (tour du bloc)');
+assert(crownTl.steps[crownTl.steps.length - 1].state.meEquipGone.indexOf('crown of providence') >= 0, 'Crown retirée auto dès son apparition au cimetière (sans liste)');
+
+// Détection auto vaut aussi pour le banni.
+const banishTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'X', equipment: { legs: { name: 'Nullrune Boots' } } }, opp: { hero: 'Y', equipment: {} } },
+  lifeSeries: { me: [40], opp: [40] },
+  turns: [ { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], banish: { me: ['Nullrune Boots'], opp: [] }, events: [] } ]
+});
+assert(banishTl.steps.slice(-1)[0].state.meEquipGone.indexOf('nullrune boots') >= 0, 'équipement banni détecté comme retiré');
 
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;

@@ -33,11 +33,6 @@
     return HERO_TOKENS[k] || [];
   }
 
-  // Équipements qui se DÉTRUISENT en fin de tour lorsqu'ils bloquent (règle de
-  // la carte, NON journalisée par Talishar comme « was destroyed » → il faut
-  // l'appliquer nous-mêmes). Clé = nom normalisé. Étendre au besoin.
-  const BREAK_ON_BLOCK = { 'crown of providence': true };
-
   // ---------- Images (cache local ; CardImages cache déjà côté réseau) ----------
   const _img = {};
   function resolveImg(name, hero) {
@@ -128,6 +123,17 @@
       if (t.grave) { st.meGrave = (t.grave.me || []).slice(); st.oppGrave = (t.grave.opp || []).slice(); }
       if (t.banish) { st.meBanish = (t.banish.me || []).slice(); st.oppBanish = (t.banish.opp || []).slice(); }
 
+      // Détection AUTOMATIQUE des équipements détruits (sans liste de cartes) :
+      // un équipement détruit part au cimetière (ou banni). Dès qu'une pièce
+      // connue y apparaît, on la retire du plateau — de façon cumulative, donc
+      // définitive. Couvre tout ce qui « casse » (Crown en bloquant, Nullrune,
+      // armures…). Complète l'événement « was destroyed » (utile aux vieux logs
+      // sans cimetière capté). NB : détecté en DÉBUT de tour → une pièce cassée
+      // ce tour-ci reste visible pendant le tour, puis disparaît au suivant.
+      [['me', st.meGrave, st.meBanish, st.meEquipGone], ['opp', st.oppGrave, st.oppBanish, st.oppEquipGone]].forEach(([sd, grave, banish, gone]) => {
+        (grave || []).concat(banish || []).forEach(c => { const k = norm(c); if (EQ[sd][k] && gone.indexOf(k) < 0) gone.push(k); });
+      });
+
       // Joueur actif. Le tour d'ouverture (1er joueur) n'a souvent pas d'en-tête
       // → player=null : on déduit l'acteur (celui qui joue le plus ce tour-là).
       const opening = !attacker;
@@ -171,7 +177,6 @@
       const evs = t.events || [], consumed = {};
       let openAtk = null, curBlocks = [], curReactions = [];
       let lastAction = null, ended = false;   // dernière carte jouée/activée (cause du coup fatal) ; fin de partie atteinte
-      let pendingBreak = [];   // équipements « casse en bloquant » à détruire en fin de CE tour
       // Affiche en carte SEULE une carte de l'attaquant restée sans combat
       // (action hors-combat). Une vraie carte d'ATTAQUE, elle, n'est montrée que
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
@@ -226,12 +231,7 @@
           const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
         } else if (e.type === 'blocked') {
           const s = sideOf(e.player);
-          (e.cards || []).forEach(c => {
-            const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq });
-            // Équipement « casse en bloquant » (ex. Crown of Providence) : programmé
-            // pour destruction en FIN de ce tour (reste visible pendant qu'il bloque).
-            if (eq && BREAK_ON_BLOCK[norm(c)]) pendingBreak.push({ side: s, key: norm(c) });
-          });
+          (e.cards || []).forEach(c => { const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq }); });
         } else if (e.type === 'damageTaken') {
           const s = sideOf(e.player); st.life[s] = Math.max(0, st.life[s] - (e.amount || 0));
         } else if (e.type === 'combatResult') {
@@ -268,10 +268,6 @@
         }
       });
       flushAtk();   // fin de tour : dernière action hors-combat affichée seule
-      // Destruction de fin de tour des équipements « casse en bloquant » : appliquée
-      // APRÈS les étapes du tour (l'équipement reste visible pendant le tour où il a
-      // bloqué), donc visible comme retiré dès le prochain tour (état cumulatif).
-      pendingBreak.forEach(b => { const arr = b.side === 'me' ? st.meEquipGone : st.oppEquipGone; if (arr.indexOf(b.key) < 0) arr.push(b.key); });
     });
     return { players: GAME.players, myName: MY, oppName: OPP, hero: HERO, steps };
   }
