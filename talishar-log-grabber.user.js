@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.13.2
+// @version      1.14.0
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,8 +15,8 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.13.2';
-  console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
+  const VERSION = '1.14.0';
+  console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
   const POLL_MS = 500;
@@ -159,18 +159,15 @@
       // stats de l'adversaire arrivent ensuite (après le swap) → le dépôt reçoit
       // la version complète, sans clic. Le garde est posé AVANT l'appel async
       // pour éviter les doublons entre deux ticks.
-      // Compte appairé (sbConfigured) → envoi AUTO systématique : appairer son
-      // compte implique qu'on veut ses parties dedans sans y penser. GitHub, lui,
-      // reste soumis au drapeau auto (héritage).
-      const autoGh = cfg(SYNC.auto) === '1';
-      if ((autoGh && syncConfigured()) || sbConfigured()) {
+      // Envoi AUTO vers le COMPTE (Supabase) dès que le compte est appairé.
+      // L'envoi GitHub (héritage) a été retiré : tout passe par le compte privé.
+      if (sbConfigured()) {
         const nPlayers = Object.keys(found.byPlayer).length;
         if (autoPushedFor !== gameName || nPlayers > autoPushedCount) {
           autoPushedFor = gameName;
           autoPushedCount = nPlayers;
-          console.log('[TLG] auto-envoi (' + nPlayers + ' camp(s) de stats)');
-          if (autoGh && syncConfigured()) pushGameToRepo(true);
-          if (sbConfigured()) pushGameToSupabase(true);
+          console.log('[TLG] auto-envoi compte (' + nPlayers + ' camp(s) de stats)');
+          pushGameToSupabase(true);
         }
       }
     }
@@ -643,9 +640,8 @@
     };
     btnRow.appendChild(mkBtn('Copier', copyLog));
     btnRow.appendChild(mkBtn('Télécharger', downloadLog));
-    btnRow.appendChild(mkBtn('☁ Dépôt', () => pushGameToRepo(false)));
     btnRow.appendChild(mkBtn('🔗 Compte', () => pushGameToSupabase(false)));
-    btnRow.appendChild(mkBtn('⚙', configureSync));
+    btnRow.appendChild(mkBtn('⚙', configurePairing));
     btnRow.appendChild(mkBtn('Effacer', clearLog));
     fullBox.appendChild(btnRow);
 
@@ -1076,7 +1072,7 @@
     const k = e.key.toLowerCase();
     if (k === 'd') { e.preventDefault(); downloadLog(); }
     else if (k === 'c') { e.preventDefault(); copyLog(); }
-    else if (k === 's') { e.preventDefault(); pushGameToRepo(false); }
+    else if (k === 's') { e.preventDefault(); pushGameToSupabase(false); }
     else if (k === 'x') { e.preventDefault(); setCollapsed(!collapsed); }
   }, true);
 
