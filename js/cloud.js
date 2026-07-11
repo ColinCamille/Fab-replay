@@ -96,7 +96,9 @@
   async function createPairing(label) {
     if (!client || !currentUser) throw new Error('Non connecté.');
     const token = randomToken();
-    const { error } = await client.from('device_tokens').insert({ token, label: label || null });
+    // user_id explicite : la policy RLS (insert) vérifie auth.uid() = user_id ;
+    // sans lui, la ligne (user_id NULL) est refusée.
+    const { error } = await client.from('device_tokens').insert({ token, user_id: currentUser.id, label: label || null });
     if (error) throw error;
     return { token };
   }
