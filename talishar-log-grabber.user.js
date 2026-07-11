@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.13.1
+// @version      1.13.2
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.13.1';
+  const VERSION = '1.13.2';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -159,13 +159,17 @@
       // stats de l'adversaire arrivent ensuite (après le swap) → le dépôt reçoit
       // la version complète, sans clic. Le garde est posé AVANT l'appel async
       // pour éviter les doublons entre deux ticks.
-      if (cfg(SYNC.auto) === '1' && (syncConfigured() || sbConfigured())) {
+      // Compte appairé (sbConfigured) → envoi AUTO systématique : appairer son
+      // compte implique qu'on veut ses parties dedans sans y penser. GitHub, lui,
+      // reste soumis au drapeau auto (héritage).
+      const autoGh = cfg(SYNC.auto) === '1';
+      if ((autoGh && syncConfigured()) || sbConfigured()) {
         const nPlayers = Object.keys(found.byPlayer).length;
         if (autoPushedFor !== gameName || nPlayers > autoPushedCount) {
           autoPushedFor = gameName;
           autoPushedCount = nPlayers;
           console.log('[TLG] auto-envoi (' + nPlayers + ' camp(s) de stats)');
-          if (syncConfigured()) pushGameToRepo(true);
+          if (autoGh && syncConfigured()) pushGameToRepo(true);
           if (sbConfigured()) pushGameToSupabase(true);
         }
       }
@@ -1037,9 +1041,10 @@
       + (has ? '\n\n(Un code est déjà enregistré — laisse vide pour le garder.)' : ''), '');
     if (code == null) return;
     if (code.trim()) { try { localStorage.setItem(SB.token, code.trim()); } catch (e) {} }
-    const auto = confirm('Envoyer AUTOMATIQUEMENT la partie à ton compte en fin de partie ?\n\nOK = auto · Annuler = manuel (bouton 🔗 Compte).');
-    try { localStorage.setItem(SYNC.auto, auto ? '1' : '0'); } catch (e) {}
-    flash(sbConfigured() ? 'Compte connecté ✔' : 'Code manquant');
+    // Appairer = vouloir l'envoi auto : le compte est toujours envoyé en fin de
+    // partie (pas de drapeau à gérer ici). Le bouton 🔗 Compte reste dispo pour
+    // un envoi manuel immédiat.
+    flash(sbConfigured() ? 'Compte connecté ✔ (envoi auto activé)' : 'Code manquant');
     updateUI();
   }
 
