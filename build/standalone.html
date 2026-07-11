@@ -1393,6 +1393,7 @@ footer a{color:var(--text-dim)}
     <button class="lib-btn" id="importToggle" aria-expanded="false" aria-controls="importPanel" title="Importer un log .txt à la main (les parties arrivent normalement toutes seules)">⤒ Importer un log</button>
     <button class="lib-btn" id="cloudBtn" hidden>🔑 Mon compte</button>
     <button class="lib-btn" id="pairBtn" hidden>🔗 Connecter le grabber</button>
+    <button class="lib-btn" id="migrateBtn" hidden>⤴ Migrer vers le compte</button>
     <button class="lib-btn" id="syncBtn">☁ Synchro GitHub</button>
     <button class="lib-btn" id="exportBtn">⤓ Exporter la bibliothèque</button>
     <button class="lib-btn" id="importBtn">⤒ Importer une sauvegarde</button>
@@ -5230,8 +5231,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=94"></script>
-<script src="js/cloud.js?v=94"></script>
+<script src="js/cloud-config.js?v=95"></script>
+<script src="js/cloud.js?v=95"></script>
 
 <script>
 // ============================================================
@@ -5561,17 +5562,43 @@ footer a{color:var(--text-dim)}
   // ---------- Compte cloud (Supabase — login par lien magique) ----------
   // ADDITIF : tant que ce n'est pas configuré / connecté, l'app se comporte
   // exactement comme avant (IndexedDB + éventuelle synchro GitHub).
-  const cloudBtn = $('#cloudBtn'), pairBtn = $('#pairBtn');
+  const cloudBtn = $('#cloudBtn'), pairBtn = $('#pairBtn'), migrateBtn = $('#migrateBtn');
   function refreshCloudBtn() {
     const ok = !!(window.Cloud && window.Cloud.available());
-    if (!ok) { if (cloudBtn) cloudBtn.hidden = true; if (pairBtn) pairBtn.hidden = true; return; }
+    if (!ok) { [cloudBtn, pairBtn, migrateBtn].forEach(b => { if (b) b.hidden = true; }); return; }
     cloudBtn.hidden = false;
     const u = window.Cloud.getUser();
     if (u) { cloudBtn.textContent = '🔑 ' + (u.email || 'Connecté'); cloudBtn.title = 'Cliquer pour te déconnecter.'; }
     else { cloudBtn.textContent = '🔑 Se connecter'; cloudBtn.title = 'Recevoir un lien de connexion par email (sans mot de passe).'; }
-    // « Connecter le grabber » : seulement une fois connecté.
+    // « Connecter le grabber » et « Migrer » : seulement une fois connecté.
     if (pairBtn) { pairBtn.hidden = !u; pairBtn.title = 'Générer un code à coller dans le grabber (bouton 🔗 Compte) pour envoyer tes parties ici.'; }
+    if (migrateBtn) { migrateBtn.hidden = !u; migrateBtn.title = 'Envoyer une fois tes parties déjà présentes sur cet appareil vers ton compte.'; }
   }
+
+  if (migrateBtn) migrateBtn.addEventListener('click', async () => {
+    if (!window.Cloud || !window.Cloud.getUser()) { alert('Connecte-toi d’abord (🔑 Se connecter).'); return; }
+    const entries = await window.FabDB.getAllEntries();
+    const list = entries.map(e => ({
+      game_id: (e.record && e.record.source && e.record.source.gameId) || e.gameId,
+      raw: e.raw,
+      me: (e.record && e.record.myName) || null,
+      opp_hero: (e.record && e.record.players && e.record.players.opp && e.record.players.opp.hero) || null,
+      format: (e.record && e.record.format) || null,
+      captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null
+    })).filter(g => g.raw && /^\d+$/.test(String(g.game_id || '')));
+    if (!list.length) { alert('Aucune partie migrable sur cet appareil (il faut le log brut + un id numérique).'); return; }
+    if (!confirm('Envoyer ' + list.length + ' partie(s) de cet appareil vers ton compte ?\n(Sans doublon : une partie déjà présente sera simplement mise à jour.)')) return;
+    migrateBtn.disabled = true;
+    libHint.textContent = 'Migration en cours…';
+    try {
+      const n = await window.Cloud.uploadGames(list);
+      libHint.textContent = n + ' partie(s) envoyée(s) vers ton compte. ✔';
+    } catch (e) {
+      console.error(e);
+      alert('Migration échouée : ' + (e.message || e));
+      libHint.textContent = 'Migration échouée (voir console).';
+    } finally { migrateBtn.disabled = false; }
+  });
 
   if (pairBtn) pairBtn.addEventListener('click', async () => {
     if (!window.Cloud || !window.Cloud.getUser()) { alert('Connecte-toi d’abord (🔑 Se connecter).'); return; }

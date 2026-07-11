@@ -103,11 +103,39 @@
     return { token };
   }
 
+  // Migration : envoie une liste de parties locales vers le compte. L'app est
+  // authentifiée → insertion directe dans `games` (RLS insert_own : user_id =
+  // auth.uid()). Upsert par lots, dédup par (user_id, game_id) → réexécutable
+  // sans créer de doublon. `list` = [{game_id, raw, me, opp_hero, format, captured_at}].
+  async function uploadGames(list) {
+    if (!client || !currentUser) throw new Error('Non connecté.');
+    const rows = (list || [])
+      .map(g => ({
+        user_id: currentUser.id,
+        game_id: String(g.game_id || ''),
+        raw: g.raw,
+        me: g.me || null,
+        opp_hero: g.opp_hero || null,
+        format: g.format || null,
+        captured_at: g.captured_at || null
+      }))
+      .filter(r => r.raw && /^\d+$/.test(r.game_id));   // ids non numériques ignorés
+    let done = 0;
+    const CHUNK = 20;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const batch = rows.slice(i, i + CHUNK);
+      const { error } = await client.from('games').upsert(batch, { onConflict: 'user_id,game_id' });
+      if (error) throw error;
+      done += batch.length;
+    }
+    return done;
+  }
+
   function randomToken() {
     const a = new Uint8Array(24);
     (root.crypto || {}).getRandomValues ? root.crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = (i * 40503) & 255);
     return 'dt_' + Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, createPairing };
+  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, createPairing, uploadGames };
 })(typeof self !== 'undefined' ? self : this);
