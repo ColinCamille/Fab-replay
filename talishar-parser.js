@@ -49,6 +49,11 @@
     if ((m = line.match(/^(.+?) activated (.+)$/))) return { type: 'activated', player: m[1], card: m[2], text: line };
     if ((m = line.match(/^(.+?) blocked with (.+)$/))) { const cards = m[2].replace(/,? and /g, ', ').split(',').map(s => s.trim()).filter(Boolean); return { type: 'blocked', player: m[1], cards, text: line }; }
     if ((m = line.match(/^(.+?) was discarded$/))) return { type: 'discarded', card: m[1], text: line };
+    // Destruction (ex. armure/Nullrune détruite pour prévenir des dégâts arcaniques,
+    // ou carte détruite depuis l'arsenal). `detail` garde le suffixe éventuel
+    // (« and prevented 1 arcane damage », « from the arsenal »…). La vue Table
+    // s'en sert pour retirer du plateau un ÉQUIPEMENT détruit (cf. boardreplay).
+    if ((m = line.match(/^(.+?) was destroyed(?:\s+(.*?))?\.?$/))) return { type: 'destroyed', card: m[1], detail: (m[2] || null), text: line };
     if ((m = line.match(/^(.+?) took (\d+) damage$/))) return { type: 'damageTaken', player: m[1], amount: parseInt(m[2], 10), text: line };
     if ((m = line.match(/^(.+?) is about to take (\d+) damage from(?: (.+))?$/))) return { type: 'damageAnnounced', player: m[1], amount: parseInt(m[2], 10), source: m[3] || null, text: line };
     if ((m = line.match(/^(.+?) gained (\d+) life$/))) return { type: 'lifeGained', player: m[1], amount: parseInt(m[2], 10), text: line };

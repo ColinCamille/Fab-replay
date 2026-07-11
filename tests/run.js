@@ -41,6 +41,13 @@ eq(rec.endStats.me.cards.length, 3, 'endStats.me.cards (3 cartes)');
 assert(rec.endStats.opp && rec.endStats.opp.cards.length === 1, 'endStats.opp présent');
 eq(rec.timeline.durationSec, 180, 'durée globale (timestamps)');
 
+// Reconnaissance de la destruction (équipement/carte) — utilisée par la Table.
+const dEq = Parser.classifyLine('Helm of Might and Magic was destroyed and prevented 1 arcane damage.');
+eq(dEq.type, 'destroyed', 'classifyLine: type destroyed');
+eq(dEq.card, 'Helm of Might and Magic', 'classifyLine: nom de l\'équipement détruit');
+eq(Parser.classifyLine('Lightning Surge was destroyed from the arsenal').type, 'destroyed', 'classifyLine: destroyed (arsenal) aussi capté');
+eq(Parser.classifyLine('Nimblism was banished.').type !== 'destroyed', true, 'classifyLine: « banished » ≠ destroyed');
+
 // Miroir : la main ne doit PAS avoir été filtrée par les cartes adverses.
 const t1 = rec.turns.find(t => t.player === 'Ehecalt' && t.turnNumber === 1);
 assert(t1 && Array.isArray(t1.hand) && t1.hand.indexOf('Bloodrush Bellow') >= 0, 'main tour 1 conservée (miroir)');
@@ -199,6 +206,30 @@ const ccAgg = Dashboard.aggregate(fmtHeroEntries, { format: 'cc' });
 const ccHeroes = ccAgg.byMyHero.filter(m => m.hero !== '(inconnu)');
 assert(ccHeroes.length === 1 && ccHeroes[0].hero === 'Dorinthea', 'byMyHero restreint au format (Briar exclu en cc)');
 eq(ccAgg.facets.formats.length, 2, 'facette formats complète malgré le filtre (blitz + cc)');
+
+// ---------- Board replay : équipement détruit retiré du plateau ----------
+console.log('Board replay —');
+const BR = require('../js/boardreplay.js');
+const eqGame = {
+  myName: 'Me', oppName: 'Opp',
+  players: {
+    me: { hero: 'Oscilio', equipment: { head: { name: 'Helm of Might and Magic' } } },
+    opp: { hero: 'Kano', equipment: { arms: { name: 'Claw of Vynserakai' } } }
+  },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: ['Card A'], arsenal: [], events: [
+      { type: 'played', player: 'Me', card: 'Card A' },
+      { type: 'destroyed', card: 'Helm of Might and Magic', detail: 'and prevented 1 arcane damage' },
+      { type: 'combatResult', hit: false }
+    ] }
+  ]
+};
+const eqTl = BR.buildTimeline(eqGame);
+const eqLast = eqTl.steps[eqTl.steps.length - 1];
+assert(eqLast.state.meEquipGone.indexOf('helm of might and magic') >= 0, 'équipement détruit (moi) suivi dans l\'état final');
+eq(eqLast.state.oppEquipGone.length, 0, 'équipement adverse intact (non retiré)');
+eq(eqTl.steps[0].state.meEquipGone.length, 0, 'équipement présent avant sa destruction (bannière)');
 
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;

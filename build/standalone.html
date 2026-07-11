@@ -1095,6 +1095,9 @@ footer a{color:var(--text-dim)}
 .br-cluster>.br-gcard{width:50px;aspect-ratio:5/7}
 .br-cluster>.br-gcard.br-hero{width:64px}
 .br-gcard{border-radius:6px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel));position:relative}
+/* Équipement détruit (armure/arme cassée) : retiré du plateau pour refléter
+   l'état réel du jeu (cf. boardreplay applyEquipGone). */
+.br-gcard.br-broken{display:none}
 /* La vignette EST la carte : l'image remplit toute la tuile (portrait), le nom
    est en surimpression en bas. Fini la fine bande mal cadrée. */
 .br-art{position:absolute;inset:0;background:radial-gradient(120% 90% at 30% 10%,#2a3350,#141a29) center/cover no-repeat}
@@ -1451,6 +1454,11 @@ footer a{color:var(--text-dim)}
     if ((m = line.match(/^(.+?) activated (.+)$/))) return { type: 'activated', player: m[1], card: m[2], text: line };
     if ((m = line.match(/^(.+?) blocked with (.+)$/))) { const cards = m[2].replace(/,? and /g, ', ').split(',').map(s => s.trim()).filter(Boolean); return { type: 'blocked', player: m[1], cards, text: line }; }
     if ((m = line.match(/^(.+?) was discarded$/))) return { type: 'discarded', card: m[1], text: line };
+    // Destruction (ex. armure/Nullrune détruite pour prévenir des dégâts arcaniques,
+    // ou carte détruite depuis l'arsenal). `detail` garde le suffixe éventuel
+    // (« and prevented 1 arcane damage », « from the arsenal »…). La vue Table
+    // s'en sert pour retirer du plateau un ÉQUIPEMENT détruit (cf. boardreplay).
+    if ((m = line.match(/^(.+?) was destroyed(?:\s+(.*?))?\.?$/))) return { type: 'destroyed', card: m[1], detail: (m[2] || null), text: line };
     if ((m = line.match(/^(.+?) took (\d+) damage$/))) return { type: 'damageTaken', player: m[1], amount: parseInt(m[2], 10), text: line };
     if ((m = line.match(/^(.+?) is about to take (\d+) damage from(?: (.+))?$/))) return { type: 'damageAnnounced', player: m[1], amount: parseInt(m[2], 10), source: m[3] || null, text: line };
     if ((m = line.match(/^(.+?) gained (\d+) life$/))) return { type: 'lifeGained', player: m[1], amount: parseInt(m[2], 10), text: line };

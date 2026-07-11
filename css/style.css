@@ -1088,6 +1088,9 @@ footer a{color:var(--text-dim)}
 .br-cluster>.br-gcard{width:50px;aspect-ratio:5/7}
 .br-cluster>.br-gcard.br-hero{width:64px}
 .br-gcard{border-radius:6px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel));position:relative}
+/* Équipement détruit (armure/arme cassée) : retiré du plateau pour refléter
+   l'état réel du jeu (cf. boardreplay applyEquipGone). */
+.br-gcard.br-broken{display:none}
 /* La vignette EST la carte : l'image remplit toute la tuile (portrait), le nom
    est en surimpression en bas. Fini la fine bande mal cadrée. */
 .br-art{position:absolute;inset:0;background:radial-gradient(120% 90% at 30% 10%,#2a3350,#141a29) center/cover no-repeat}

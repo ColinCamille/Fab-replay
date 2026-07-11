@@ -77,14 +77,16 @@
     const st = {
       meHandCards: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
       mePitch: [], oppPitch: [], meArsenal: [], oppArsenalCount: 0,
-      meGrave: [], oppGrave: [], meBanish: [], oppBanish: [], meTokens: [], oppTokens: [], life: { me: 0, opp: 0 }
+      meGrave: [], oppGrave: [], meBanish: [], oppBanish: [], meTokens: [], oppTokens: [],
+      meEquipGone: [], oppEquipGone: [], life: { me: 0, opp: 0 }
     };
     const steps = [];
     const snap = () => ({
       meHandCards: st.meHandCards.slice(), meHandCount: st.meHandCount, meFaceUp: st.meFaceUp, oppHandCount: st.oppHandCount,
       mePitch: st.mePitch.slice(), oppPitch: st.oppPitch.slice(), meArsenal: st.meArsenal.slice(), oppArsenalCount: st.oppArsenalCount,
       meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(), meBanish: st.meBanish.slice(), oppBanish: st.oppBanish.slice(),
-      meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(), life: { me: st.life.me, opp: st.life.opp }
+      meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(),
+      meEquipGone: st.meEquipGone.slice(), oppEquipGone: st.oppEquipGone.slice(), life: { me: st.life.me, opp: st.life.opp }
     });
     const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, state: snap() });
     const rm = (a, n) => { const k = a.findIndex(x => norm(x) === norm(n)); if (k >= 0) { a.splice(k, 1); return true; } return false; };
@@ -189,6 +191,17 @@
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
           push(label, side, { type: 'play', side, card: { nm: e.card }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
+        } else if (e.type === 'destroyed') {
+          // Un ÉQUIPEMENT détruit (armure/Nullrune cassée…) est retiré du plateau
+          // à partir d'ici (effet cumulatif, jamais annulé). On identifie le camp
+          // par correspondance avec l'équipement connu (META). La ligne ne nomme
+          // pas le joueur ; si la même pièce est portée des deux côtés (rare), on
+          // attribue au défenseur (l'autre camp que l'attaquant du tour). Les
+          // cartes détruites hors-équipement (ex. « … from the arsenal ») ne
+          // correspondent à aucune pièce → naturellement ignorées ici.
+          const k = norm(e.card), inMe = !!EQ.me[k], inOpp = !!EQ.opp[k];
+          const gside = (inMe && !inOpp) ? 'me' : (inOpp && !inMe) ? 'opp' : (inMe && inOpp) ? (atkSide === 'me' ? 'opp' : 'me') : null;
+          if (gside) { const arr = gside === 'me' ? st.meEquipGone : st.oppEquipGone; if (arr.indexOf(k) < 0) arr.push(k); }
         } else if (e.type === 'pitched') {
           const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
         } else if (e.type === 'blocked') {
@@ -222,7 +235,10 @@
   // RENDU
   // ============================================================
   function gcard(side, slot, name, hero) {
-    return '<div class="br-gcard br-' + side + ' p-' + slot + (hero ? ' br-hero' : '') + '">' +
+    // data-equip = clé normalisée d'une pièce d'équipement (armure) : permet à
+    // render() de la masquer quand elle est détruite. Le héros n'en porte pas.
+    const eqAttr = (!hero && name && name !== '—') ? ' data-equip="' + esc(norm(name)) + '"' : '';
+    return '<div class="br-gcard br-' + side + ' p-' + slot + (hero ? ' br-hero' : '') + '"' + eqAttr + '>' +
       '<div class="br-art" data-card="' + esc(name) + '"' + (hero ? ' data-hero' : '') + '></div>' +
       '<div class="br-lab">' + esc(name) + '</div></div>';
   }
@@ -247,7 +263,7 @@
     // « Arcane Lantern »), en sautant les slots vides — sinon la 2e arme adverse
     // n'apparaissait pas sur le plateau.
     const wpnTile = wnm => (wnm && wnm !== '—')
-      ? '<div class="br-gcard br-' + side + ' br-wpn"><div class="br-art" data-card="' + esc(wnm) + '"></div><div class="br-lab">' + esc(wnm) + '</div></div>'
+      ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(norm(wnm)) + '"><div class="br-art" data-card="' + esc(wnm) + '"></div><div class="br-lab">' + esc(wnm) + '</div></div>'
       : '';
     const cluster = '<div class="br-cluster">' + equip +
       gcard(side, 'hero', pl.hero || '?', true) +
@@ -352,6 +368,13 @@
         s.meHandCards.forEach(c => { const d = document.createElement('div'); d.className = 'br-pcard br-me br-inhand'; d.innerHTML = '<div class="br-art" data-card="' + esc(c) + '"></div><div class="br-nm">' + esc(c) + '</div>'; mh.appendChild(d); });
       } else backs(mh, s.meHandCount, 'main vide');
     }
+    function applyEquipGone(zoneSel, goneArr) {
+      const zone = $(zoneSel); if (!zone) return;
+      const gone = goneArr || [];
+      zone.querySelectorAll('[data-equip]').forEach(el => {
+        el.classList.toggle('br-broken', gone.indexOf(el.getAttribute('data-equip')) >= 0);
+      });
+    }
     function render(prev) {
       const s = steps[i], stt = s.state;
       stage.innerHTML = buildStage(s.stage);
@@ -376,6 +399,10 @@
       };
       const otk = $('#br-oppTok'); if (otk) otk.innerHTML = tokHtml(stt.oppTokens, 'opp');
       const mtk = $('#br-meTok'); if (mtk) mtk.innerHTML = tokHtml(stt.meTokens, 'me');
+      // Équipements détruits : masqués à partir de l'étape courante (réversible en
+      // scrubbant la timeline — on repositionne la classe selon l'état de l'étape).
+      applyEquipGone('#br-fMe', stt.meEquipGone);
+      applyEquipGone('#br-fOpp', stt.oppEquipGone);
       $('#br-fMe').classList.toggle('br-active', s.actor === 'me');
       $('#br-fOpp').classList.toggle('br-active', s.actor === 'opp');
       slider.value = i; slider.style.setProperty('--pct', (steps.length > 1 ? i / (steps.length - 1) * 100 : 0) + '%');
