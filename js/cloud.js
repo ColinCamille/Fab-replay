@@ -131,6 +131,16 @@
     return done;
   }
 
+  // Supprime UNE partie du compte (RLS delete_own). Utilisé quand on supprime
+  // une partie dans la bibliothèque, pour que ça se propage à tous les appareils.
+  async function deleteGame(gameId) {
+    if (!client || !currentUser) return false;
+    const { error } = await client.from('games').delete()
+      .eq('user_id', currentUser.id).eq('game_id', String(gameId));
+    if (error) throw error;
+    return true;
+  }
+
   // RGPD : supprime le compte + toutes les données (via l'Edge Function
   // delete-account, qui appelle l'API admin ; cascade sur games/device_tokens).
   async function deleteAccount() {
@@ -149,5 +159,5 @@
     return 'dt_' + Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, createPairing, uploadGames, deleteAccount };
+  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, createPairing, uploadGames, deleteGame, deleteAccount };
 })(typeof self !== 'undefined' ? self : this);

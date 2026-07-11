@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=96">
+<link rel="stylesheet" href="css/style.css?v=97">
 </head>
 <body>
 
@@ -126,18 +126,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=96"></script>
-<script src="js/images.js?v=96"></script>
-<script src="js/db.js?v=96"></script>
-<script src="js/sync.js?v=96"></script>
-<script src="js/replay.js?v=96"></script>
-<script src="js/boardreplay.js?v=96"></script>
-<script src="js/dashboard.js?v=96"></script>
+<script src="talishar-parser.js?v=97"></script>
+<script src="js/images.js?v=97"></script>
+<script src="js/db.js?v=97"></script>
+<script src="js/sync.js?v=97"></script>
+<script src="js/replay.js?v=97"></script>
+<script src="js/boardreplay.js?v=97"></script>
+<script src="js/dashboard.js?v=97"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=96"></script>
-<script src="js/cloud.js?v=96"></script>
+<script src="js/cloud-config.js?v=97"></script>
+<script src="js/cloud.js?v=97"></script>
 
 <script>
 // ============================================================
@@ -188,6 +188,13 @@
     const hasGames = entries.length > 0;
     $('#dashEmpty').style.display = hasGames ? 'none' : 'block';
     $('#dashboardBody').style.display = hasGames ? 'block' : 'none';
+    // Onboarding : pas de partie ET pas connecté → invite à se connecter.
+    if (!hasGames && window.Cloud && window.Cloud.available() && !window.Cloud.getUser()) {
+      $('#dashEmpty').innerHTML = 'Bienvenue sur <strong>Chain Replay</strong> 👋<br>'
+        + 'Clique <strong>🔑 Se connecter</strong> en bas de page (lien magique par email, sans mot de passe) '
+        + 'pour retrouver tes parties, puis <strong>🔗 Connecter le grabber</strong> pour qu’elles arrivent toutes seules.<br>'
+        + '<span style="font-size:.8rem">Tes parties sont privées : toi seul les vois.</span>';
+    }
     if (hasGames) {
       window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onMeta: updateMeta });
     }
@@ -236,20 +243,23 @@
 
   async function deleteGame(id) {
     if (!confirm('Supprimer cette partie de la bibliothèque ?')) return;
-    await window.FabDB.removeGame(id);
+    await window.FabDB.removeGame(id);   // + pierre tombale locale (évite le ré-ajout)
     await reloadDashboard();
-    // Propagation inter-appareil : on inscrit la suppression dans le dépôt
-    // (data/deleted.json) si la synchro est connectée sur cet appareil.
-    if (window.FabSync.canWrite()) {
+    // Propagation : on efface la partie du COMPTE (Supabase) → disparaît sur
+    // tous tes appareils. Repli GitHub seulement si l'héritage est réactivé.
+    if (window.Cloud && window.Cloud.getUser()) {
       try {
-        await window.FabSync.pushDeletion([id]);
-        libHint.textContent = 'Partie supprimée — propagée à tes autres appareils.';
+        await window.Cloud.deleteGame(id);
+        libHint.textContent = 'Partie supprimée de ton compte (sur tous tes appareils).';
       } catch (e) {
         console.error(e);
-        libHint.textContent = 'Supprimée ici, mais propagation échouée : ' + e.message;
+        libHint.textContent = 'Supprimée ici, mais suppression du compte échouée : ' + (e.message || e);
       }
+    } else if (LEGACY_GITHUB && window.FabSync.canWrite()) {
+      try { await window.FabSync.pushDeletion([id]); libHint.textContent = 'Partie supprimée — propagée à tes autres appareils.'; }
+      catch (e) { console.error(e); libHint.textContent = 'Supprimée ici, mais propagation échouée : ' + e.message; }
     } else {
-      libHint.textContent = 'Partie supprimée sur cet appareil. Connecte la synchro (☁) pour supprimer sur tous tes appareils.';
+      libHint.textContent = 'Partie supprimée sur cet appareil. Connecte-toi (🔑) pour supprimer sur tous tes appareils.';
     }
   }
 
@@ -304,7 +314,15 @@
   // ---------- Synchro GitHub (dépôt = base ; lecture libre, écriture par token) ----------
   const syncBtn = $('#syncBtn');
 
+  // Basculement Supabase : l'ancienne synchro GitHub (lecture du dépôt public +
+  // écriture par token) est DÉSACTIVÉE. Le dépôt étant partagé par tous les
+  // utilisateurs du site central, la lire donnerait à chacun les parties des
+  // autres. Le compte Supabase (privé, par utilisateur) la remplace. Passer à
+  // true réactive l'héritage GitHub (dépannage seulement).
+  const LEGACY_GITHUB = false;
+
   function refreshSyncBtn() {
+    if (!LEGACY_GITHUB) { syncBtn.hidden = true; return; }   // masqué dans le modèle Supabase
     const repo = window.FabSync.detectRepo();
     if (!repo) { syncBtn.textContent = '☁ Synchro indisponible'; syncBtn.title = 'La synchro nécessite un déploiement GitHub Pages.'; return; }
     if (window.FabSync.hasToken()) { syncBtn.textContent = '☁ Synchro : connectée'; syncBtn.title = 'Cliquer pour déconnecter ce token.'; }
@@ -399,20 +417,31 @@
 
     await reloadDashboard();
 
-    // Publication cloud (si un token est connecté sur cet appareil).
-    if (importedIds.length && window.FabSync.canWrite()) {
+    // Publication : vers le COMPTE (Supabase) si connecté → visible sur tous
+    // tes appareils. Repli GitHub seulement si l'héritage est réactivé.
+    if (importedIds.length && window.Cloud && window.Cloud.getUser()) {
+      libHint.textContent = 'Envoi vers ton compte…';
+      try {
+        const entries = (await Promise.all(importedIds.map(id => window.FabDB.getEntry(id)))).filter(Boolean);
+        const list = entries.map(e => ({
+          game_id: (e.record && e.record.source && e.record.source.gameId) || e.gameId,
+          raw: e.raw,
+          me: (e.record && e.record.myName) || null,
+          opp_hero: (e.record && e.record.players && e.record.players.opp && e.record.players.opp.hero) || null,
+          format: (e.record && e.record.format) || null,
+          captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null
+        }));
+        const n = await window.Cloud.uploadGames(list);
+        libHint.textContent = n + ' partie(s) envoyée(s) vers ton compte.';
+      } catch (e) { console.error(e); libHint.textContent = 'Import local OK, mais envoi au compte échoué : ' + (e.message || e); }
+    } else if (importedIds.length && LEGACY_GITHUB && window.FabSync.canWrite()) {
       libHint.textContent = 'Publication dans le dépôt…';
       try {
         const entries = (await Promise.all(importedIds.map(id => window.FabDB.getEntry(id)))).filter(Boolean);
         const res = await window.FabSync.push(entries);
-        // Réimport volontaire → on retire ces parties de la liste de suppressions
-        // partagée, pour qu'elles ne soient plus masquées sur les autres appareils.
         try { await window.FabSync.pushUndelete(importedIds); } catch (e) { console.error(e); }
-        libHint.textContent = res.pushed + ' partie(s) publiée(s) dans le dépôt (visibles sur tes autres appareils après le redéploiement Pages).';
-      } catch (e) {
-        console.error(e);
-        libHint.textContent = 'Import local OK, mais publication cloud échouée : ' + e.message;
-      }
+        libHint.textContent = res.pushed + ' partie(s) publiée(s) dans le dépôt.';
+      } catch (e) { console.error(e); libHint.textContent = 'Import local OK, mais publication cloud échouée : ' + e.message; }
     }
 
     // Un seul .txt → on ouvre directement le replay ; plusieurs → dashboard.
@@ -586,12 +615,15 @@
     setupCloud();
     await reloadDashboard();
 
-    // Synchro descendante : récupère les parties publiées dans le dépôt
-    // (lecture statique, sans token) et les fusionne dans le cache local.
-    try {
-      const r = await window.FabSync.pull();
-      if (r.added || r.removed || r.updated || r.metaUpdated) await reloadDashboard();
-    } catch (e) { console.error(e); }
+    // Lecture GitHub (héritage) : COUPÉE dans le modèle Supabase — sinon tout
+    // utilisateur du site central hériterait des parties publiques du dépôt.
+    // Les parties arrivent désormais du compte (Cloud.onChange → mergeCloudGames).
+    if (LEGACY_GITHUB) {
+      try {
+        const r = await window.FabSync.pull();
+        if (r.added || r.removed || r.updated || r.metaUpdated) await reloadDashboard();
+      } catch (e) { console.error(e); }
+    }
 
     // Reprise d'un lien profond #game=<id> (après la synchro, la partie
     // liée peut provenir du dépôt).
