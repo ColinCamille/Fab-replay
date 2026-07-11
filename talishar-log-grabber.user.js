@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.13.0
+// @version      1.13.1
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.13.0';
+  const VERSION = '1.13.1';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -159,13 +159,14 @@
       // stats de l'adversaire arrivent ensuite (après le swap) → le dépôt reçoit
       // la version complète, sans clic. Le garde est posé AVANT l'appel async
       // pour éviter les doublons entre deux ticks.
-      if (cfg(SYNC.auto) === '1' && syncConfigured()) {
+      if (cfg(SYNC.auto) === '1' && (syncConfigured() || sbConfigured())) {
         const nPlayers = Object.keys(found.byPlayer).length;
         if (autoPushedFor !== gameName || nPlayers > autoPushedCount) {
           autoPushedFor = gameName;
           autoPushedCount = nPlayers;
           console.log('[TLG] auto-envoi (' + nPlayers + ' camp(s) de stats)');
-          pushGameToRepo(true);
+          if (syncConfigured()) pushGameToRepo(true);
+          if (sbConfigured()) pushGameToSupabase(true);
         }
       }
     }
@@ -639,6 +640,7 @@
     btnRow.appendChild(mkBtn('Copier', copyLog));
     btnRow.appendChild(mkBtn('Télécharger', downloadLog));
     btnRow.appendChild(mkBtn('☁ Dépôt', () => pushGameToRepo(false)));
+    btnRow.appendChild(mkBtn('🔗 Compte', () => pushGameToSupabase(false)));
     btnRow.appendChild(mkBtn('⚙', configureSync));
     btnRow.appendChild(mkBtn('Effacer', clearLog));
     fullBox.appendChild(btnRow);
@@ -887,6 +889,12 @@
   function cfg(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
   function syncConfigured() { return !!(cfg(SYNC.owner) && cfg(SYNC.repo) && cfg(SYNC.token)); }
 
+  // --- Compte Supabase (option C) : envoi privé via l'Edge Function ingest,
+  // authentifié par un CODE D'APPAIRAGE généré dans l'app (pas de token GitHub).
+  const SB_INGEST = 'https://alzldgpopmhxnlxafsrl.supabase.co/functions/v1/ingest';
+  const SB = { token: 'tlg_sb_token' };
+  function sbConfigured() { return !!cfg(SB.token); }
+
   function utf8ToBase64(str) {
     const bytes = new TextEncoder().encode(str);
     let bin = '';
@@ -980,6 +988,59 @@
       if (!silent) alert('Envoi au dépôt échoué : ' + e.message
         + '\n\n(Si « Failed to fetch », c’est probablement la CSP de Talishar qui bloque l’appel — dis-le-moi, je passe le grabber en GM_xmlhttpRequest.)');
     }
+  }
+
+  // Envoi de la partie vers le COMPTE (Supabase) via l'Edge Function ingest.
+  // Authentifié par le code d'appairage. Coexiste avec l'envoi GitHub le temps
+  // de la transition.
+  async function pushGameToSupabase(silent) {
+    if (!sbConfigured()) { if (silent) return; configurePairing(); if (!sbConfigured()) return; }
+    if (!captured.length) { if (!silent) alert('Aucune ligne de log capturée pour cette partie.'); return; }
+    const id = gameName;
+    if (!id || !/^\d+$/.test(String(id))) {
+      if (silent) return;
+      flash('Partie sans id — envoi ignoré');
+      alert('Impossible d’identifier la partie (aucun numéro dans l’URL Talishar). Ouvre la partie depuis talishar.net/game/play/<numéro> puis réessaie.');
+      return;
+    }
+    flash('Envoi au compte…');
+    try {
+      const res = await fetch(SB_INGEST, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_token: cfg(SB.token),
+          game_id: String(id),
+          raw: logText(),
+          me: meta.myName || null,
+          opp_hero: meta.oppHero || null,
+          format: meta.format || null,
+          captured_at: meta.capturedAt || new Date().toISOString()
+        })
+      });
+      if (res.ok) { flash('Envoyé au compte ✔'); console.log('[TLG] partie ' + id + ' envoyée au compte'); return; }
+      const t = await res.text().catch(() => '');
+      throw new Error('HTTP ' + res.status + ' ' + t.slice(0, 180));
+    } catch (e) {
+      console.error('[TLG] envoi compte échoué:', e);
+      flash('Envoi compte échoué');
+      if (!silent) alert('Envoi au compte échoué : ' + e.message
+        + '\n\nVérifie que : (1) l’Edge Function « ingest » est déployée avec JWT verification désactivée, (2) le code d’appairage est correct (régénère-le dans l’app → 🔗 Connecter le grabber).');
+    }
+  }
+
+  // Appairage : on colle le code généré dans l'app (bouton « 🔗 Connecter le
+  // grabber »). Une fois par appareil. (La version 1-clic viendra ensuite.)
+  function configurePairing() {
+    const has = !!cfg(SB.token);
+    const code = prompt('Colle le CODE D’APPAIRAGE de ton compte.\n\nGénère-le dans l’app (une fois connecté) : bouton « 🔗 Connecter le grabber ».'
+      + (has ? '\n\n(Un code est déjà enregistré — laisse vide pour le garder.)' : ''), '');
+    if (code == null) return;
+    if (code.trim()) { try { localStorage.setItem(SB.token, code.trim()); } catch (e) {} }
+    const auto = confirm('Envoyer AUTOMATIQUEMENT la partie à ton compte en fin de partie ?\n\nOK = auto · Annuler = manuel (bouton 🔗 Compte).');
+    try { localStorage.setItem(SYNC.auto, auto ? '1' : '0'); } catch (e) {}
+    flash(sbConfigured() ? 'Compte connecté ✔' : 'Code manquant');
+    updateUI();
   }
 
   function configureSync() {

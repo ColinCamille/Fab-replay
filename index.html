@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=92">
+<link rel="stylesheet" href="css/style.css?v=93">
 </head>
 <body>
 
@@ -102,6 +102,7 @@
   <div class="tools-row">
     <button class="lib-btn" id="importToggle" aria-expanded="false" aria-controls="importPanel" title="Importer un log .txt à la main (les parties arrivent normalement toutes seules)">⤒ Importer un log</button>
     <button class="lib-btn" id="cloudBtn" hidden>🔑 Mon compte</button>
+    <button class="lib-btn" id="pairBtn" hidden>🔗 Connecter le grabber</button>
     <button class="lib-btn" id="syncBtn">☁ Synchro GitHub</button>
     <button class="lib-btn" id="exportBtn">⤓ Exporter la bibliothèque</button>
     <button class="lib-btn" id="importBtn">⤒ Importer une sauvegarde</button>
@@ -123,18 +124,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=92"></script>
-<script src="js/images.js?v=92"></script>
-<script src="js/db.js?v=92"></script>
-<script src="js/sync.js?v=92"></script>
-<script src="js/replay.js?v=92"></script>
-<script src="js/boardreplay.js?v=92"></script>
-<script src="js/dashboard.js?v=92"></script>
+<script src="talishar-parser.js?v=93"></script>
+<script src="js/images.js?v=93"></script>
+<script src="js/db.js?v=93"></script>
+<script src="js/sync.js?v=93"></script>
+<script src="js/replay.js?v=93"></script>
+<script src="js/boardreplay.js?v=93"></script>
+<script src="js/dashboard.js?v=93"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=92"></script>
-<script src="js/cloud.js?v=92"></script>
+<script src="js/cloud-config.js?v=93"></script>
+<script src="js/cloud.js?v=93"></script>
 
 <script>
 // ============================================================
@@ -464,14 +465,26 @@
   // ---------- Compte cloud (Supabase — login par lien magique) ----------
   // ADDITIF : tant que ce n'est pas configuré / connecté, l'app se comporte
   // exactement comme avant (IndexedDB + éventuelle synchro GitHub).
-  const cloudBtn = $('#cloudBtn');
+  const cloudBtn = $('#cloudBtn'), pairBtn = $('#pairBtn');
   function refreshCloudBtn() {
-    if (!window.Cloud || !window.Cloud.available()) { if (cloudBtn) cloudBtn.hidden = true; return; }
+    const ok = !!(window.Cloud && window.Cloud.available());
+    if (!ok) { if (cloudBtn) cloudBtn.hidden = true; if (pairBtn) pairBtn.hidden = true; return; }
     cloudBtn.hidden = false;
     const u = window.Cloud.getUser();
     if (u) { cloudBtn.textContent = '🔑 ' + (u.email || 'Connecté'); cloudBtn.title = 'Cliquer pour te déconnecter.'; }
     else { cloudBtn.textContent = '🔑 Se connecter'; cloudBtn.title = 'Recevoir un lien de connexion par email (sans mot de passe).'; }
+    // « Connecter le grabber » : seulement une fois connecté.
+    if (pairBtn) { pairBtn.hidden = !u; pairBtn.title = 'Générer un code à coller dans le grabber (bouton 🔗 Compte) pour envoyer tes parties ici.'; }
   }
+
+  if (pairBtn) pairBtn.addEventListener('click', async () => {
+    if (!window.Cloud || !window.Cloud.getUser()) { alert('Connecte-toi d’abord (🔑 Se connecter).'); return; }
+    try {
+      const { token } = await window.Cloud.createPairing('grabber');
+      window.prompt('Code d’appairage du grabber.\n\nCopie-le, puis dans le grabber (sur Talishar) : bouton « 🔗 Compte » → colle ce code.', token);
+      libHint.textContent = 'Code d’appairage généré — colle-le dans le grabber (🔗 Compte).';
+    } catch (e) { console.error(e); alert('Génération du code impossible : ' + (e.message || e)); }
+  });
 
   // Récupère les parties du compte connecté et les fusionne dans le cache local
   // (mêmes règles que la synchro : pas de doublon, respect des suppressions).
