@@ -250,6 +250,20 @@ assert(/gagne/.test(winLast.stage.big) && /Oscilio/.test(winLast.stage.big), 'ba
 assert(/coup fatal\s*:\s*Volzar/.test(winLast.stage.sub), 'coup fatal = dernière action (Volzar)');
 assert(/Bravo 0 PV/.test(winLast.stage.sub), 'perdant affiché à 0 PV');
 
+// Équipement activé → marqué « utilisé » ce tour, réarmé au tour suivant.
+const usedGame = {
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: { legs: { name: 'Lightning Greaves' } } }, opp: { hero: 'Bravo', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], events: [ { type: 'activated', player: 'Me', card: 'Lightning Greaves' } ] },
+    { player: 'Opp', label: 'Opp — Tour 2', hand: [], arsenal: [], events: [ { type: 'played', player: 'Opp', card: 'Some Attack' }, { type: 'combatResult', hit: false } ] }
+  ]
+};
+const usedTl = BR.buildTimeline(usedGame);
+assert(usedTl.steps.some(s => (s.state.meEquipUsed || []).indexOf('lightning greaves') >= 0), 'équipement activé marqué « utilisé » ce tour');
+eq(usedTl.steps[usedTl.steps.length - 1].state.meEquipUsed.length, 0, '« utilisé » réarmé au tour suivant');
+
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;
 console.log('DB —');

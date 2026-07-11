@@ -78,7 +78,7 @@
       meHandCards: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
       mePitch: [], oppPitch: [], meArsenal: [], oppArsenalCount: 0,
       meGrave: [], oppGrave: [], meBanish: [], oppBanish: [], meTokens: [], oppTokens: [],
-      meEquipGone: [], oppEquipGone: [], life: { me: 0, opp: 0 }
+      meEquipGone: [], oppEquipGone: [], meEquipUsed: [], oppEquipUsed: [], life: { me: 0, opp: 0 }
     };
     const steps = [];
     const snap = () => ({
@@ -86,7 +86,8 @@
       mePitch: st.mePitch.slice(), oppPitch: st.oppPitch.slice(), meArsenal: st.meArsenal.slice(), oppArsenalCount: st.oppArsenalCount,
       meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(), meBanish: st.meBanish.slice(), oppBanish: st.oppBanish.slice(),
       meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(),
-      meEquipGone: st.meEquipGone.slice(), oppEquipGone: st.oppEquipGone.slice(), life: { me: st.life.me, opp: st.life.opp }
+      meEquipGone: st.meEquipGone.slice(), oppEquipGone: st.oppEquipGone.slice(),
+      meEquipUsed: st.meEquipUsed.slice(), oppEquipUsed: st.oppEquipUsed.slice(), life: { me: st.life.me, opp: st.life.opp }
     });
     const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, state: snap() });
     const rm = (a, n) => { const k = a.findIndex(x => norm(x) === norm(n)); if (k >= 0) { a.splice(k, 1); return true; } return false; };
@@ -102,6 +103,7 @@
       if (ls.me[idx] != null) st.life.me = ls.me[idx];
       if (ls.opp[idx] != null) st.life.opp = ls.opp[idx];
       st.mePitch = []; st.oppPitch = [];   // le pitch part au deck en fin de tour
+      st.meEquipUsed = []; st.oppEquipUsed = [];   // « équipement utilisé » se réarme à chaque tour
 
       // t.hand / t.arsenal sont TOUJOURS les instantanés du joueur (moi), quel
       // que soit le tour. Mon arsenal est donc toujours à jour — y compris une
@@ -190,6 +192,10 @@
           // sans passer par le différé de combat (openAtk).
           lastAction = e.card;
           const side = sideOf(e.player);
+          // Si la carte activée EST une pièce d'équipement (armure/arme/item),
+          // on la marque « utilisée » pour ce tour → grisée sur le plateau
+          // (réarmée au tour suivant). Les activations de héros ne matchent pas.
+          if (EQ[side][norm(e.card)]) { const u = side === 'me' ? st.meEquipUsed : st.oppEquipUsed; if (u.indexOf(norm(e.card)) < 0) u.push(norm(e.card)); }
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
@@ -388,11 +394,13 @@
         s.meHandCards.forEach(c => { const d = document.createElement('div'); d.className = 'br-pcard br-me br-inhand'; d.innerHTML = '<div class="br-art" data-card="' + esc(c) + '"></div><div class="br-nm">' + esc(c) + '</div>'; mh.appendChild(d); });
       } else backs(mh, s.meHandCount, 'main vide');
     }
-    function applyEquipGone(zoneSel, goneArr) {
+    function applyEquipState(zoneSel, goneArr, usedArr) {
       const zone = $(zoneSel); if (!zone) return;
-      const gone = goneArr || [];
+      const gone = goneArr || [], used = usedArr || [];
       zone.querySelectorAll('[data-equip]').forEach(el => {
-        el.classList.toggle('br-broken', gone.indexOf(el.getAttribute('data-equip')) >= 0);
+        const k = el.getAttribute('data-equip'), broken = gone.indexOf(k) >= 0;
+        el.classList.toggle('br-broken', broken);                       // détruit → masqué
+        el.classList.toggle('br-used', !broken && used.indexOf(k) >= 0); // activé ce tour → grisé
       });
     }
     function render(prev) {
@@ -421,8 +429,8 @@
       const mtk = $('#br-meTok'); if (mtk) mtk.innerHTML = tokHtml(stt.meTokens, 'me');
       // Équipements détruits : masqués à partir de l'étape courante (réversible en
       // scrubbant la timeline — on repositionne la classe selon l'état de l'étape).
-      applyEquipGone('#br-fMe', stt.meEquipGone);
-      applyEquipGone('#br-fOpp', stt.oppEquipGone);
+      applyEquipState('#br-fMe', stt.meEquipGone, stt.meEquipUsed);
+      applyEquipState('#br-fOpp', stt.oppEquipGone, stt.oppEquipUsed);
       $('#br-fMe').classList.toggle('br-active', s.actor === 'me');
       $('#br-fOpp').classList.toggle('br-active', s.actor === 'opp');
       slider.value = i; slider.style.setProperty('--pct', (steps.length > 1 ? i / (steps.length - 1) * 100 : 0) + '%');
