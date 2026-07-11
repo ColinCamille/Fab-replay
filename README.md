@@ -119,6 +119,12 @@ Cette clé autorise le script à écrire **dans ton dépôt, et seulement lui**.
 - **« Partie sans id — envoi ignoré »** → tu as cliqué ☁ Dépôt sur une page sans
   numéro de partie (partie fermée, lobby). Ouvre la partie depuis
   `talishar.net/game/play/<numéro>` puis réessaie.
+- **Le gestionnaire dit « le script ne correspondait pas à l'URL » / « recharger
+  l'onglet »** (typiquement en ouvrant Talishar sur la page d'accueil) → corrigé
+  à partir de la **v1.13.0** : le script s'injecte désormais sur **tout le site**
+  (le widget n'apparaît toujours que sur une page de partie). Laisse-le se mettre
+  à jour tout seul, ou force via le menu de l'extension → « Rechercher des mises
+  à jour ». Plus besoin de lancer une partie contre l'IA pour le réveiller.
 - **Je ne vois pas mes parties tout de suite** → attends ~1 min (le site se met à
   jour) puis recharge la page.
 - **Une partie affiche un mauvais héros / de vieilles infos** → recharge la page :

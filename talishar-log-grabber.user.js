@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.12.4
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. Export texte / téléchargement + localStorage.
+// @version      1.13.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
-// @match        *://talishar.net/game/*
-// @match        *://www.talishar.net/game/*
+// @match        *://talishar.net/*
+// @match        *://www.talishar.net/*
 // @run-at       document-idle
 // @grant        none
 // @downloadURL  https://raw.githubusercontent.com/ColinCamille/Fab-replay/main/talishar-log-grabber.user.js
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.12.4';
+  const VERSION = '1.13.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au dépôt, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -60,6 +60,12 @@
            || location.pathname.match(/(\d{5,})/);
     return m ? m[1] : 'unknown';
   }
+
+  // Depuis v1.13, @match couvre tout le site (pour être injecté dès la page
+  // d'accueil, Talishar étant une SPA). On restreint la capture ET le widget
+  // aux pages de partie — comportement visible identique aux versions ≤ 1.12,
+  // et pas de faux gameId tiré d'un nombre présent dans une autre URL.
+  function onGamePage() { return /\/game\//.test(location.pathname); }
 
   // ============================================================
   // ACCÈS AU STORE REDUX (v1.8)
@@ -539,6 +545,10 @@
   function tick() {
     try {
       ensureUI();
+      // Hors d'une page de partie (accueil, deckbuilder…) : le widget est masqué
+      // par ensureUI et on n'effectue aucune capture. Le script reste vivant et
+      // reprend automatiquement dès qu'on entre dans une partie (navigation SPA).
+      if (!onGamePage()) return;
       const gn = currentGameName();
       if (gn !== gameName) {
         gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false;
@@ -657,6 +667,8 @@
     const root = document.documentElement || document.body;
     if (ui && ui.parentNode !== root && root) root.appendChild(ui);
     applyStyle();
+    // Widget visible uniquement sur les pages de partie (cf. onGamePage).
+    if (ui) ui.style.display = onGamePage() ? '' : 'none';
     updateUI();
   }
 
