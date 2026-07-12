@@ -1189,138 +1189,172 @@ footer a{color:var(--text-dim)}
 .hx-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ============================================================
-   BOARD REPLAY — vue « table » (onglet Table du replay).
-   Grille façon Talishar : deux camps en miroir (adversaire haut / moi bas).
-   Chaque camp = grille 6 colonnes — équipement (tête·torse·bras·jambes) |
-   arme · héros · arsenal | pitch · deck · cimetière · banni. Zones étiquetées
-   + identité couleur. Bande de combat centrale (attaque → défense → verdict)
-   + PV empilés. Mobile : tout tient en largeur. Desktop : blocs rapprochés
-   par alignement (bras↔torse, arme↔héros, pitch↔deck) + aperçu au survol.
-   Toutes les classes sont préfixées « br- ».
+   BOARD REPLAY — vue « table + timeline » (onglet Table du replay).
+   Toutes les classes sont préfixées « br- » : aucune collision avec le
+   reste du site (qui a déjà .verdict, .card, .slot, .stage, .hand…).
    ============================================================ */
 .br-wrap{padding:4px 2px 2px}
 .br-empty{padding:24px 12px;text-align:center;color:var(--text-dim);font-size:.85rem}
-
-/* Barre de lecture */
-.br-toolbar{display:flex;gap:8px;justify-content:center;margin-bottom:10px}
-.br-tool{width:46px;height:40px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.br-toolbar{display:flex;gap:7px;justify-content:center;margin-bottom:10px}
+.br-tool{width:44px;height:38px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
 .br-tool:hover{border-color:var(--accent-dim,var(--gold-dim));background:var(--panel-2)}
 .br-tool:disabled{opacity:.35;cursor:default}
 .br-tool:focus-visible{outline:2px solid var(--accent,var(--gold));outline-offset:2px}
 .br-tool.br-play{font-size:1.05rem;color:#141414;background:var(--accent,var(--gold));border-color:var(--accent,var(--gold))}
-
-/* Tapis — --u = taille de tuile de référence (cartes plafonnées à ~1.15·u). */
-.br-mat{--u:clamp(46px,15vw,58px);--gap:6px;position:relative;display:flex;flex-direction:column;gap:8px;
-  background:radial-gradient(150% 100% at 50% 42%,#101724,#080b12 82%);
-  border:1px solid var(--line);border-radius:14px;padding:9px 7px}
-
-/* Mains (bas = moi face visible, haut = adversaire dos) */
-.br-hand{display:flex;gap:5px;justify-content:center;min-height:calc(var(--u)*1.1);align-items:center;flex-wrap:nowrap;overflow-x:auto;padding:2px}
+.br-mat{position:relative;display:flex;flex-direction:column;gap:7px;
+  background:radial-gradient(150% 100% at 50% 42%,#16223b,#0a0e18 82%);
+  border:1px solid var(--line);border-radius:14px;padding:9px 8px;
+  box-shadow:inset 0 0 90px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.02)}
+.br-hand{display:flex;gap:4px;justify-content:center;min-height:46px;align-items:center;flex-wrap:nowrap;overflow-x:auto;padding:2px}
 .br-handempty{font:.6rem 'JetBrains Mono',monospace;color:var(--text-faint)}
-.br-back{width:calc(var(--u)*.82);aspect-ratio:5/7;flex:0 0 auto;border-radius:5px;border:1px solid #5b1e22;background:linear-gradient(160deg,#7a2a2f,#3c1417);position:relative;box-shadow:inset 0 0 0 2px #0000002e}
-.br-back::after{content:"FaB";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99}
-
-/* Champ = grille 6 colonnes */
-.br-field{position:relative;display:grid;grid-template-columns:repeat(6,1fr);gap:var(--gap);align-items:center;
-  background:linear-gradient(180deg,rgba(20,26,41,.5),rgba(10,14,24,.5));border:1px solid var(--line);border-radius:12px;padding:8px}
+.br-back{width:34px;height:46px;flex:0 0 auto;border-radius:5px;border:1px solid #5b1e22;background:linear-gradient(160deg,#7a2a2f,#3c1417);position:relative;box-shadow:inset 0 0 0 2px #0000002e}
+.br-back::after{content:"FaB";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99;letter-spacing:.05em}
+/* Champ d'un joueur : rail (cimetière·deck·pitch) | héros+équipement | arsenal.
+   Rails empilés en colonne sur mobile (compact) ; passent en rangée sur desktop. */
+.br-field{position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;
+  background:radial-gradient(120% 120% at 50% 50%,rgba(20,26,41,.72),rgba(10,14,24,.72));
+  border:1px solid var(--line);border-radius:12px;padding:7px 8px}
 .br-field.br-active.br-opp{box-shadow:inset 0 0 0 1px #8b6bff55,0 0 20px rgba(139,107,255,.12)}
 .br-field.br-active.br-me{box-shadow:inset 0 0 0 1px rgba(201,162,39,.42),0 0 20px rgba(201,162,39,.12)}
-.br-cell{display:flex;align-items:center;justify-content:center;min-width:0}
-.br-cell>*{width:100%;max-width:calc(var(--u)*1.15)}
-.br-cell>.br-gcard.br-hero{max-width:calc(var(--u)*1.35)}
-
-/* Tuiles (carte = art plein cadre + nom en surimpression, masqué si l'image charge) */
-.br-gcard,.br-zcard,.br-deck{border-radius:6px;overflow:hidden;border:1px solid var(--line);position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));aspect-ratio:5/7}
-.br-gcard.br-hero{border:2px solid var(--accent,var(--gold));box-shadow:0 0 0 2px rgba(var(--accent-rgb),.12)}
+.br-rail{display:flex;flex-direction:column;gap:5px;align-items:center;flex:0 0 auto}
+/* Mobile : rail gauche en 2×2 (cimetière·deck / pitch·banni) → plus compact
+   en hauteur, ce qui remonte les boutons et laisse la place au héros. */
+.br-rail.br-left{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:5px;align-content:center}
+.br-rail.br-right{justify-self:end}
+.br-zpair{display:flex;flex-direction:column;align-items:center;gap:2px}
+.br-zlbl{font:600 .5rem/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);white-space:nowrap}
+.br-cluster{display:flex;align-items:center;justify-content:center;gap:5px}
+.br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:4px}
+/* Dimensions des tuiles — mobile (héros/équipement/arme agrandis). */
+.br-rail .br-slot,.br-rail .br-deck{width:44px;aspect-ratio:5/7;min-height:0;height:auto}
+.br-equip .br-gcard{width:44px;aspect-ratio:5/7}
+.br-cluster>.br-gcard{width:50px;aspect-ratio:5/7}
+.br-cluster>.br-gcard.br-hero{width:64px}
+.br-gcard{border-radius:6px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel));position:relative}
+/* Équipement détruit (armure/arme cassée) : retiré du plateau pour refléter
+   l'état réel du jeu (cf. boardreplay applyEquipState). */
+.br-gcard.br-broken{display:none}
+/* Équipement dont la capacité a été activée ce tour-ci : grisé (« épuisé »),
+   réarmé au tour suivant. */
+.br-gcard.br-used{opacity:.42;filter:grayscale(.75)}
+.br-gcard.br-used::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 5px,rgba(0,0,0,.18) 5px,rgba(0,0,0,.18) 10px);pointer-events:none}
+/* La vignette EST la carte : l'image remplit toute la tuile (portrait), le nom
+   est en surimpression en bas. Fini la fine bande mal cadrée. */
 .br-art{position:absolute;inset:0;background:radial-gradient(120% 90% at 30% 10%,#2a3350,#141a29) center/cover no-repeat}
-.br-gcard.br-me .br-art,.br-zcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
-.br-gcard.br-opp .br-art,.br-zcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-gcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-gcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+/* contain : la carte ENTIÈRE est toujours visible, jamais recadrée/coupée
+   (au pire un fin liseré sombre si son ratio diffère de la tuile). */
 .br-art.has-img{background-size:contain;background-repeat:no-repeat;background-position:center}
-.br-lab,.br-zcard .br-nm,.br-pcard .br-nm{position:absolute;left:0;right:0;top:0;bottom:auto;z-index:2;font-size:calc(var(--u)*.135);line-height:1.1;padding:3px;
-  color:#f2ecd6;text-align:center;background:linear-gradient(#0c0c0cf0,#0c0c0cab);border-bottom:1px solid #b9922f44;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Image chargée → la carte porte son nom : on masque le nom en surimpression.
+   Spécificité tuile+imgok pour battre .br-zcard/.br-pcard .br-nm (display:-webkit-box). */
 .br-gcard.br-imgok .br-lab,.br-zcard.br-imgok .br-nm,.br-pcard.br-imgok .br-nm,.br-tok.br-imgok .br-nm{display:none}
-.br-gcard.br-hero .br-lab{color:#fff;font-weight:700}
-.br-deck{border-color:#5b1e22;background:linear-gradient(160deg,#7a2a2f,#3c1417)}
-.br-deck::after{content:"FaB";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:800 calc(var(--u)*.17)/1 'Cinzel',serif;color:#e6b56a99;text-shadow:0 1px 2px #000}
-
-/* Zones : vide = pointillé + libellé + couleur ; pleine = carte du dessus + compteur */
-.br-slot{aspect-ratio:5/7;border-radius:6px;border:1.5px dashed #2a3348;background:#0c111b;display:flex;align-items:flex-end;justify-content:center;
-  text-align:center;font:600 calc(var(--u)*.125)/1.1 'Inter',sans-serif;color:var(--text-faint);padding-bottom:5px}
-.br-z-arsenal:not(.br-filled){border-color:#5b4a24;background:linear-gradient(160deg,#1a160c,#0d0b08)}
-.br-z-pitch:not(.br-filled){border-color:#2f5a7e;background:linear-gradient(160deg,#0f1c28,#0b0f16)}
-.br-z-banish:not(.br-filled){border-color:#4a3d6e;background:linear-gradient(160deg,#150f24,#0c0916)}
-.br-z-grave:not(.br-filled){border-color:#39414f;background:#12141c}
-.br-slot.br-filled{padding:0;border-style:solid;overflow:visible;font-size:0}
-.br-z-pitch.br-filled{border-color:#3f7bb0;box-shadow:0 0 0 1px #3f7bb040}
-.br-z-banish.br-filled{border-color:#7b62b0}
-.br-slot.br-filled .br-zcard{width:100%;height:100%}
-.br-zcard.br-back{display:flex;background:linear-gradient(160deg,#7a2a2f,#3c1417);align-items:center;justify-content:center;border-color:#5b1e22}
-.br-zcard.br-back::after{content:"FaB";font:800 calc(var(--u)*.16)/1 'Cinzel',serif;color:#e6b56a99}
-.br-zcard.br-grave{filter:grayscale(.5) brightness(.82)}
-.br-badge{position:absolute;bottom:-5px;right:-5px;font:800 calc(var(--u)*.13)/1 'JetBrains Mono',monospace;color:#fff;background:#0b0e16;border:1px solid var(--line2);border-radius:6px;padding:2px 5px;z-index:3}
+/* Plateau épuré : on retire les libellés de zones/emplacements (TÊTE, ARSENAL,
+   PITCH, CIMETIÈRE, ARME, DECK…). La position et le visuel suffisent. */
 .br-slot-t,.br-slot-tag{display:none}
+.br-slot:not(.br-filled){font-size:0}
+.br-lab{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:9px 3px 3px;color:#e9e6da;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.45) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
+.br-slot-t{font-size:.5rem;text-transform:uppercase;letter-spacing:.06em;color:#cdd2e0;position:absolute;top:2px;left:3px;z-index:2;text-shadow:0 1px 3px #000}
+.br-gcard.br-hero .br-lab{color:#fff;font-weight:700}
+.br-slot{height:100%;min-height:62px;border-radius:6px;border:1px dashed #33405e;background:#0f1420;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.56rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);padding:2px}
+.br-deck{min-height:62px;border-radius:6px;border:1px solid #5b1e22;position:relative;background:linear-gradient(160deg,#7a2a2f,#3c1417)}
+.br-deck::before{content:"";position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);text-align:center;font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99;letter-spacing:.08em}
+.br-slot.br-filled{padding:0;border-style:solid;position:relative;overflow:visible}
+.br-slot-tag{position:absolute;top:-6px;left:50%;transform:translateX(-50%);font:700 .44rem/1 'JetBrains Mono',monospace;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 4px;white-space:nowrap;z-index:2}
+.br-zcard{width:100%;height:100%;border-radius:5px;overflow:hidden;position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));border:1px solid var(--line)}
+.br-zcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-zcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-zcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:8px 2px 2px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.4) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
+.br-zcard.br-back{display:flex;background:linear-gradient(160deg,#7a2a2f,#3c1417);align-items:center;justify-content:center}
+.br-zcard.br-back::after{content:"FaB";font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99}
+.br-zcard.br-grave{filter:grayscale(.35) brightness(.85)}
+.br-badge{position:absolute;bottom:-4px;right:-4px;font:700 .52rem/1 'JetBrains Mono',monospace;color:#fff;background:#111a;border:1px solid var(--line);border-radius:6px;padding:1px 4px;z-index:2}
 .br-bump{animation:brBump .45s ease}
-@keyframes brBump{0%{transform:scale(1)}35%{transform:scale(1.14)}100%{transform:scale(1)}}
-
-/* Tokens / permanents en jeu : petite rangée près du héros */
-.br-tokrow{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
-.br-tokrow:empty{display:none}
-.br-tok{position:relative;width:calc(var(--u)*.68);aspect-ratio:5/7;border-radius:5px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel))}
-.br-tok.br-opp{border-color:#8b6bff66}.br-tok.br-me{border-color:rgba(201,162,39,.5)}
-.br-tok .br-nm{position:absolute;inset:0;top:auto;font-size:calc(var(--u)*.1);line-height:1.05;padding:2px;text-align:center;color:#eee;background:linear-gradient(transparent,#000d);display:flex;align-items:flex-end;justify-content:center;text-shadow:0 1px 2px #000;overflow:hidden}
-
-/* Alignement des blocs — desktop uniquement (rapproche bras↔torse, arme↔héros, pitch↔deck) */
-@media (min-width:900px){.br-alR{justify-content:flex-end}.br-alL{justify-content:flex-start}}
-
-/* Bande centrale : indicateur de tour + combat + PV empilés */
-.br-mid{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding-top:4px}
-.br-turnchip{z-index:4;font:700 .56rem/1 'JetBrains Mono',monospace;color:#141414;background:var(--green);border-radius:999px;padding:4px 12px;white-space:nowrap}
-.br-combat{display:flex;align-items:stretch;gap:9px;width:100%;justify-content:center}
-.br-lane{position:relative;flex:1 1 auto;min-width:0;min-height:calc(var(--u)*2.2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:10px;overflow:hidden;
-  background:linear-gradient(180deg,#0b0f18,#080b12);border:1px solid var(--line);border-radius:11px}
-.br-lifecol{flex:0 0 auto;display:flex;flex-direction:column;gap:6px;justify-content:center;width:calc(var(--u)*1.5)}
-.br-life{border-radius:10px;text-align:center;padding:7px 4px;display:flex;flex-direction:column;gap:2px}
-.br-life-who{font:700 calc(var(--u)*.115)/1.1 'JetBrains Mono',monospace;letter-spacing:.02em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.br-life-n{font:800 calc(var(--u)*.44)/1 'JetBrains Mono',monospace;transition:transform .2s}
-.br-life.br-opp{background:#1a1730;border:1px solid #4a3d7a}.br-life.br-opp .br-life-who{color:var(--violet)}.br-life.br-opp .br-life-n{color:#fff}
-.br-life.br-me{background:#1c1808;border:1px solid #5f5026}.br-life.br-me .br-life-who{color:var(--accent,var(--gold))}.br-life.br-me .br-life-n{color:#f0d9c0}
+@keyframes brBump{0%{transform:scale(1)}35%{transform:scale(1.18);box-shadow:0 0 10px #0006}100%{transform:scale(1)}}
+/* Bande centrale : PV (côté gauche) + piste de combat, entre les deux camps. */
+.br-mid{position:relative;display:flex;flex-direction:row;justify-content:center;align-items:stretch;gap:12px}
+.br-turnchip{position:absolute;top:-4px;left:50%;transform:translateX(-50%);z-index:4;
+  font:700 .56rem/1 'JetBrains Mono',monospace;color:#141414;background:var(--green);
+  border-radius:6px;padding:3px 9px;white-space:nowrap}
+.br-lane{position:relative;flex:1 1 auto;min-width:0;min-height:120px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;padding:10px 10px;overflow:hidden;
+  background:radial-gradient(80% 120% at 50% 50%,rgba(255,255,255,.04),transparent 72%)}
+/* PV : petit tableau de score sur le CÔTÉ de la piste de combat (plus sur le
+   héros). Adversaire en haut, toi en bas → les deux PV encadrent le centre,
+   au même repère sur PC comme sur mobile. Dans les coins → n'empiète pas sur
+   l'échange (attaque/défense) qui reste centré. */
+.br-lifeside{flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+.br-life{display:flex;flex-direction:column;align-items:center;gap:0;border-radius:9px;padding:4px 9px;
+  background:rgba(12,16,26,.8);border:1px solid var(--line)}
+.br-life-who{font:600 .5rem/1.3 'JetBrains Mono',monospace;letter-spacing:.03em;text-transform:uppercase;
+  max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.br-life-n{font:800 1.4rem/1.15 'JetBrains Mono',monospace;transition:transform .2s}
+.br-life.br-opp{border-color:#8b6bff66} .br-life.br-opp .br-life-who{color:var(--violet)}
+.br-life.br-me{border-color:rgba(201,162,39,.5)} .br-life.br-me .br-life-who{color:var(--accent,var(--gold))}
 .br-life-n.br-hit{animation:brHit .55s ease}
 @keyframes brHit{0%{transform:scale(1)}30%{transform:scale(1.3);color:var(--red)}100%{transform:scale(1)}}
-
-/* Contenu combat */
+/* Tokens en jeu : petites cartes dans le coin droit de la piste (miroir des PV
+   à gauche) — adversaire en haut, toi en bas. */
+/* Mobile : tokens en overlay dans les coins droits (n'empiètent pas sur la
+   largeur de la piste → le combat ne se replie pas, la table reste courte). */
+.br-tokenside{position:absolute;right:3px;top:5px;bottom:5px;z-index:4;pointer-events:none;
+  display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+.br-tokrow{display:flex;flex-direction:row;gap:4px;align-items:center}
+.br-tok{position:relative;width:40px;aspect-ratio:5/7;flex:0 0 auto;border-radius:7px;overflow:hidden;
+  border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel))}
+.br-tok.br-opp{border-color:#8b6bff66} .br-tok.br-me{border-color:rgba(201,162,39,.5)}
+.br-tok.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
+.br-tok.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
+.br-tok .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.44rem;line-height:1.03;
+  padding:8px 2px 2px;color:#e9e6da;text-align:center;text-shadow:0 1px 2px #000;
+  background:linear-gradient(to top,rgba(0,0,0,.92),transparent);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Badge « ×N » d'un token groupé : à l'intérieur de la tuile (elle a overflow:hidden),
+   coin haut-droit pour ne pas chevaucher le nom affiché en bas. */
+.br-tok .br-badge{top:2px;right:2px;bottom:auto;left:auto;font-size:.5rem;padding:1px 4px;background:rgba(10,10,14,.85)}
+.br-phase{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);font-weight:700;margin-bottom:4px}
 .br-banner{text-align:center}
-.br-big{font-size:1rem;font-weight:700;font-family:'Cinzel',serif}
-.br-banner.br-me .br-big{color:var(--accent,var(--gold))}.br-banner.br-opp .br-big{color:var(--violet)}
+.br-big{font-size:1rem;font-weight:700;font-family:'Cinzel',serif;letter-spacing:.02em}
+.br-banner.br-me .br-big{color:var(--accent,var(--gold))} .br-banner.br-opp .br-big{color:var(--violet)}
+/* Étape terminale (victoire/abandon) : mise en avant nette pour que la fin de
+   partie — souvent hors combat (arcane, effet…) — soit toujours lisible. */
+.br-banner.br-end{padding:10px 12px;border:1px solid var(--accent,var(--gold));border-radius:10px;background:linear-gradient(160deg,rgba(201,162,39,.14),rgba(201,162,39,.04))}
+.br-banner.br-end .br-big{font-size:1.15rem}
 .br-sub{font-size:.76rem;color:var(--text-dim);margin-top:3px}
-.br-duel{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
+.br-duel{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
 .br-side{display:flex;flex-direction:column;align-items:center;gap:5px}
-.br-duel-who{font:700 calc(var(--u)*.15)/1.1 'JetBrains Mono',monospace;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);max-width:calc(var(--u)*3.4);text-align:center}
-.br-cardrow{display:flex;gap:5px;justify-content:center;flex-wrap:wrap}
+.br-duel-who{font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);font-weight:700}
+.br-cardrow{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;max-width:214px}
 .br-noblock{font:.62rem 'Inter',sans-serif;color:var(--red);font-weight:600}
-.br-pcard{width:calc(var(--u)*1.05);aspect-ratio:5/7;border-radius:6px;overflow:hidden;border:1px solid var(--line);position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));animation:brPop .3s ease}
-@keyframes brPop{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
+.br-pcard{width:56px;aspect-ratio:5/7;border-radius:6px;overflow:hidden;border:1px solid var(--line);position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));animation:brPop .3s ease}
+.br-pcard.br-inhand{width:54px}
+@keyframes brPop{from{transform:translateY(6px) scale(.94);opacity:0}to{transform:none;opacity:1}}
 .br-pcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
 .br-pcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
-.br-pcard.br-lg{width:calc(var(--u)*1.5);border-width:2px}
-.br-pcard.br-lg.br-me{border-color:var(--accent,var(--gold));box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}
-.br-pcard.br-lg.br-opp{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,107,255,.22)}
-.br-pcard.br-inhand{width:calc(var(--u)*.92)}
-.br-playone{display:flex;flex-direction:column;align-items:center;gap:8px}
-.br-react{font-size:.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
-.br-pitch-pill{display:inline-flex;align-items:center;gap:4px;font:.6rem 'JetBrains Mono',monospace;color:#82b4dd;background:#16273655;border:1px solid #2c4a6366;border-radius:999px;padding:2px 8px}
+.br-pcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:9px 3px 3px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.45) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
+.br-pitch-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#82b4dd;background:#16273655;border:1px solid #2c4a6366;border-radius:999px;padding:1px 7px;margin-top:2px}
 .br-arrow{color:var(--text-faint);font-size:1.2rem}
-.br-verdictline{margin-top:4px}
-.br-verdict{font:700 .78rem 'JetBrains Mono',monospace;padding:5px 12px;border-radius:999px}
+.br-verdict{margin-top:11px;font:700 .8rem 'JetBrains Mono',monospace;padding:5px 12px;border-radius:999px}
 .br-verdict.br-blocked{color:var(--green);background:#4fb87a1a;border:1px solid #4fb87a44}
 .br-verdict.br-through{color:var(--red);background:#e0555a1a;border:1px solid #e0555a55}
-
-/* Aperçu grande carte au survol (desktop) */
+/* Récap « une action » : juste la carte en grand, liseré = qui joue. */
+.br-playone{display:flex;flex-direction:column;align-items:center;gap:9px}
+/* Cartes de la piste de combat (centre) — agrandies. */
+.br-lane .br-pcard{width:66px}
+/* Cartes de DÉFENSE (dans l'échange) plus petites → elles tiennent sur une
+   seule rangée à côté de l'attaque, au lieu de passer à la ligne et de gonfler
+   la hauteur de la bande. L'attaque, elle, reste grande. */
+.br-lane .br-cardrow .br-pcard{width:50px}
+.br-lane .br-pcard.br-lg{width:100px}
+.br-pcard.br-lg{width:92px;border-width:2px}
+.br-pcard.br-lg.br-me{border-color:var(--accent,var(--gold));box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}
+.br-pcard.br-lg.br-opp{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,107,255,.22)}
+.br-react{font-size:.66rem;color:var(--text-dim);letter-spacing:.05em;text-transform:uppercase;font-weight:600}
+.br-act{font-size:.66rem;color:#f0b429;letter-spacing:.05em;text-transform:uppercase;font-weight:700}
+/* Aperçu grande carte au survol d'une tuile (desktop) */
 .br-preview{position:fixed;width:224px;height:313px;border-radius:14px;background-size:contain;background-repeat:no-repeat;background-position:center;background-color:#0c0f17;
-  border:1px solid var(--line2);box-shadow:0 10px 34px rgba(0,0,0,.7);opacity:0;pointer-events:none;z-index:120;transition:opacity .1s}
+  border:1px solid var(--line-2);box-shadow:0 10px 34px rgba(0,0,0,.7);opacity:0;pointer-events:none;z-index:120;transition:opacity .1s}
 .br-preview.show{opacity:1}
-
-/* Timeline */
 .br-timeline{margin-top:14px}
 .br-tl-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
 .br-tl-lbl{font:.72rem 'JetBrains Mono',monospace;color:var(--text-dim)}
@@ -1335,41 +1369,66 @@ footer a{color:var(--text-dim)}
 #boardReplay input[type=range]:focus-visible{outline:2px solid var(--accent,var(--gold));outline-offset:3px;border-radius:4px}
 .br-ticks{display:flex;justify-content:space-between;font:.58rem 'JetBrains Mono',monospace;color:var(--text-faint);margin-top:1px;padding:0 2px}
 
-/* ---- Desktop : tapis élargi, cartes plus grandes, blocs rapprochés, barre
-   de lecture en rail vertical collant à droite, cartes jouées agrandies. ---- */
+/* ---- Desktop : le tapis miroir sort de la colonne 720 px et occupe l'écran,
+   centré et agrandi. Rails à l'horizontale (on a la largeur), cartes plus
+   grandes. Le combat reste au centre entre les deux camps. Le reste
+   (Déroulé/Stats) garde sa colonne lisible. */
 @media (min-width: 900px) {
   #boardReplay{width:min(94vw,1280px);margin-inline:calc(50% - min(47vw,640px))}
-  #boardReplay .br-wrap{display:grid;grid-template-columns:1fr auto;column-gap:12px;align-items:start;grid-template-areas:"mat tools" "tl tl"}
-  #boardReplay .br-mat{--u:74px;--gap:8px;grid-area:mat;max-width:none;margin:0;gap:12px;padding:16px 20px}
+  /* Plateau + barre de lecture côte à côte, alignés sur les onglets :
+     [ table (remplit) | boutons ]. La table démarre au bord gauche des onglets,
+     les boutons se collent à son bord droit, l'ensemble atteint le bord droit. */
+  #boardReplay .br-wrap{display:grid;grid-template-columns:1fr auto;column-gap:12px;
+    align-items:start;grid-template-areas:"mat tools" "tl tl"}
+  #boardReplay .br-mat{grid-area:mat;max-width:none;margin:0;gap:10px;padding:16px 24px}
   #boardReplay .br-timeline{grid-area:tl}
-  /* Largeur bornée à la taille de tuile → playmat centré (pas de cartes
-     perdues dans des colonnes trop larges quand --u rétrécit pour tenir en hauteur). */
-  #boardReplay .br-field{padding:12px 16px;max-width:calc(var(--u)*12.5);margin-inline:auto;width:100%}
-  #boardReplay .br-combat{max-width:calc(var(--u)*12.5);margin-inline:auto;gap:14px}
-  #boardReplay .br-mid{gap:8px}
-  #boardReplay .br-lane{min-height:calc(var(--u)*2.5)}
-  #boardReplay .br-lifecol{width:calc(var(--u)*.92)}
-  #boardReplay .br-pcard{width:calc(var(--u)*.95)}
-  #boardReplay .br-pcard.br-lg{width:calc(var(--u)*1.7)}
-  #boardReplay .br-duel{gap:calc(var(--u)*.35)}
+  /* gap réduit + cluster agrandi = on rogne l'espace vide au centre du champ
+     pour de plus grandes cartes, sans toucher à la taille des cases (rails). */
+  #boardReplay .br-field{gap:14px;padding:12px 26px}
+  #boardReplay .br-rail{flex-direction:row;gap:9px}
+  #boardReplay .br-rail.br-left{display:flex;flex-direction:row}
+  #boardReplay .br-cluster{gap:10px}
+  /* Équipement en RANGÉE à côté du héros : on a la largeur, ça économise la
+     hauteur (les deux mains tiennent alors à l'écran sans scroller). */
+  #boardReplay .br-equip{display:flex;flex-direction:row;gap:6px;grid-template-columns:none;grid-auto-rows:auto}
+  #boardReplay .br-equip .br-gcard{width:74px}
+  #boardReplay .br-rail .br-slot,#boardReplay .br-rail .br-deck{width:72px}
+  #boardReplay .br-cluster>.br-gcard{width:92px}
+  #boardReplay .br-cluster>.br-gcard.br-hero{width:118px}
+  #boardReplay .br-lifetok{width:38px;height:38px;font-size:1rem;right:-11px;top:-11px}
+  #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
+
+  /* Piste de combat centrale : cartes nettement plus grandes (c'est le focus). */
+  #boardReplay .br-mid{gap:16px}
+  /* Piste bornée + centrée → les PV restent collés à sa gauche (pas au bord). */
+  #boardReplay .br-lane{flex:0 0 auto;width:min(720px,100%);min-height:230px}
+  #boardReplay .br-lane .br-pcard{width:126px}
+  #boardReplay .br-lane .br-pcard.br-lg{width:194px}
+  #boardReplay .br-life-n{font-size:1.6rem}
+  #boardReplay .br-life-who{font-size:.56rem;max-width:120px}
+  /* Desktop : tokens en colonne in-flow à droite de la piste (place dispo). */
+  #boardReplay .br-tokenside{position:static;flex:0 0 auto}
+  #boardReplay .br-tokrow{flex-direction:column;gap:6px}
+  #boardReplay .br-tok{width:62px}
+  #boardReplay .br-playone{max-width:100%}
+  #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}
   #boardReplay .br-big{font-size:1.5rem}
   #boardReplay .br-sub{font-size:.95rem}
-  #boardReplay .br-duel-who{font-size:.72rem;max-width:none}
-  #boardReplay .br-hand{min-height:0;gap:8px}
-  #boardReplay .br-hand .br-pcard,#boardReplay .br-hand .br-pcard.br-inhand{width:66px}
-  #boardReplay .br-hand .br-back{width:54px}
-  #boardReplay .br-toolbar{grid-area:tools;position:sticky;top:16px;align-self:start;flex-direction:column;gap:8px;margin:0;padding:8px;border-radius:14px;
-    background:rgba(12,15,23,.85);border:1px solid var(--line2);box-shadow:0 8px 28px rgba(0,0,0,.55)}
+  #boardReplay .br-cardrow{max-width:none}
+
+  /* Mains agrandies. */
+  #boardReplay .br-hand{min-height:0;gap:8px;padding:2px}
+  #boardReplay .br-hand .br-pcard{width:68px}
+  #boardReplay .br-hand .br-pcard.br-inhand{width:66px}
+  #boardReplay .br-hand .br-back{width:54px;height:auto;aspect-ratio:5/7}
+
+  /* Contrôles : rail vertical collé au bord droit de la table, collant en haut
+     pour rester accessibles quand on fait défiler le plateau. */
+  #boardReplay .br-toolbar{grid-area:tools;position:sticky;top:16px;align-self:start;
+    flex-direction:column;gap:8px;margin:0;padding:8px;border-radius:14px;
+    background:rgba(12,15,23,.85);border:1px solid var(--line-2);box-shadow:0 8px 28px rgba(0,0,0,.55)}
   #boardReplay .br-toolbar .br-tool{width:46px;height:46px;font-size:1.15rem}
 }
-
-
-/* --- Repris de main : état fonctionnel des équipements + bannière de fin --- */
-.br-gcard.br-broken{display:none}                                  /* équipement détruit → retiré du plateau */
-.br-gcard.br-used{opacity:.42;filter:grayscale(.75)}              /* capacité activée ce tour → grisé */
-.br-gcard.br-used::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 5px,rgba(0,0,0,.18) 5px,rgba(0,0,0,.18) 10px);pointer-events:none}
-.br-banner.br-end{padding:10px 12px;border:1px solid var(--accent,var(--gold));border-radius:10px;background:linear-gradient(160deg,rgba(201,162,39,.14),rgba(201,162,39,.04))}
-.br-banner.br-end .br-big{font-size:1.15rem}
 
 </style>
 </head>
@@ -5343,8 +5402,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=102"></script>
-<script src="js/cloud.js?v=102"></script>
+<script src="js/cloud-config.js?v=103"></script>
+<script src="js/cloud.js?v=103"></script>
 
 <script>
 // ============================================================
