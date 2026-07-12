@@ -33,9 +33,14 @@ Un petit script (« grabber ») lit tes parties sur Talishar. Installe-en **un s
 1. Ouvre **https://raw.githubusercontent.com/ColinCamille/Fab-replay/main/talishar-log-grabber.user.js**
 2. Ton gestionnaire propose **Installer** → confirme. *(Il se met à jour tout seul ensuite.)*
 
-### 4) Connecter le grabber à ton compte (une fois)
-1. Dans l'app (connecté) → **🔗 Connecter le grabber** → **copie** le code affiché.
-2. Ouvre une **partie sur Talishar** → widget **📜 Log Grabber** (en bas à gauche) → **🔗 Compte** → **colle** le code.
+### 4) Connecter le grabber à ton compte (une fois, en 1 clic)
+1. Assure-toi d'être **connecté dans l'app** (même navigateur).
+2. Ouvre une **partie sur Talishar** → widget **📜 Log Grabber** (en bas à gauche) → clique **🔗 Compte**.
+3. Une petite fenêtre de l'app s'ouvre, se connecte **toute seule** et se ferme (« Compte connecté ✔ »). **Rien à copier.**
+
+> Si la fenêtre est bloquée (bloqueur de pop-up) : autorise-la et réessaie, ou
+> clique **🔗 Connecter le grabber** dans l'app pour obtenir un **code** à coller
+> manuellement (bouton **⚙** du grabber).
 
 ### 5) Jouer et consulter
 1. **Joue** normalement.
