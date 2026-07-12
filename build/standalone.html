@@ -2817,6 +2817,14 @@ footer a{color:var(--text-dim)}
     return res;
   }
 
+  // Retrait local SANS pierre tombale : pour la réconciliation depuis le compte
+  // (une partie supprimée ailleurs). Pas de tombstone → si elle est re-ajoutée
+  // au compte plus tard, elle pourra revenir normalement.
+  async function dropGame(id) {
+    const store = await tx('readwrite');
+    return wrap(store.delete(String(id)));
+  }
+
   async function count() {
     const store = await tx('readonly');
     return wrap(store.count());
@@ -2896,7 +2904,7 @@ footer a{color:var(--text-dim)}
   }
 
   root.FabDB = {
-    open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
+    open, keyFor, putGame, getAllEntries, getEntry, removeGame, dropGame, count, clearAll,
     putEntry, buildExport, normalizeImport, exportAll, importEntries,
     markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted,
     normalizeTags, setMeta
@@ -5411,8 +5419,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=104"></script>
-<script src="js/cloud.js?v=104"></script>
+<script src="js/cloud-config.js?v=105"></script>
+<script src="js/cloud.js?v=105"></script>
 
 <script>
 // ============================================================
@@ -5842,11 +5850,14 @@ footer a{color:var(--text-dim)}
   // Récupère les parties du compte connecté et les fusionne dans le cache local
   // (mêmes règles que la synchro : pas de doublon, respect des suppressions).
   async function mergeCloudGames() {
-    if (!window.Cloud || !window.Cloud.getUser()) return 0;
+    if (!window.Cloud || !window.Cloud.getUser()) return { added: 0, removed: 0 };
     let rows;
-    try { rows = await window.Cloud.fetchGames(); } catch (e) { console.error(e); return 0; }
-    const have = new Set((await window.FabDB.getAllEntries()).map(e => String(e.gameId)));
-    let added = 0;
+    try { rows = await window.Cloud.fetchGames(); } catch (e) { console.error(e); return { added: 0, removed: 0 }; }
+    const cloudIds = new Set(rows.map(r => String(r.game_id)));
+    const local = await window.FabDB.getAllEntries();
+    const have = new Set(local.map(e => String(e.gameId)));
+    let added = 0, removed = 0;
+    // Ajouts : parties du compte absentes en local.
     for (const row of rows) {
       if (!row || !row.raw) continue;
       let rec;
@@ -5855,7 +5866,16 @@ footer a{color:var(--text-dim)}
       if (!gid || have.has(gid) || window.FabDB.isDeleted(gid)) continue;
       try { await window.FabDB.putGame(rec, row.raw); have.add(gid); added++; } catch (e) { console.error(e); }
     }
-    return added;
+    // Réconciliation des suppressions : une partie locale à id numérique (donc
+    // issue du compte) qui n'est PLUS dans le compte a été supprimée ailleurs →
+    // on la retire ici aussi (sans pierre tombale → réversible si re-ajoutée).
+    for (const e of local) {
+      const gid = String(e.gameId);
+      if (/^\d+$/.test(gid) && !cloudIds.has(gid)) {
+        try { await window.FabDB.dropGame(gid); removed++; } catch (err) { console.error(err); }
+      }
+    }
+    return { added, removed };
   }
 
   if (cloudBtn) cloudBtn.addEventListener('click', async () => {
@@ -5904,8 +5924,11 @@ footer a{color:var(--text-dim)}
       refreshCloudBtn();
       if (user) {
         if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
-        const n = await mergeCloudGames();
-        if (n) { libHint.textContent = n + ' partie(s) récupérée(s) depuis ton compte.'; await reloadDashboard(); }
+        const { added, removed } = await mergeCloudGames();
+        if (added || removed) {
+          libHint.textContent = (added ? added + ' partie(s) récupérée(s)' : '') + (added && removed ? ', ' : '') + (removed ? removed + ' supprimée(s) ailleurs' : '') + '.';
+          await reloadDashboard();
+        }
       }
     });
   }

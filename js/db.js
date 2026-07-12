@@ -187,6 +187,14 @@
     return res;
   }
 
+  // Retrait local SANS pierre tombale : pour la réconciliation depuis le compte
+  // (une partie supprimée ailleurs). Pas de tombstone → si elle est re-ajoutée
+  // au compte plus tard, elle pourra revenir normalement.
+  async function dropGame(id) {
+    const store = await tx('readwrite');
+    return wrap(store.delete(String(id)));
+  }
+
   async function count() {
     const store = await tx('readonly');
     return wrap(store.count());
@@ -266,7 +274,7 @@
   }
 
   root.FabDB = {
-    open, keyFor, putGame, getAllEntries, getEntry, removeGame, count, clearAll,
+    open, keyFor, putGame, getAllEntries, getEntry, removeGame, dropGame, count, clearAll,
     putEntry, buildExport, normalizeImport, exportAll, importEntries,
     markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted,
     normalizeTags, setMeta

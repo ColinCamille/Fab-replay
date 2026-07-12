@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=104">
+<link rel="stylesheet" href="css/style.css?v=105">
 </head>
 <body>
 
@@ -126,18 +126,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=104"></script>
-<script src="js/images.js?v=104"></script>
-<script src="js/db.js?v=104"></script>
-<script src="js/sync.js?v=104"></script>
-<script src="js/replay.js?v=104"></script>
-<script src="js/boardreplay.js?v=104"></script>
-<script src="js/dashboard.js?v=104"></script>
+<script src="talishar-parser.js?v=105"></script>
+<script src="js/images.js?v=105"></script>
+<script src="js/db.js?v=105"></script>
+<script src="js/sync.js?v=105"></script>
+<script src="js/replay.js?v=105"></script>
+<script src="js/boardreplay.js?v=105"></script>
+<script src="js/dashboard.js?v=105"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=104"></script>
-<script src="js/cloud.js?v=104"></script>
+<script src="js/cloud-config.js?v=105"></script>
+<script src="js/cloud.js?v=105"></script>
 
 <script>
 // ============================================================
@@ -567,11 +567,14 @@
   // Récupère les parties du compte connecté et les fusionne dans le cache local
   // (mêmes règles que la synchro : pas de doublon, respect des suppressions).
   async function mergeCloudGames() {
-    if (!window.Cloud || !window.Cloud.getUser()) return 0;
+    if (!window.Cloud || !window.Cloud.getUser()) return { added: 0, removed: 0 };
     let rows;
-    try { rows = await window.Cloud.fetchGames(); } catch (e) { console.error(e); return 0; }
-    const have = new Set((await window.FabDB.getAllEntries()).map(e => String(e.gameId)));
-    let added = 0;
+    try { rows = await window.Cloud.fetchGames(); } catch (e) { console.error(e); return { added: 0, removed: 0 }; }
+    const cloudIds = new Set(rows.map(r => String(r.game_id)));
+    const local = await window.FabDB.getAllEntries();
+    const have = new Set(local.map(e => String(e.gameId)));
+    let added = 0, removed = 0;
+    // Ajouts : parties du compte absentes en local.
     for (const row of rows) {
       if (!row || !row.raw) continue;
       let rec;
@@ -580,7 +583,16 @@
       if (!gid || have.has(gid) || window.FabDB.isDeleted(gid)) continue;
       try { await window.FabDB.putGame(rec, row.raw); have.add(gid); added++; } catch (e) { console.error(e); }
     }
-    return added;
+    // Réconciliation des suppressions : une partie locale à id numérique (donc
+    // issue du compte) qui n'est PLUS dans le compte a été supprimée ailleurs →
+    // on la retire ici aussi (sans pierre tombale → réversible si re-ajoutée).
+    for (const e of local) {
+      const gid = String(e.gameId);
+      if (/^\d+$/.test(gid) && !cloudIds.has(gid)) {
+        try { await window.FabDB.dropGame(gid); removed++; } catch (err) { console.error(err); }
+      }
+    }
+    return { added, removed };
   }
 
   if (cloudBtn) cloudBtn.addEventListener('click', async () => {
@@ -629,8 +641,11 @@
       refreshCloudBtn();
       if (user) {
         if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
-        const n = await mergeCloudGames();
-        if (n) { libHint.textContent = n + ' partie(s) récupérée(s) depuis ton compte.'; await reloadDashboard(); }
+        const { added, removed } = await mergeCloudGames();
+        if (added || removed) {
+          libHint.textContent = (added ? added + ' partie(s) récupérée(s)' : '') + (added && removed ? ', ' : '') + (removed ? removed + ' supprimée(s) ailleurs' : '') + '.';
+          await reloadDashboard();
+        }
       }
     });
   }
