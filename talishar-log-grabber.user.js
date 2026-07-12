@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.1
+// @version      1.14.2
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.1';
+  const VERSION = '1.14.2';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -23,6 +23,7 @@
   const LS_PREFIX = 'taliLog_';
   const LS_HAND_PREFIX = 'taliHand_';
   const LS_ARSENAL_PREFIX = 'taliArsenal_';
+  const LS_OPPARS_PREFIX = 'taliOppArs_';
   const LS_FIELD_PREFIX = 'taliField_';
   const LS_GRAVE_PREFIX = 'taliGrave_';
   const LS_BANISH_PREFIX = 'taliBanish_';
@@ -40,6 +41,7 @@
 
   let handSnapshots = {};
   let arsenalSnapshots = {};
+  let oppArsenalSnapshots = {};  // clé tour -> nombre de cartes en arsenal ADVERSE (face cachée : compte seul, jamais le nom)
   let fieldSnapshots = {};  // clé tour -> { me: [noms], opp: [noms] } (permanents/tokens en jeu)
   let graveSnapshots = {};  // clé tour -> { me, opp } (cimetière, zone publique)
   let banishSnapshots = {}; // clé tour -> { me, opp } (banni, zone publique)
@@ -269,6 +271,7 @@
       localStorage.setItem(LS_PREFIX + gameName, JSON.stringify(captured));
       localStorage.setItem(LS_HAND_PREFIX + gameName, JSON.stringify(handSnapshots));
       localStorage.setItem(LS_ARSENAL_PREFIX + gameName, JSON.stringify(arsenalSnapshots));
+      localStorage.setItem(LS_OPPARS_PREFIX + gameName, JSON.stringify(oppArsenalSnapshots));
       localStorage.setItem(LS_FIELD_PREFIX + gameName, JSON.stringify(fieldSnapshots));
       localStorage.setItem(LS_GRAVE_PREFIX + gameName, JSON.stringify(graveSnapshots));
       localStorage.setItem(LS_BANISH_PREFIX + gameName, JSON.stringify(banishSnapshots));
@@ -286,6 +289,7 @@
     captured = read(LS_PREFIX + gameName, []);
     handSnapshots = read(LS_HAND_PREFIX + gameName, {});
     arsenalSnapshots = read(LS_ARSENAL_PREFIX + gameName, {});
+    oppArsenalSnapshots = read(LS_OPPARS_PREFIX + gameName, {});
     fieldSnapshots = read(LS_FIELD_PREFIX + gameName, {});
     graveSnapshots = read(LS_GRAVE_PREFIX + gameName, {});
     banishSnapshots = read(LS_BANISH_PREFIX + gameName, {});
@@ -341,6 +345,15 @@
       return cardListNames(g.playerOne.Arsenal);
     }
     return extractZoneCardsDOM('[class*="pOneArsenal_" i] img');
+  }
+
+  // Arsenal ADVERSE : la carte y est FACE CACHÉE → Talishar ne révèle jamais son
+  // nom. On ne capte donc QUE le NOMBRE de cartes (0 ou 1), information publique,
+  // pour afficher un dos de carte sur le plateau. Redux prioritaire, repli DOM.
+  function extractOppArsenalCount() {
+    const g = getGameState();
+    if (g && g.playerTwo && Array.isArray(g.playerTwo.Arsenal)) return g.playerTwo.Arsenal.length;
+    return document.querySelectorAll('[class*="pTwoArsenal_" i] img').length;
   }
 
   // Permanents / tokens en jeu (arène). Zone PUBLIQUE → on lit les DEUX joueurs.
@@ -519,6 +532,7 @@
       } else if (hand.length > prev.length) {
         handSnapshots['__opening__'] = hand;                // la main grandit encore (rendu / pioche d'ouverture)
         arsenalSnapshots['__opening__'] = extractMyArsenal();
+        oppArsenalSnapshots['__opening__'] = extractOppArsenalCount();
         lifeSnapshots['__opening__'] = extractLife();
         const f0 = extractField(); if (f0) fieldSnapshots['__opening__'] = f0;
         const gr0 = extractTwoCamp('Graveyard'); if (gr0) graveSnapshots['__opening__'] = gr0;
@@ -537,6 +551,7 @@
       const hand = extractMyHandCards(), arsenal = extractMyArsenal();
       if (hand.length) handSnapshots[key] = hand;
       arsenalSnapshots[key] = arsenal;
+      oppArsenalSnapshots[key] = extractOppArsenalCount();
       const f = extractField(); if (f) fieldSnapshots[key] = f;
       const gr = extractTwoCamp('Graveyard'); if (gr) graveSnapshots[key] = gr;
       const bn = extractTwoCamp('Banish'); if (bn) banishSnapshots[key] = bn;
@@ -831,6 +846,8 @@
           v => v.length ? v.join(', ') : '(vide)')
       + snapshotBlockText('ARSENAL SNAPSHOTS (ton arsenal, capté depuis le DOM — jamais celui de l\'adversaire)', arsenalSnapshots,
           v => v.length ? v.join(', ') : '(vide)')
+      + snapshotBlockText('OPP ARSENAL COUNT (arsenal adverse : NOMBRE de cartes face cachée — le nom reste inconnu)', oppArsenalSnapshots,
+          v => String(v == null ? 0 : v))
       + fieldBlockText()
       + graveBlockText()
       + banishBlockText()
@@ -869,7 +886,7 @@
   }
   function clearLog() {
     if (!confirm('Effacer le log, les snapshots et les métadonnées capturés de cette partie ?')) return;
-    captured = []; lastVisibleSig = ''; handSnapshots = {}; arsenalSnapshots = {};
+    captured = []; lastVisibleSig = ''; handSnapshots = {}; arsenalSnapshots = {}; oppArsenalSnapshots = {};
     fieldSnapshots = {}; graveSnapshots = {}; banishSnapshots = {}; lifeSnapshots = {}; tsBatches = []; meta = {};
     lastTurnKey = null; openingSnapped = false;
     save(); updateUI();

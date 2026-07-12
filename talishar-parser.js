@@ -212,6 +212,22 @@
     return { rest, snapshots: out };
   }
 
+  // Bloc de COMPTES par tour (ex. arsenal adverse : un entier par tour).
+  function parseCountSnapshotBlock(text, marker) {
+    const out = {};
+    const { rest, body } = sliceBlock(text, marker);
+    if (body == null) return { rest: text, snapshots: out };
+    const lineRe = /^\[(.+?)\]\s*(.*)$/gm;
+    let hm;
+    while ((hm = lineRe.exec(body))) {
+      const key = labelToKey(hm[1].trim());
+      if (!key) continue;
+      const n = parseInt(hm[2].trim(), 10);
+      out[key] = isFinite(n) ? n : 0;
+    }
+    return { rest, snapshots: out };
+  }
+
   function parseLifeSnapshotBlock(text, marker) {
     const out = {};
     const { rest, body } = sliceBlock(text, marker);
@@ -321,6 +337,7 @@
     const lifeRes = parseLifeSnapshotBlock(text, '=== LIFE SNAPSHOTS'); text = lifeRes.rest;
     const handRes = parseCardSnapshotBlock(text, '=== HAND SNAPSHOTS'); text = handRes.rest;
     const arsRes = parseCardSnapshotBlock(text, '=== ARSENAL SNAPSHOTS'); text = arsRes.rest;
+    const oppArsRes = parseCountSnapshotBlock(text, '=== OPP ARSENAL COUNT'); text = oppArsRes.rest;
     const fieldRes = parseFieldSnapshotBlock(text, '=== FIELD SNAPSHOTS'); text = fieldRes.rest;
     const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
     const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
@@ -330,6 +347,7 @@
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
     const handSnapshots = handRes.snapshots;
     const arsenalSnapshots = arsRes.snapshots;
+    const oppArsenalCounts = oppArsRes.snapshots;
     const fieldSnapshots = fieldRes.snapshots;
     const graveSnapshots = graveRes.snapshots;
     const banishSnapshots = banishRes.snapshots;
@@ -512,6 +530,10 @@
       // joueur, le grabber capte l'instantané d'ouverture trop tard et peut y
       // voir une carte déjà arsenalée — on force donc le vide pour l'ouverture.
       if (t.turnNumber === 0) t.arsenal = [];
+      // Arsenal ADVERSE : compte de cartes face cachée (0/1) capté par le grabber
+      // (le NOM reste inconnu — zone privée). null si non capté (vieux logs).
+      // Vide forcé à l'ouverture (même règle FaB que pour mon arsenal).
+      t.oppArsenalCount = (t.turnNumber === 0) ? 0 : ((key in oppArsenalCounts) ? oppArsenalCounts[key] : null);
       // Permanents/tokens + cimetière + banni (2 camps) captés par le grabber.
       t.field = (key in fieldSnapshots) ? fieldSnapshots[key] : null;
       t.grave = (key in graveSnapshots) ? graveSnapshots[key] : null;

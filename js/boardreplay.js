@@ -147,6 +147,17 @@
       const atkSide = actor === MY ? 'me' : 'opp';
       const label = String(t.label || '').replace(MY, HERO.me).replace(OPP, HERO.opp);
 
+      // Arsenal ADVERSE (dos de carte face cachée — nom inconnu par règle FaB) :
+      //  · compte capté par le grabber (playerTwo.Arsenal) si disponible → fiable ;
+      //  · sinon (vieux logs) inféré : si l'adversaire joue « depuis l'arsenal » ce
+      //    tour, il en avait forcément une → on l'affiche jusqu'à ce qu'il la joue.
+      if (t.oppArsenalCount != null) {
+        st.oppArsenalCount = t.oppArsenalCount;
+      } else {
+        const oppFromArsenal = (t.events || []).some(e => e.type === 'played' && e.fromArsenal && e.player && e.player !== MY);
+        st.oppArsenalCount = oppFromArsenal ? 1 : 0;
+      }
+
       if (opening) {
         // Bannière de début PUIS on rejoue les actions du 1er tour (comme le
         // Déroulé) au lieu de sauter le tour. Main de départ affichée.
@@ -168,7 +179,6 @@
           // Repli sur un compteur (dos) seulement si l'instantané manque.
           if (t.hand && t.hand.length) { st.meFaceUp = true; st.meHandCards = t.hand.slice(); }
           else { st.meFaceUp = false; st.meHandCount = 4; }
-          st.oppArsenalCount = 0;
         }
         push(label, atkSide, { type: 'banner', side: atkSide, big: actor === MY ? 'Ton tour' : 'Tour adverse',
           sub: HERO[atkSide] + ' attaque · ' + HERO.me + ' ' + st.life.me + ' PV · ' + HERO.opp + ' ' + st.life.opp + ' PV' });
@@ -190,6 +200,8 @@
         if (e.type === 'played') {
           lastAction = e.card;
           const side = sideOf(e.player); removeCard(side, e.card);
+          // Carte jouée depuis l'arsenal adverse → l'arsenal adverse se vide.
+          if (e.fromArsenal && side === 'opp') st.oppArsenalCount = Math.max(0, st.oppArsenalCount - 1);
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';

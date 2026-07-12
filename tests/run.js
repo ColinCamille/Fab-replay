@@ -48,6 +48,11 @@ eq(dEq.card, 'Helm of Might and Magic', 'classifyLine: nom de l\'équipement dé
 eq(Parser.classifyLine('Lightning Surge was destroyed from the arsenal').type, 'destroyed', 'classifyLine: destroyed (arsenal) aussi capté');
 eq(Parser.classifyLine('Nimblism was banished.').type !== 'destroyed', true, 'classifyLine: « banished » ≠ destroyed');
 
+// Arsenal adverse : 0 forcé à l'ouverture ; null quand non capté (fixture sans bloc).
+eq(rec.turns[0].oppArsenalCount, 0, 'arsenal adverse : 0 forcé à l\'ouverture');
+const tPlay = rec.turns.find(t => t.turnNumber > 0);
+if (tPlay) eq(tPlay.oppArsenalCount, null, 'arsenal adverse : null si non capté (bloc absent du log)');
+
 // Miroir : la main ne doit PAS avoir été filtrée par les cartes adverses.
 const t1 = rec.turns.find(t => t.player === 'Ehecalt' && t.turnNumber === 1);
 assert(t1 && Array.isArray(t1.hand) && t1.hand.indexOf('Bloodrush Bellow') >= 0, 'main tour 1 conservée (miroir)');
@@ -295,6 +300,29 @@ const banishTl = BR.buildTimeline({
   turns: [ { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], banish: { me: ['Nullrune Boots'], opp: [] }, events: [] } ]
 });
 assert(banishTl.steps.slice(-1)[0].state.meEquipGone.indexOf('nullrune boots') >= 0, 'équipement banni détecté comme retiré');
+
+// Arsenal adverse — chemin CAPTÉ : le compte du tour fait autorité.
+const arsCap = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'A', equipment: {} }, opp: { hero: 'B', equipment: {} } },
+  lifeSeries: { me: [40], opp: [40] },
+  turns: [ { player: 'Opp', label: 'Opp — Tour 1', hand: [], arsenal: [], oppArsenalCount: 1, events: [] } ]
+});
+eq(arsCap.steps.slice(-1)[0].state.oppArsenalCount, 1, 'arsenal adverse capté (compte du tour) affiché');
+
+// Arsenal adverse — chemin INFÉRÉ (vieux log, pas de compte) : l'adversaire joue
+// depuis l'arsenal → dos de carte affiché ce tour, puis vidé quand il la joue.
+const arsInf = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'A', equipment: {} }, opp: { hero: 'B', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], events: [ { type: 'played', player: 'Me', card: 'X' }, { type: 'combatResult', hit: false } ] },
+    { player: 'Opp', label: 'Opp — Tour 2', hand: [], arsenal: [], events: [ { type: 'played', player: 'Opp', card: 'Y', fromArsenal: true }, { type: 'combatResult', hit: false } ] }
+  ]
+});
+assert(arsInf.steps.some(s => s.turn === 'B — Tour 2' && s.stage.type === 'banner' && s.state.oppArsenalCount === 1), 'arsenal adverse inféré : dos affiché au tour où il joue depuis l\'arsenal');
+eq(arsInf.steps.slice(-1)[0].state.oppArsenalCount, 0, 'arsenal adverse inféré : vidé après la carte jouée');
 
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;
