@@ -1042,11 +1042,12 @@ footer a{color:var(--text-dim)}
    ============================================================ */
 @media (min-width:900px){
   /* Débordement hors de la colonne étroite (#app = 45rem) — même technique que le plateau. */
-  #dashboardBody{width:min(96vw,1400px);margin-left:calc(50% - min(48vw,700px));margin-right:calc(50% - min(48vw,700px))}
+  #dashboardBody{width:min(97vw,1560px);margin-left:calc(50% - min(48.5vw,780px));margin-right:calc(50% - min(48.5vw,780px))}
 
-  /* Grille maîtresse : filtres (haut) · rail (gauche) · résumé · historique · matchups · cartes. */
+  /* Grille maîtresse : filtres (haut) · rail (gauche) · résumé · historique · matchups · cartes.
+     Rail élargi, colonne droite (matchups/cartes) élargie, historique un peu réduit. */
   #dashboardBody .hxwrap{display:grid;gap:16px;align-items:start;
-    grid-template-columns:232px minmax(0,1.5fr) minmax(0,1fr);
+    grid-template-columns:278px minmax(0,1.18fr) minmax(0,1fr);
     grid-template-areas:
       "filt  filt  filt"
       "rhead summ  summ"
@@ -1075,12 +1076,13 @@ footer a{color:var(--text-dim)}
   #dashboardBody .hcard:hover .frame{transform:none}
   #dashboardBody .hcard[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.3),inset 0 0 22px rgba(var(--accent-rgb),.06)}
   #dashboardBody .hcard[aria-pressed="true"] .frame{transform:none}
-  #dashboardBody .hcard .frame{width:2.7rem;height:3.6rem;flex:0 0 auto;border-radius:9px}
-  #dashboardBody .hcard .frame .mono{font-size:1.35rem}
-  #dashboardBody .hcard .frame.all .mono{font-size:1.15rem}
-  #dashboardBody .hcard .rec{padding:2px 1px 3px;font-size:.56rem}
-  #dashboardBody .hcard .rec .wr{font-size:.66rem}
-  #dashboardBody .hcard .name{flex:1;min-width:0;text-align:left;font-size:.86rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #dashboardBody .hcard{padding:8px 10px;gap:12px}
+  #dashboardBody .hcard .frame{width:3.3rem;height:4.4rem;flex:0 0 auto;border-radius:10px}
+  #dashboardBody .hcard .frame .mono{font-size:1.65rem}
+  #dashboardBody .hcard .frame.all .mono{font-size:1.4rem}
+  #dashboardBody .hcard .rec{padding:3px 2px 4px;font-size:.6rem}
+  #dashboardBody .hcard .rec .wr{font-size:.74rem}
+  #dashboardBody .hcard .name{flex:1;min-width:0;text-align:left;font-size:.92rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #dashboardBody .hcard[aria-pressed="true"] .name{color:var(--accent)}
 
   /* ---- Résumé : avatar · méta · tendance intégrée · winrate, puis KPIs ---- */
@@ -5335,8 +5337,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=100"></script>
-<script src="js/cloud.js?v=100"></script>
+<script src="js/cloud-config.js?v=101"></script>
+<script src="js/cloud.js?v=101"></script>
 
 <script>
 // ============================================================
