@@ -283,38 +283,48 @@
       '<div class="br-art" data-card="' + esc(name) + '"' + (hero ? ' data-hero' : '') + '></div>' +
       '<div class="br-lab">' + esc(name) + '</div></div>';
   }
+  // Cellule de la grille : place un contenu à (colonne, ligne) et lui donne un
+  // alignement (al = 'R' colle à droite de sa colonne, 'L' à gauche) — c'est ce
+  // qui, sur desktop, rapproche les blocs (bras↔torse, arme↔héros, pitch↔deck).
+  function gcell(inner, col, row, al) {
+    return '<div class="br-cell' + (al ? ' br-al' + al : '') + '" style="grid-column:' + col + ';grid-row:' + row + '">' + inner + '</div>';
+  }
   // Champ d'un joueur (tapis miroir) : rail cimetière·deck·pitch | héros entouré
   // de son équipement + arme | arsenal. Les IDs des emplacements dynamiques
   // (cimetière/pitch/arsenal) sont conservés pour que render() les remplisse.
   function buildZone(side, pl) {
     const e = pl.equipment || {};
     const nm = k => (e[k] && e[k].name) || '—';
+    const opp = side === 'opp';
     const gId = side === 'me' ? 'mGrave' : 'oGrave', pId = side === 'me' ? 'mPitch' : 'oPitch';
     const arsId = side === 'me' ? 'mArsenal' : 'oArsenal', bId = side === 'me' ? 'mBanish' : 'oBanish';
-    const leftRail = '<div class="br-rail br-left">' +
-      '<div class="br-slot p-grave" id="br-' + gId + '">Cimetière</div>' +
-      '<div class="br-deck p-deck" title="Deck"></div>' +
-      '<div class="br-slot p-pitch" id="br-' + pId + '">Pitch</div>' +
-      '<div class="br-slot p-banish" id="br-' + bId + '" title="Banni">Banni</div>' +
-      '</div>';
-    const equip = '<div class="br-equip">' +
-      gcard(side, 'head', nm('head')) + gcard(side, 'chest', nm('chest')) +
-      gcard(side, 'arms', nm('arms')) + gcard(side, 'legs', nm('legs')) + '</div>';
-    // Arme(s) : on affiche weaponL ET weaponR (main + main gauche/off-hand, ex.
-    // « Arcane Lantern »), en sautant les slots vides — sinon la 2e arme adverse
-    // n'apparaissait pas sur le plateau.
+    const tokId = side === 'me' ? 'meTok' : 'oppTok';
+    const head = gcard(side, 'head', nm('head')), chest = gcard(side, 'chest', nm('chest'));
+    const arms = gcard(side, 'arms', nm('arms')), legs = gcard(side, 'legs', nm('legs'));
+    // Arme(s) : weaponL ET weaponR (main + off-hand, ex. « Arcane Lantern ») ;
+    // data-equip conservé pour que render() puisse griser/masquer une arme cassée.
     const wpnTile = wnm => (wnm && wnm !== '—')
       ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(norm(wnm)) + '"><div class="br-art" data-card="' + esc(wnm) + '"></div><div class="br-lab">' + esc(wnm) + '</div></div>'
       : '';
-    const cluster = '<div class="br-cluster">' + equip +
-      gcard(side, 'hero', pl.hero || '?', true) +
-      wpnTile(nm('weaponL')) + wpnTile(nm('weaponR')) +
-      '</div>';
-    const rightRail = '<div class="br-rail br-right">' +
-      '<div class="br-zpair"><span class="br-zlbl">Arsenal</span>' +
-        '<div class="br-slot br-arsenal" id="br-' + arsId + '">Arsenal</div></div>' +
-      '</div>';
-    return leftRail + cluster + rightRail;
+    const weapon = wpnTile(nm('weaponL')) + wpnTile(nm('weaponR')) || '<div class="br-gcard br-' + side + ' br-wpn br-empty-wpn"><div class="br-art"></div><div class="br-lab">—</div></div>';
+    const hero = gcard(side, 'hero', pl.hero || '?', true);
+    const deck = '<div class="br-deck"></div>';
+    const zone = (id, cls) => '<div class="br-slot ' + cls + '" id="br-' + id + '"></div>';
+    const tok = '<div class="br-tokrow br-' + side + '" id="br-' + tokId + '"></div>';
+    // Rangée « intérieure » (r2) identique aux deux camps ; les rangées
+    // extérieures s'inversent pour que arsenal + jambes/tête forment le miroir.
+    const mid =
+      gcell(chest, 1, 2, 'R') + gcell(arms, 2, 2, 'L') +
+      gcell(weapon, 3, 2, 'R') + gcell(hero, 4, 2, 'L') +
+      gcell(zone(pId, 'br-z-pitch'), 5, 2, 'R') + gcell(deck, 6, 2, 'L');
+    if (opp) {
+      return gcell(legs, 1, 1, 'R') + gcell(tok, 5, 1, 'L') + gcell(zone(arsId, 'br-z-arsenal'), 4, 1, 'L') + gcell(zone(bId, 'br-z-banish'), 6, 1, 'L') +
+        mid +
+        gcell(head, 1, 3, 'R') + gcell(zone(gId, 'br-z-grave'), 6, 3, 'L');
+    }
+    return gcell(head, 1, 1, 'R') + gcell(zone(gId, 'br-z-grave'), 6, 1, 'L') +
+      mid +
+      gcell(legs, 1, 3, 'R') + gcell(tok, 5, 3, 'L') + gcell(zone(arsId, 'br-z-arsenal'), 4, 3, 'L') + gcell(zone(bId, 'br-z-banish'), 6, 3, 'L');
   }
 
   function mount(container, GAME) {
@@ -322,17 +332,9 @@
     const data = buildTimeline(GAME), steps = data.steps, P = data.players;
     if (!steps.length) { container.innerHTML = '<div class="br-empty">Pas d\'action à rejouer pour cette partie.</div>'; return; }
 
-    // Tokens en jeu (coin droit de la piste centrale ; adversaire en haut, toi
-    // en bas — miroir des PV). Conteneurs remplis à chaque étape depuis l'état
-    // (terrain réel capté par le grabber, sinon repli par héros). Masqués si la
-    // partie n'a aucun token.
-    const hasTokens = steps.some(s => (s.state.meTokens && s.state.meTokens.length) || (s.state.oppTokens && s.state.oppTokens.length));
-    const tokSide = hasTokens
-      ? '<div class="br-tokenside">' +
-          '<div class="br-tokrow br-opp" id="br-oppTok"></div>' +
-          '<div class="br-tokrow br-me" id="br-meTok"></div>' +
-        '</div>'
-      : '';
+    // Tokens en jeu : rendus directement dans la grille du champ (cf. buildZone,
+    // rangée extérieure côté centre). #br-oppTok / #br-meTok sont remplis à chaque
+    // étape depuis l'état et se replient (CSS) quand la partie n'a aucun token.
 
     container.innerHTML =
       '<div class="br-wrap">' +
@@ -347,12 +349,13 @@
           '<div class="br-field br-opp" id="br-fOpp">' + buildZone('opp', P.opp) + '</div>' +
           '<div class="br-mid">' +
             '<span class="br-turnchip" id="br-turnPill"> </span>' +
-            '<div class="br-lifeside">' +
-              '<div class="br-life br-opp"><span class="br-life-who">' + esc(data.hero.opp) + '</span><span class="br-life-n" id="br-oLifeTok">0</span></div>' +
-              '<div class="br-life br-me"><span class="br-life-who">' + esc(data.hero.me) + '</span><span class="br-life-n" id="br-mLifeTok">0</span></div>' +
+            '<div class="br-combat">' +
+              '<div class="br-lane" id="br-stage"></div>' +
+              '<div class="br-lifecol">' +
+                '<div class="br-life br-opp"><span class="br-life-who">' + esc(data.hero.opp) + '</span><span class="br-life-n" id="br-oLifeTok">0</span></div>' +
+                '<div class="br-life br-me"><span class="br-life-who">' + esc(data.hero.me) + '</span><span class="br-life-n" id="br-mLifeTok">0</span></div>' +
+              '</div>' +
             '</div>' +
-            '<div class="br-lane" id="br-stage"></div>' +
-            tokSide +
           '</div>' +
           '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me) + '</div>' +
           '<div class="br-hand br-me" id="br-myHand"></div>' +
@@ -375,10 +378,24 @@
     function buildStage(s) {
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
-      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
+      if (s.type === 'play') {
+        const who = data.hero[s.side] || (s.side === 'me' ? data.myName : data.oppName);
+        return '<div class="br-playone br-' + s.side + '">' +
+          '<span class="br-duel-who">' + (s.reaction ? 'Réaction · ' : 'Joue · ') + esc(who) + '</span>' +
+          pcard(s.card, s.side, true) +
+          (s.act ? '<span class="br-act">⚡ activé</span>' : '') +
+          (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
+      }
       if (s.type === 'clash') {
+        const atkHero = data.hero[s.atk.who] || (s.atk.who === 'me' ? data.myName : data.oppName);
+        const defSide = s.atk.who === 'me' ? 'opp' : 'me';
+        const defHero = data.hero[defSide] || (defSide === 'me' ? data.myName : data.oppName);
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
-        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div></div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
+        return '<div class="br-duel">' +
+          '<div class="br-side"><span class="br-duel-who">Attaque · ' + esc(atkHero) + '</span>' + pcard(s.atk, s.atk.who, true) + '</div>' +
+          '<span class="br-arrow">→</span>' +
+          '<div class="br-side"><span class="br-duel-who">Défense · ' + esc(defHero) + '</span><div class="br-cardrow">' + bl + '</div></div>' +
+          '</div><div class="br-verdictline"><span class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</span></div>';
       }
       return '';
     }
@@ -496,20 +513,42 @@
     // mobile/desktop) car le passage à la ligne des cartes dépend de la largeur.
     function stabilizeStage() {
       if (!stage.offsetParent) return;             // onglet caché → pas de layout fiable
-      // Sur desktop, la piste est bornée à la LARGEUR du plus grand contenu pour
-      // que les PV (à sa gauche) restent collés au combat au lieu de flotter au
-      // bord ; sur mobile elle remplit l'espace restant (flex) → largeur libre.
-      const wide = !!(window.matchMedia && window.matchMedia('(min-width: 900px)').matches);
+      // On fige la hauteur de la piste de combat sur le contenu le plus haut de
+      // TOUTES les étapes → la mise en page ne saute plus d'une étape à l'autre
+      // (bannière courte vs combat haut) pendant la lecture. La largeur est gérée
+      // par le flex (piste extensible, PV en colonne à droite).
       const savedH = stage.style.height, savedMin = stage.style.minHeight;
-      stage.style.height = 'auto'; stage.style.minHeight = '0'; stage.style.width = 'auto';
-      let maxH = 0, maxW = 0;
-      for (const s of steps) { stage.innerHTML = buildStage(s.stage); if (stage.offsetHeight > maxH) maxH = stage.offsetHeight; if (stage.offsetWidth > maxW) maxW = stage.offsetWidth; }
-      if (!maxH) { stage.style.height = savedH; stage.style.minHeight = savedMin; stage.style.width = ''; render(null); return; }
+      stage.style.height = 'auto'; stage.style.minHeight = '0'; stage.style.width = '';
+      let maxH = 0;
+      for (const s of steps) { stage.innerHTML = buildStage(s.stage); if (stage.offsetHeight > maxH) maxH = stage.offsetHeight; }
+      if (!maxH) { stage.style.height = savedH; stage.style.minHeight = savedMin; render(null); return; }
       stage.style.minHeight = '0';
       stage.style.height = maxH + 'px';
-      stage.style.width = wide && maxW ? maxW + 'px' : '';
       render(null);                                // ré-affiche l'étape courante dans la boîte figée
     }
+
+    // ---- Ajustement à l'écran : on met TOUT le plateau à l'échelle pour qu'il
+    // tienne dans la fenêtre (fini le zoom manuel). Le contenu vertical (2 mains
+    // + 2 champs + combat + timeline) est trop dense pour tenir en réduisant
+    // seulement les cartes ; on applique donc une échelle globale (comme un zoom
+    // navigateur) — l'aperçu au survol reste pour lire une carte en détail.
+    function fitBoard() {
+      const wrap = container.querySelector('.br-wrap');
+      if (!wrap || !wrap.offsetParent) return;
+      wrap.style.transform = ''; container.style.height = '';   // remise à zéro pour mesurer
+      const natW = wrap.offsetWidth, natH = wrap.offsetHeight;
+      if (!natW || !natH) return;
+      const top = container.getBoundingClientRect().top;
+      const availH = window.innerHeight - top - 12;
+      const availW = container.clientWidth;
+      let scale = Math.min(availW / natW, availH / natH, 1);
+      scale = Math.max(scale, 0.38);                // plancher de lisibilité (au-delà : léger scroll)
+      wrap.style.transformOrigin = 'top center';
+      wrap.style.transform = 'scale(' + scale + ')';
+      container.style.height = Math.ceil(natH * scale) + 'px';
+    }
+    // Ordre : figer la piste (hauteur stable), PUIS mettre à l'échelle l'ensemble.
+    function relayout() { const w = container.querySelector('.br-wrap'); if (w) w.style.transform = ''; stabilizeStage(); fitBoard(); }
     if (window.ResizeObserver) {
       let raf = 0, lastW = -1;
       const ro = new ResizeObserver(() => {
@@ -519,13 +558,16 @@
         if (w === lastW) return;
         lastW = w;
         if (raf) return;
-        raf = requestAnimationFrame(() => { raf = 0; stabilizeStage(); });
+        raf = requestAnimationFrame(() => { raf = 0; relayout(); });
       });
       ro.observe(container);
     }
+    // Changements de hauteur du viewport (rotation, barre d'URL mobile, fenêtre) :
+    let rraf = 0;
+    window.addEventListener('resize', () => { if (rraf) return; rraf = requestAnimationFrame(() => { rraf = 0; relayout(); }); });
 
     go(0, null);
-    stabilizeStage();
+    relayout();
   }
 
   root.BoardReplay = { mount, buildTimeline };
