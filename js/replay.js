@@ -78,7 +78,7 @@
       prev.className = 'br-preview';
       document.body.appendChild(prev);
       const PW = 224, PH = 313;
-      const sel = '.eq-slot[data-card], .hero-avatar[data-hero], .card-chip, .ev-thumb';
+      const sel = '.eq-slot[data-card], .hero-avatar[data-hero], .card-chip, .ev-thumb, .rex-mini';
       rv.addEventListener('mouseover', e => {
         const el = e.target.closest(sel);
         const img = el && el.querySelector('img');
