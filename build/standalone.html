@@ -1115,7 +1115,13 @@ footer a{color:var(--text-dim)}
   #dashboardBody #hxPanelHist{max-height:calc(100vh - 60px)}
   #dashboardBody #hxSubMatchups>.card{margin:0;border:0;background:none;border-radius:0;display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1}
   #dashboardBody #hxSubMatchups>.card>h2{flex:0 0 auto}
-  #dashboardBody #hxSubMatchups .cbody{flex:1;min-height:0;overflow:auto}
+  #dashboardBody #hxSubMatchups .cbody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
+  /* Pas de scroll latéral : les noms longs (encadrés Meilleur/Pire) se tronquent. */
+  #dashboardBody #hxSubMatchups .muhl{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  #dashboardBody #hxSubMatchups .muhl .hl{min-width:0;overflow:hidden}
+  #dashboardBody #hxSubMatchups .muhl .hl .info{min-width:0}
+  #dashboardBody #hxSubMatchups .muhl .hl .htag,#dashboardBody #hxSubMatchups .muhl .hl .hnm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #dashboardBody #hxSubMatchups .muhl .hl .hrt{flex:0 0 auto}
 
   /* En-têtes propres aux panneaux (masqués sur mobile) : titre + bouton agrandir. */
   #dashboardBody .hxcards-hd,#dashboardBody .hxhist-hd{display:block;padding:12px 14px 0;flex:0 0 auto}
@@ -1131,7 +1137,7 @@ footer a{color:var(--text-dim)}
   #dashboardBody .card>h2 .hx-expand{margin-left:auto}
 
   /* Cartes : en-tête (titre + bascule) puis une seule vue affichée. */
-  #dashboardBody #hxSubCards>.card{margin:0;border:0;background:none;border-radius:0;min-height:0;overflow:auto;flex:1}
+  #dashboardBody #hxSubCards>.card{margin:0;border:0;background:none;border-radius:0;min-height:0;overflow-y:auto;overflow-x:hidden;flex:1}
   #dashboardBody #hxSubCards>.card>h2{display:none}
   #dashboardBody .ctoggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:10px 0 2px}
   #dashboardBody .ctoggle button{background:var(--panel-2);border:0;border-right:1px solid var(--line);color:var(--text-dim);font-size:.76rem;padding:6px 11px;cursor:pointer;font-family:'Inter',sans-serif}
@@ -1143,7 +1149,7 @@ footer a{color:var(--text-dim)}
 
   /* Historique : en-tête + contrôles fixes, liste qui défile. */
   #dashboardBody #hxPanelHist .controls,#dashboardBody #hxPanelHist .resfilter,#dashboardBody #hxPanelHist .listmeta{flex:0 0 auto}
-  #dashboardBody #hxPanelHist #hxList{flex:1;min-height:0;overflow:auto;padding-bottom:12px}
+  #dashboardBody #hxPanelHist #hxList{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-bottom:12px}
 
   /* ---- Mode focus : le panneau agrandi prend toute la zone basse ---- */
   #dashboardBody .hxwrap[data-max="hist"]{grid-template-areas:"filt filt filt" "rhead summ summ" "rail summ summ" "rail hist hist" "rail hist hist"}
@@ -5337,8 +5343,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=101"></script>
-<script src="js/cloud.js?v=101"></script>
+<script src="js/cloud-config.js?v=102"></script>
+<script src="js/cloud.js?v=102"></script>
 
 <script>
 // ============================================================
