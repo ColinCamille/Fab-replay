@@ -2799,6 +2799,25 @@ footer a{color:var(--text-dim)}
     return entry;
   }
 
+  // Applique des métadonnées venues du COMPTE (tags/favori/metaUpdatedAt) en
+  // dernier-écrit-gagne : on n'écrase que si l'estampille distante est plus
+  // récente que la locale. Renvoie true si l'entrée a changé.
+  async function applyCloudMeta(id, meta) {
+    if (!meta) return false;
+    const prev = await getEntry(id);
+    if (!prev) return false;
+    const local = prev.metaUpdatedAt || '';
+    const remote = meta.metaUpdatedAt || '';
+    if (remote && local && remote <= local) return false;   // local aussi/plus récent → garder
+    const entry = Object.assign({}, prev);
+    entry.tags = normalizeTags(meta.tags || []);
+    entry.favorite = !!meta.favorite;
+    entry.metaUpdatedAt = remote || new Date().toISOString();
+    const store = await tx('readwrite');
+    await wrap(store.put(entry));
+    return true;
+  }
+
   async function getAllEntries() {
     const store = await tx('readonly');
     const all = await wrap(store.getAll());
@@ -2907,7 +2926,7 @@ footer a{color:var(--text-dim)}
     open, keyFor, putGame, getAllEntries, getEntry, removeGame, dropGame, count, clearAll,
     putEntry, buildExport, normalizeImport, exportAll, importEntries,
     markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted,
-    normalizeTags, setMeta
+    normalizeTags, setMeta, applyCloudMeta
   };
 })(typeof self !== 'undefined' ? self : this);
 
@@ -5419,8 +5438,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=105"></script>
-<script src="js/cloud.js?v=105"></script>
+<script src="js/cloud-config.js?v=106"></script>
+<script src="js/cloud.js?v=106"></script>
 
 <script>
 // ============================================================
@@ -5492,9 +5511,13 @@ footer a{color:var(--text-dim)}
   // (fusion descendante gérée par FabSync.pull via metaUpdatedAt).
   async function updateMeta(id, patch) {
     const entry = await window.FabDB.setMeta(id, patch);
-    if (entry && window.FabSync.canWrite()) {
-      try { await window.FabSync.push([entry]); }
+    // Propagation des tags/favoris via le COMPTE (colonne meta) → visibles sur
+    // tous tes appareils. Repli GitHub si l'héritage est réactivé.
+    if (entry && window.Cloud && window.Cloud.getUser()) {
+      try { await window.Cloud.updateMeta(id, { tags: entry.tags || [], favorite: !!entry.favorite, metaUpdatedAt: entry.metaUpdatedAt }); }
       catch (e) { console.error(e); }
+    } else if (entry && LEGACY_GITHUB && window.FabSync.canWrite()) {
+      try { await window.FabSync.push([entry]); } catch (e) { console.error(e); }
     }
     return entry;
   }
@@ -5715,7 +5738,8 @@ footer a{color:var(--text-dim)}
           me: (e.record && e.record.myName) || null,
           opp_hero: (e.record && e.record.players && e.record.players.opp && e.record.players.opp.hero) || null,
           format: (e.record && e.record.format) || null,
-          captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null
+          captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null,
+          meta: (e.tags && e.tags.length) || e.favorite || e.metaUpdatedAt ? { tags: e.tags || [], favorite: !!e.favorite, metaUpdatedAt: e.metaUpdatedAt || null } : null
         }));
         const n = await window.Cloud.uploadGames(list);
         libHint.textContent = n + ' partie(s) envoyée(s) vers ton compte.';
@@ -5822,7 +5846,8 @@ footer a{color:var(--text-dim)}
       me: (e.record && e.record.myName) || null,
       opp_hero: (e.record && e.record.players && e.record.players.opp && e.record.players.opp.hero) || null,
       format: (e.record && e.record.format) || null,
-      captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null
+      captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null,
+          meta: (e.tags && e.tags.length) || e.favorite || e.metaUpdatedAt ? { tags: e.tags || [], favorite: !!e.favorite, metaUpdatedAt: e.metaUpdatedAt || null } : null
     })).filter(g => g.raw && /^\d+$/.test(String(g.game_id || '')));
     if (!list.length) { alert('Aucune partie migrable sur cet appareil (il faut le log brut + un id numérique).'); return; }
     if (!confirm('Envoyer ' + list.length + ' partie(s) de cet appareil vers ton compte ?\n(Sans doublon : une partie déjà présente sera simplement mise à jour.)')) return;
@@ -5856,15 +5881,20 @@ footer a{color:var(--text-dim)}
     const cloudIds = new Set(rows.map(r => String(r.game_id)));
     const local = await window.FabDB.getAllEntries();
     const have = new Set(local.map(e => String(e.gameId)));
-    let added = 0, removed = 0;
-    // Ajouts : parties du compte absentes en local.
+    let added = 0, removed = 0, metaChanged = 0;
+    // Ajouts + application des tags/favoris (colonne meta), dernier-écrit-gagne.
     for (const row of rows) {
       if (!row || !row.raw) continue;
       let rec;
       try { rec = window.TalisharParser.parse(row.raw); } catch (e) { continue; }
       const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
-      if (!gid || have.has(gid) || window.FabDB.isDeleted(gid)) continue;
-      try { await window.FabDB.putGame(rec, row.raw); have.add(gid); added++; } catch (e) { console.error(e); }
+      if (!gid) continue;
+      if (!have.has(gid) && !window.FabDB.isDeleted(gid)) {
+        try { await window.FabDB.putGame(rec, row.raw); have.add(gid); added++; } catch (e) { console.error(e); }
+      }
+      if (row.meta && have.has(gid)) {
+        try { if (await window.FabDB.applyCloudMeta(gid, row.meta)) metaChanged++; } catch (e) { console.error(e); }
+      }
     }
     // Réconciliation des suppressions : une partie locale à id numérique (donc
     // issue du compte) qui n'est PLUS dans le compte a été supprimée ailleurs →
@@ -5875,7 +5905,7 @@ footer a{color:var(--text-dim)}
         try { await window.FabDB.dropGame(gid); removed++; } catch (err) { console.error(err); }
       }
     }
-    return { added, removed };
+    return { added, removed, metaChanged };
   }
 
   if (cloudBtn) cloudBtn.addEventListener('click', async () => {
@@ -5924,9 +5954,13 @@ footer a{color:var(--text-dim)}
       refreshCloudBtn();
       if (user) {
         if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
-        const { added, removed } = await mergeCloudGames();
-        if (added || removed) {
-          libHint.textContent = (added ? added + ' partie(s) récupérée(s)' : '') + (added && removed ? ', ' : '') + (removed ? removed + ' supprimée(s) ailleurs' : '') + '.';
+        const { added, removed, metaChanged } = await mergeCloudGames();
+        if (added || removed || metaChanged) {
+          const parts = [];
+          if (added) parts.push(added + ' récupérée(s)');
+          if (removed) parts.push(removed + ' supprimée(s) ailleurs');
+          if (metaChanged) parts.push(metaChanged + ' tag(s)/favori(s) synchronisés');
+          libHint.textContent = 'Compte : ' + parts.join(', ') + '.';
           await reloadDashboard();
         }
       }

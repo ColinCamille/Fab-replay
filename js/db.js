@@ -169,6 +169,25 @@
     return entry;
   }
 
+  // Applique des métadonnées venues du COMPTE (tags/favori/metaUpdatedAt) en
+  // dernier-écrit-gagne : on n'écrase que si l'estampille distante est plus
+  // récente que la locale. Renvoie true si l'entrée a changé.
+  async function applyCloudMeta(id, meta) {
+    if (!meta) return false;
+    const prev = await getEntry(id);
+    if (!prev) return false;
+    const local = prev.metaUpdatedAt || '';
+    const remote = meta.metaUpdatedAt || '';
+    if (remote && local && remote <= local) return false;   // local aussi/plus récent → garder
+    const entry = Object.assign({}, prev);
+    entry.tags = normalizeTags(meta.tags || []);
+    entry.favorite = !!meta.favorite;
+    entry.metaUpdatedAt = remote || new Date().toISOString();
+    const store = await tx('readwrite');
+    await wrap(store.put(entry));
+    return true;
+  }
+
   async function getAllEntries() {
     const store = await tx('readonly');
     const all = await wrap(store.getAll());
@@ -277,6 +296,6 @@
     open, keyFor, putGame, getAllEntries, getEntry, removeGame, dropGame, count, clearAll,
     putEntry, buildExport, normalizeImport, exportAll, importEntries,
     markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted,
-    normalizeTags, setMeta
+    normalizeTags, setMeta, applyCloudMeta
   };
 })(typeof self !== 'undefined' ? self : this);

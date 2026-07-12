@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=105">
+<link rel="stylesheet" href="css/style.css?v=106">
 </head>
 <body>
 
@@ -126,18 +126,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=105"></script>
-<script src="js/images.js?v=105"></script>
-<script src="js/db.js?v=105"></script>
-<script src="js/sync.js?v=105"></script>
-<script src="js/replay.js?v=105"></script>
-<script src="js/boardreplay.js?v=105"></script>
-<script src="js/dashboard.js?v=105"></script>
+<script src="talishar-parser.js?v=106"></script>
+<script src="js/images.js?v=106"></script>
+<script src="js/db.js?v=106"></script>
+<script src="js/sync.js?v=106"></script>
+<script src="js/replay.js?v=106"></script>
+<script src="js/boardreplay.js?v=106"></script>
+<script src="js/dashboard.js?v=106"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=105"></script>
-<script src="js/cloud.js?v=105"></script>
+<script src="js/cloud-config.js?v=106"></script>
+<script src="js/cloud.js?v=106"></script>
 
 <script>
 // ============================================================
@@ -209,9 +209,13 @@
   // (fusion descendante gérée par FabSync.pull via metaUpdatedAt).
   async function updateMeta(id, patch) {
     const entry = await window.FabDB.setMeta(id, patch);
-    if (entry && window.FabSync.canWrite()) {
-      try { await window.FabSync.push([entry]); }
+    // Propagation des tags/favoris via le COMPTE (colonne meta) → visibles sur
+    // tous tes appareils. Repli GitHub si l'héritage est réactivé.
+    if (entry && window.Cloud && window.Cloud.getUser()) {
+      try { await window.Cloud.updateMeta(id, { tags: entry.tags || [], favorite: !!entry.favorite, metaUpdatedAt: entry.metaUpdatedAt }); }
       catch (e) { console.error(e); }
+    } else if (entry && LEGACY_GITHUB && window.FabSync.canWrite()) {
+      try { await window.FabSync.push([entry]); } catch (e) { console.error(e); }
     }
     return entry;
   }
@@ -432,7 +436,8 @@
           me: (e.record && e.record.myName) || null,
           opp_hero: (e.record && e.record.players && e.record.players.opp && e.record.players.opp.hero) || null,
           format: (e.record && e.record.format) || null,
-          captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null
+          captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null,
+          meta: (e.tags && e.tags.length) || e.favorite || e.metaUpdatedAt ? { tags: e.tags || [], favorite: !!e.favorite, metaUpdatedAt: e.metaUpdatedAt || null } : null
         }));
         const n = await window.Cloud.uploadGames(list);
         libHint.textContent = n + ' partie(s) envoyée(s) vers ton compte.';
@@ -539,7 +544,8 @@
       me: (e.record && e.record.myName) || null,
       opp_hero: (e.record && e.record.players && e.record.players.opp && e.record.players.opp.hero) || null,
       format: (e.record && e.record.format) || null,
-      captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null
+      captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null,
+          meta: (e.tags && e.tags.length) || e.favorite || e.metaUpdatedAt ? { tags: e.tags || [], favorite: !!e.favorite, metaUpdatedAt: e.metaUpdatedAt || null } : null
     })).filter(g => g.raw && /^\d+$/.test(String(g.game_id || '')));
     if (!list.length) { alert('Aucune partie migrable sur cet appareil (il faut le log brut + un id numérique).'); return; }
     if (!confirm('Envoyer ' + list.length + ' partie(s) de cet appareil vers ton compte ?\n(Sans doublon : une partie déjà présente sera simplement mise à jour.)')) return;
@@ -573,15 +579,20 @@
     const cloudIds = new Set(rows.map(r => String(r.game_id)));
     const local = await window.FabDB.getAllEntries();
     const have = new Set(local.map(e => String(e.gameId)));
-    let added = 0, removed = 0;
-    // Ajouts : parties du compte absentes en local.
+    let added = 0, removed = 0, metaChanged = 0;
+    // Ajouts + application des tags/favoris (colonne meta), dernier-écrit-gagne.
     for (const row of rows) {
       if (!row || !row.raw) continue;
       let rec;
       try { rec = window.TalisharParser.parse(row.raw); } catch (e) { continue; }
       const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
-      if (!gid || have.has(gid) || window.FabDB.isDeleted(gid)) continue;
-      try { await window.FabDB.putGame(rec, row.raw); have.add(gid); added++; } catch (e) { console.error(e); }
+      if (!gid) continue;
+      if (!have.has(gid) && !window.FabDB.isDeleted(gid)) {
+        try { await window.FabDB.putGame(rec, row.raw); have.add(gid); added++; } catch (e) { console.error(e); }
+      }
+      if (row.meta && have.has(gid)) {
+        try { if (await window.FabDB.applyCloudMeta(gid, row.meta)) metaChanged++; } catch (e) { console.error(e); }
+      }
     }
     // Réconciliation des suppressions : une partie locale à id numérique (donc
     // issue du compte) qui n'est PLUS dans le compte a été supprimée ailleurs →
@@ -592,7 +603,7 @@
         try { await window.FabDB.dropGame(gid); removed++; } catch (err) { console.error(err); }
       }
     }
-    return { added, removed };
+    return { added, removed, metaChanged };
   }
 
   if (cloudBtn) cloudBtn.addEventListener('click', async () => {
@@ -641,9 +652,13 @@
       refreshCloudBtn();
       if (user) {
         if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
-        const { added, removed } = await mergeCloudGames();
-        if (added || removed) {
-          libHint.textContent = (added ? added + ' partie(s) récupérée(s)' : '') + (added && removed ? ', ' : '') + (removed ? removed + ' supprimée(s) ailleurs' : '') + '.';
+        const { added, removed, metaChanged } = await mergeCloudGames();
+        if (added || removed || metaChanged) {
+          const parts = [];
+          if (added) parts.push(added + ' récupérée(s)');
+          if (removed) parts.push(removed + ' supprimée(s) ailleurs');
+          if (metaChanged) parts.push(metaChanged + ' tag(s)/favori(s) synchronisés');
+          libHint.textContent = 'Compte : ' + parts.join(', ') + '.';
           await reloadDashboard();
         }
       }

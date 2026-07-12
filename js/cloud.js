@@ -85,10 +85,20 @@
     if (!client || !currentUser) return [];
     const { data, error } = await client
       .from('games')
-      .select('game_id, raw, me, opp_hero, format, captured_at')
+      .select('game_id, raw, me, opp_hero, format, captured_at, meta')
       .order('captured_at', { ascending: true });
     if (error) throw error;
     return data || [];
+  }
+
+  // Met à jour les métadonnées utilisateur (tags/favori) d'une partie du compte.
+  // `meta` = { tags, favorite, metaUpdatedAt }. RLS update_own.
+  async function updateMeta(gameId, meta) {
+    if (!client || !currentUser) return false;
+    const { error } = await client.from('games').update({ meta })
+      .eq('user_id', currentUser.id).eq('game_id', String(gameId));
+    if (error) throw error;
+    return true;
   }
 
   // Appairage du grabber (phase 2) : génère un jeton d'appareil aléatoire et
@@ -117,7 +127,8 @@
         me: g.me || null,
         opp_hero: g.opp_hero || null,
         format: g.format || null,
-        captured_at: g.captured_at || null
+        captured_at: g.captured_at || null,
+        meta: g.meta || null   // tags/favori si présents (migration/import)
       }))
       .filter(r => r.raw && /^\d+$/.test(r.game_id));   // ids non numériques ignorés
     let done = 0;
@@ -159,5 +170,5 @@
     return 'dt_' + Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, createPairing, uploadGames, deleteGame, deleteAccount };
+  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, updateMeta, createPairing, uploadGames, deleteGame, deleteAccount };
 })(typeof self !== 'undefined' ? self : this);
