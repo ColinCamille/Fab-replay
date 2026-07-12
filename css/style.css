@@ -1156,6 +1156,15 @@ footer a{color:var(--text-dim)}
 
   /* Le fond dégradé du haut suit la largeur élargie. */
   #dashboardBody::before{height:200px}
+
+  /* Barre d'outils (bas de page) : en vue dashboard PC, on l'élargit et on met
+     toutes les options sur UNE seule ligne (au lieu de passer à la ligne dans la
+     colonne étroite). Scopé à la vue dashboard active — la vue replay est intacte. */
+  body:has(#dashboardView.view.active) #toolsBar{width:min(97vw,1560px);max-width:none}
+  body:has(#dashboardView.view.active) #toolsBar .tools-row{flex-wrap:nowrap;gap:6px}
+  body:has(#dashboardView.view.active) #toolsBar .tools-row .lib-btn{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:7px 10px;font-size:.78rem}
+  /* le texte d'aide (redondant sur PC) laisse la place aux boutons */
+  body:has(#dashboardView.view.active) #toolsBar .tools-row .lib-hint{display:none}
 }
 
 /* Éditeur de tags (fenêtre modale globale, hors #dashboardBody). */
