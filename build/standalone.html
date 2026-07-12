@@ -1451,6 +1451,16 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-toolbar .br-tool{width:46px;height:46px;font-size:1.15rem}
 }
 
+/* Mobile : contrôles de lecture (⏮ ‹ ▶ ›) déplacés SOUS le plateau + la timeline
+   → plus accessibles au pouce, et on occupe l'espace du bas. Le desktop garde
+   son rail latéral (grille ci-dessus, non affectée par 'order'). */
+@media (max-width:899px){
+  #boardReplay .br-wrap{display:flex;flex-direction:column}
+  #boardReplay .br-mat{order:1}
+  #boardReplay .br-timeline{order:2}
+  #boardReplay .br-toolbar{order:3;margin:12px 0 2px}
+}
+
 </style>
 </head>
 <body>
@@ -5450,8 +5460,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=107"></script>
-<script src="js/cloud.js?v=107"></script>
+<script src="js/cloud-config.js?v=108"></script>
+<script src="js/cloud.js?v=108"></script>
 
 <script>
 // ============================================================

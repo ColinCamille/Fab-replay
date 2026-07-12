@@ -1443,3 +1443,13 @@ footer a{color:var(--text-dim)}
     background:rgba(12,15,23,.85);border:1px solid var(--line-2);box-shadow:0 8px 28px rgba(0,0,0,.55)}
   #boardReplay .br-toolbar .br-tool{width:46px;height:46px;font-size:1.15rem}
 }
+
+/* Mobile : contrôles de lecture (⏮ ‹ ▶ ›) déplacés SOUS le plateau + la timeline
+   → plus accessibles au pouce, et on occupe l'espace du bas. Le desktop garde
+   son rail latéral (grille ci-dessus, non affectée par 'order'). */
+@media (max-width:899px){
+  #boardReplay .br-wrap{display:flex;flex-direction:column}
+  #boardReplay .br-mat{order:1}
+  #boardReplay .br-timeline{order:2}
+  #boardReplay .br-toolbar{order:3;margin:12px 0 2px}
+}
