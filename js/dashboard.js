@@ -360,15 +360,19 @@
             '<div class="trend-leg" id="hxTrendLeg"></div></div></div>' +
         '</div>' +
         '<div class="subpanel" id="hxSubMatchups">' +
-          '<div class="card"><h2>Winrate par matchup <span class="scope" id="hxMuScope"></span></h2><div class="cbody" id="hxMuBody"></div></div></div>' +
+          '<div class="card"><h2>Winrate par matchup <span class="scope" id="hxMuScope"></span><button class="hx-expand" data-max="mu" title="Agrandir" aria-label="Agrandir le panneau matchups">⤢</button></h2><div class="cbody" id="hxMuBody"></div></div></div>' +
         '<div class="subpanel" id="hxSubCards">' +
-          '<div class="card"><h2>Cartes en victoire vs défaite <span class="scope" id="hxCwlScope"></span></h2><div class="cbody">' +
+          '<div class="hxcards-hd"><h2>🃏 Cartes<button class="hx-expand" data-max="cards" title="Agrandir" aria-label="Agrandir le panneau cartes">⤢</button></h2>' +
+            '<div class="ctoggle" id="hxCardToggle">' +
+              '<button data-cv="wl" aria-pressed="true">Cartes qui gagnent</button>' +
+              '<button data-cv="perf" aria-pressed="false">Performance</button></div></div>' +
+          '<div class="card" id="hxCardWL"><h2>Cartes en victoire vs défaite <span class="scope" id="hxCwlScope"></span></h2><div class="cbody">' +
             '<div class="cards-controls"><span class="minlbl">Afficher dès</span>' +
               '<span class="fchip"><select id="hxCwlMin">' +
                 '<option value="1">1 partie</option><option value="2">2 parties</option><option value="3">3 parties</option><option value="5">5 parties</option><option value="10">10 parties</option>' +
               '</select></span></div>' +
             '<div id="hxCwlBody"></div></div></div>' +
-          '<div class="card"><h2>Performance des cartes</h2><div class="cbody">' +
+          '<div class="card" id="hxCardPerf"><h2>Performance des cartes</h2><div class="cbody">' +
             '<div class="cards-controls">' +
               '<input class="search" id="hxCardSearch" type="search" placeholder="Filtrer une carte…">' +
               '<span class="fchip"><select id="hxCardMode"><option value="total">Total</option><option value="pergame">Par partie</option><option value="pct">%</option></select></span>' +
@@ -378,6 +382,7 @@
         '</div>' +
       '</section>' +
       '<section class="panel" id="hxPanelHist">' +
+        '<div class="hxhist-hd"><h2>🗒 Historique des parties</h2><button class="hx-expand" data-max="hist" title="Agrandir" aria-label="Agrandir le panneau historique">⤢</button></div>' +
         '<div class="controls">' +
           '<input class="search" id="hxSearch" type="search" placeholder="Rechercher (adversaire, format…)">' +
           '<div class="seg" id="hxHistView">' +
@@ -767,6 +772,31 @@
     D.addEventListener('keydown', _tagEscHandler);
   }
 
+  // ---------- Desktop : mode focus + bascule des vues Cartes ----------
+  // Agrandir un panneau (historique / matchups / cartes) : marque .hxwrap avec
+  // data-max ; le CSS desktop redistribue la grille pour lui donner toute la zone
+  // basse. Sans effet sur mobile (les boutons ⤢ y sont masqués). Re-cliquer le
+  // même bouton réduit.
+  function setMax(host, p) {
+    const wrap = host.querySelector('.hxwrap'); if (!wrap) return;
+    const next = (wrap.getAttribute('data-max') === p) ? '' : p;
+    if (next) wrap.setAttribute('data-max', next); else wrap.removeAttribute('data-max');
+    host.querySelectorAll('.hx-expand').forEach(b => {
+      const on = !!next && b.dataset.max === next;
+      b.textContent = on ? '⤡' : '⤢';
+      b.title = on ? 'Réduire' : 'Agrandir';
+      b.setAttribute('aria-pressed', on);
+    });
+  }
+  // Bascule Cartes : « Cartes qui gagnent » (défaut) ↔ « Performance ». Desktop
+  // seulement ; sur mobile les deux cartes restent empilées (cf. CSS).
+  function setCard(host, which) {
+    const sc = host.querySelector('#hxSubCards'); if (!sc) return;
+    sc.classList.toggle('show-perf', which === 'perf');
+    const t = host.querySelector('#hxCardToggle');
+    if (t) t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.cv === which));
+  }
+
   // ---------- Câblage (une seule fois) ----------
   function wire(host) {
     host.querySelector('#hxTabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
@@ -826,6 +856,10 @@
       const item = e.target.closest('[data-id]');
       if (item) { const en = _entries.find(x => String(x.gameId) === item.dataset.id); if (en && _onOpen) _onOpen(en); }
     });
+    // Desktop : agrandir un panneau (⤢) + bascule Cartes qui gagnent / Performance.
+    host.querySelectorAll('.hx-expand').forEach(b => b.addEventListener('click', () => setMax(host, b.dataset.max)));
+    const ctog = host.querySelector('#hxCardToggle');
+    if (ctog) ctog.querySelectorAll('button').forEach(b => b.addEventListener('click', () => setCard(host, b.dataset.cv)));
   }
 
   function mount(opts) {
