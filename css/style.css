@@ -1449,6 +1449,10 @@ footer a{color:var(--text-dim)}
    son rail latéral (grille ci-dessus, non affectée par 'order'). */
 @media (max-width:899px){
   #boardReplay .br-wrap{display:flex;flex-direction:column}
+  /* Le tapis prend sa largeur NATURELLE (le cadre du champ englobe l'arsenal au
+     lieu de le laisser déborder à droite) ; fitBoard met ensuite tout le plateau
+     à l'échelle pour tenir dans l'écran. */
+  #boardReplay .br-mat{width:max-content;max-width:none;margin-inline:auto}
   #boardReplay .br-mat{order:1}
   #boardReplay .br-timeline{order:2}
   #boardReplay .br-toolbar{order:3;margin:12px 0 2px}
