@@ -519,17 +519,25 @@
     function fitBoard() {
       const wrap = container.querySelector('.br-wrap');
       if (!wrap || !wrap.offsetParent) return;
+      const fs = container.classList.contains('br-fs');   // plein écran → toute la fenêtre
       wrap.style.transform = ''; container.style.height = '';   // remise à zéro pour mesurer
-      const natW = wrap.offsetWidth, natH = wrap.offsetHeight;
+      // On prend l'EMPREINTE RÉELLE du contenu (scrollWidth/Height) et pas juste
+      // offsetWidth : sur mobile la table peut être plus large que son cadre
+      // (sinon, en plein écran, l'arsenal de droite était rogné).
+      const natW = Math.max(wrap.offsetWidth, wrap.scrollWidth);
+      const natH = Math.max(wrap.offsetHeight, wrap.scrollHeight);
       if (!natW || !natH) return;
-      const top = container.getBoundingClientRect().top;
-      const availH = window.innerHeight - top - 12;
-      const availW = container.clientWidth;
+      const top = fs ? 0 : container.getBoundingClientRect().top;
+      const availH = (fs ? window.innerHeight : window.innerHeight - top) - 12;
+      const availW = container.clientWidth - 24;   // marge → l'arsenal de droite (bord du champ) n'est jamais rogné
       let scale = Math.min(availW / natW, availH / natH, 1);
       scale = Math.max(scale, 0.38);                // plancher de lisibilité (au-delà : léger scroll)
       wrap.style.transformOrigin = 'top center';
       wrap.style.transform = 'scale(' + scale + ')';
-      container.style.height = Math.ceil(natH * scale) + 'px';
+      // Hors plein écran, on fige la hauteur du conteneur (= plateau mis à l'échelle)
+      // pour que le flux de la page suive. En plein écran, le conteneur est fixé
+      // (inset:0) → on laisse le CSS le remplir.
+      if (!fs) container.style.height = Math.ceil(natH * scale) + 'px';
     }
     // Ordre : figer la piste (hauteur stable), PUIS mettre à l'échelle l'ensemble.
     function relayout() { const w = container.querySelector('.br-wrap'); if (w) w.style.transform = ''; stabilizeStage(); fitBoard(); }
@@ -550,6 +558,45 @@
     // Changements de hauteur du viewport (rotation, barre d'URL mobile, fenêtre) :
     let rraf = 0;
     window.addEventListener('resize', () => { if (rraf) return; rraf = requestAnimationFrame(() => { rraf = 0; relayout(); }); });
+
+    // ---- Plein écran : agrandit le plateau pour la lisibilité (PC + mobile) ----
+    // On combine l'API Fullscreen native (quand dispo : masque la barre du
+    // navigateur) avec un repli CSS (.br-fs = position:fixed) qui, lui, marche
+    // partout (dont iOS). Dans les deux cas fitBoard récupère toute la fenêtre.
+    const fsBtn = document.createElement('button');
+    fsBtn.className = 'br-fsbtn'; fsBtn.type = 'button';
+    fsBtn.title = 'Plein écran'; fsBtn.setAttribute('aria-label', 'Plein écran');
+    fsBtn.textContent = '⛶';
+    container.appendChild(fsBtn);
+    const inFs = () => container.classList.contains('br-fs');
+    function paintFsBtn() { const on = inFs(); fsBtn.textContent = on ? '✕' : '⛶'; fsBtn.title = on ? 'Quitter le plein écran' : 'Plein écran'; fsBtn.setAttribute('aria-pressed', on); }
+    function setFs(on) { container.classList.toggle('br-fs', on); paintFsBtn(); requestAnimationFrame(relayout); }
+    function toggleFs() {
+      if (!inFs()) {
+        setFs(true);
+        const req = container.requestFullscreen || container.webkitRequestFullscreen;
+        if (req) { try { const r = req.call(container); if (r && r.catch) r.catch(() => {}); } catch (e) { /* repli CSS */ } }
+      } else {
+        setFs(false);
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if ((document.fullscreenElement || document.webkitFullscreenElement) && exit) { try { exit.call(document); } catch (e) { /* ignore */ } }
+      }
+    }
+    fsBtn.addEventListener('click', toggleFs);
+    // Sortie du plein écran natif (Échap, geste système) → on retire aussi la classe.
+    const onFsChange = () => { if (!(document.fullscreenElement || document.webkitFullscreenElement) && inFs()) container.classList.remove('br-fs'); paintFsBtn(); requestAnimationFrame(relayout); };
+    const onKey = e => { if (e.key === 'Escape' && inFs() && !(document.fullscreenElement || document.webkitFullscreenElement)) setFs(false); };
+    // On nettoie les écouteurs du montage précédent (le plateau est reconstruit à
+    // chaque partie ouverte) pour ne pas les empiler.
+    if (container.__brFsCleanup) container.__brFsCleanup();
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    document.addEventListener('keydown', onKey);
+    container.__brFsCleanup = () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+      document.removeEventListener('keydown', onKey);
+    };
 
     go(0, null);
     relayout();

@@ -1195,8 +1195,20 @@ footer a{color:var(--text-dim)}
    Toutes les classes sont préfixées « br- » : aucune collision avec le
    reste du site (qui a déjà .verdict, .card, .slot, .stage, .hand…).
    ============================================================ */
+#boardReplay{position:relative}
 .br-wrap{padding:4px 2px 2px}
 .br-empty{padding:24px 12px;text-align:center;color:var(--text-dim);font-size:.85rem}
+/* Bouton plein écran (coin haut-droit du plateau) — améliore la lisibilité. */
+.br-fsbtn{position:absolute;top:6px;right:6px;z-index:6;width:34px;height:34px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;line-height:1;
+  background:rgba(12,15,23,.85);border:1px solid var(--line-2);color:var(--text);
+  box-shadow:0 4px 14px rgba(0,0,0,.5);transition:.15s}
+.br-fsbtn:hover{border-color:var(--accent,var(--gold));color:var(--accent,var(--gold))}
+/* Plein écran (repli CSS, marche partout dont iOS) : le plateau occupe toute la
+   fenêtre → fitBoard récupère la hauteur et agrandit les cartes. */
+#boardReplay.br-fs{position:fixed;inset:0;z-index:2000;height:auto;margin:0;width:auto;max-width:none;
+  background:var(--bg);overflow:auto;padding:6px}
+#boardReplay.br-fs .br-fsbtn{position:fixed;top:10px;right:12px}
 .br-toolbar{display:flex;gap:7px;justify-content:center;margin-bottom:10px}
 .br-tool{width:44px;height:38px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
 .br-tool:hover{border-color:var(--accent-dim,var(--gold-dim));background:var(--panel-2)}
