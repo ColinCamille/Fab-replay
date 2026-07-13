@@ -336,6 +336,38 @@ const arsInf = BR.buildTimeline({
 assert(arsInf.steps.some(s => s.turn === 'B — Tour 2' && s.stage.type === 'banner' && s.state.oppArsenalCount === 1), 'arsenal adverse inféré : dos affiché au tour où il joue depuis l\'arsenal');
 eq(arsInf.steps.slice(-1)[0].state.oppArsenalCount, 0, 'arsenal adverse inféré : vidé après la carte jouée');
 
+// ---------- Grabber : fusion des instantanés de log (anti-duplication) ----------
+console.log('Grabber merge —');
+(function () {
+  // On extrait la fonction PURE mergeLines du userscript (sans exécuter le boot
+  // navigateur) et on la teste sur des séquences d'instantanés.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'talishar-log-grabber.user.js'), 'utf8');
+  const start = src.indexOf('function mergeLines');
+  const braceStart = src.indexOf('{', start);
+  let depth = 0, end = braceStart;
+  for (; end < src.length; end++) { const c = src[end]; if (c === '{') depth++; else if (c === '}' && --depth === 0) { end++; break; } }
+  const mergeLines = eval('(' + src.slice(start, end) + ')');
+  const run = seq => { let cap = []; seq.forEach(v => { cap = mergeLines(cap, v).lines; }); return cap; };
+
+  // Démarrage à vide.
+  eq(mergeLines([], ['a', 'b']).lines.join('|'), 'a|b', 'merge: captured vide → adopte visible');
+  // Fenêtre glissante : queue(captured)==tête(visible) → n'ajoute que le suffixe.
+  eq(mergeLines(['a', 'b', 'c'], ['b', 'c', 'd']).lines.join('|'), 'a|b|c|d', 'merge: fenêtre glissante');
+  // Journal complet qui grandit par la fin (préfixe) → suffixe seulement.
+  eq(mergeLines(['T', 'a', 'b'], ['T', 'a', 'b', 'c']).lines.join('|'), 'T|a|b|c', 'merge: journal complet étendu');
+  // Contenu disjoint (après repli en tête) → ajout.
+  eq(mergeLines(['T', 'a'], ['U', 'b']).lines.join('|'), 'T|a|U|b', 'merge: contenu disjoint ajouté');
+
+  // ANTI-DUPLICATION (le bug) : re-rendu du MÊME journal complet à répétition
+  // ne doit PAS empiler des doublons.
+  const full1 = ['Ehe passed', 'Turn 1nissy', 'nissy played Look Tuff'];
+  const full2 = full1.concat(['Ehe blocked with Static Shock']);
+  eq(run([full1, full2, full2, full2, full1, full2]).join('|'), full2.join('|'),
+    'merge: re-rendus complets répétés → aucun doublon (journal = 1 seule copie)');
+  // Re-rendu identique répété : longueur stable.
+  eq(run([full2, full2, full2]).length, full2.length, 'merge: re-rendu identique → longueur stable');
+})();
+
 // ---------- 3. Clé DB ----------
 const DB = require('../js/db.js').FabDB;
 console.log('DB —');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.2
+// @version      1.14.3
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.2';
+  const VERSION = '1.14.3';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -221,10 +221,16 @@
     return candidates[0] || null;
   }
 
+  // Ligne condensée d'une chaîne repliée : quand une chaîne se résout, Talishar
+  // remplace ses lignes détaillées par UN résumé collé « Chain Link N<joueur>
+  // played …🎯…took N damage… » (sans séparateur). C'est un RE-RENDU de lignes
+  // déjà captées en détaillé → illisible pour le parseur ET source de doublons.
+  // On l'ignore à la lecture (les vraies parties n'en contiennent jamais).
+  const CONDENSED_CHAIN_RE = /^Chain Link \d+/;
   function readVisibleLines(box) {
     return Array.from(box.children)
       .map(c => (c.innerText || '').replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
+      .filter(l => l && !CONDENSED_CHAIN_RE.test(l));
   }
 
   function recordTsBatch(fromIdx, toIdx) {
@@ -235,13 +241,23 @@
     tsBatches.push({ from: fromIdx, to: toIdx, t });
   }
 
-  function merge(visible) {
-    if (!visible.length) return;
-    if (!captured.length) {
-      captured = visible.slice();
-      recordTsBatch(0, captured.length - 1);
-      return;
-    }
+  // Fusion PURE (testable en Node) d'un instantané `visible` du panneau de log
+  // dans l'accumulé `captured`. Renvoie { lines, from } où `from` est l'indice
+  // de départ du NOUVEAU contenu (pour l'horodatage), ou -1 si rien ajouté.
+  //
+  // Le panneau peut être rendu de deux façons selon Talishar :
+  //   · FENÊTRE glissante : `visible` = dernières lignes → sa TÊTE recouvre la
+  //     QUEUE de `captured` (cas historique) ;
+  //   · JOURNAL COMPLET re-rendu à chaque action (parfois avec chaînes repliées)
+  //     → `visible` recommence au MÊME début que `captured`.
+  // L'ancien code ne gérait que le 1er cas : sur le 2e, faute de chevauchement
+  // queue/tête, il RÉ-EMPILAIT tout le journal à chaque poll → logs géants
+  // dupliqués (parties illisibles). On détecte donc le re-rendu complet et on
+  // adopte le rendu le plus complet au lieu de le concaténer.
+  function mergeLines(captured, visible) {
+    if (!visible.length) return { lines: captured, from: -1 };
+    if (!captured.length) return { lines: visible.slice(), from: 0 };
+    // Cas 1 — fenêtre glissante : queue(captured) == tête(visible).
     const maxK = Math.min(captured.length, visible.length);
     for (let k = maxK; k > 0; k--) {
       let ok = true;
@@ -250,17 +266,23 @@
       }
       if (ok) {
         const added = visible.slice(k);
-        if (added.length) {
-          const from = captured.length;
-          captured = captured.concat(added);
-          recordTsBatch(from, captured.length - 1);
-        }
-        return;
+        return added.length ? { lines: captured.concat(added), from: captured.length } : { lines: captured, from: -1 };
       }
     }
-    const from = captured.length;
-    captured = captured.concat(visible);
-    recordTsBatch(from, captured.length - 1);
+    // Cas 2 — re-rendu complet (même 1re ligne) : on ADOPTE le plus complet,
+    // jamais on ne ré-empile (sinon duplication de tout l'historique).
+    if (visible[0] === captured[0]) {
+      return visible.length > captured.length ? { lines: visible.slice(), from: captured.length } : { lines: captured, from: -1 };
+    }
+    // Cas 3 — contenu réellement disjoint (ex. début décalé par un repli en
+    // tête) : on ajoute.
+    return { lines: captured.concat(visible), from: captured.length };
+  }
+
+  function merge(visible) {
+    const r = mergeLines(captured, visible);
+    captured = r.lines;
+    if (r.from >= 0 && r.from <= captured.length - 1) recordTsBatch(r.from, captured.length - 1);
   }
 
   // ============================================================
