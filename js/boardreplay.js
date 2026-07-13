@@ -318,9 +318,13 @@
     const wpnTile = wnm => (wnm && wnm !== '—')
       ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(norm(wnm)) + '"><div class="br-art" data-card="' + esc(wnm) + '"></div><div class="br-lab">' + esc(wnm) + '</div></div>'
       : '';
+    // Armes regroupées dans .br-wpns : avec l'équipement (à gauche du héros) et
+    // les armes (à droite), le héros est l'ancre CENTRALE du cluster. Sans ce
+    // regroupement, un joueur à 1 arme et un à 2 armes décalaient leur héros
+    // (cluster centré de largeur variable) → les deux camps ne s'alignaient pas.
     const cluster = '<div class="br-cluster">' + equip +
       gcard(side, 'hero', pl.hero || '?', true) +
-      wpnTile(nm('weaponL')) + wpnTile(nm('weaponR')) +
+      '<div class="br-wpns">' + wpnTile(nm('weaponL')) + wpnTile(nm('weaponR')) + '</div>' +
       '</div>';
     const rightRail = '<div class="br-rail br-right">' +
       '<div class="br-zpair"><span class="br-zlbl">Arsenal</span>' +

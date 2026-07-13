@@ -1237,7 +1237,13 @@ footer a{color:var(--text-dim)}
 .br-rail.br-right{justify-self:end}
 .br-zpair{display:flex;flex-direction:column;align-items:center;gap:2px}
 .br-zlbl{font:600 .5rem/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);white-space:nowrap}
-.br-cluster{display:flex;align-items:center;justify-content:center;gap:5px}
+/* Cluster = équipement | HÉROS (ancre centrale) | armes. Les colonnes latérales
+   1fr sont symétriques → le héros est toujours au centre, quel que soit le
+   nombre d'armes → les deux camps s'alignent verticalement (fini le décalage). */
+.br-cluster{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;justify-items:center;gap:5px}
+.br-cluster>.br-equip{justify-self:end}
+.br-wpns{justify-self:start;display:flex;align-items:center;gap:5px}
+.br-wpns>.br-gcard{width:50px;aspect-ratio:5/7}
 .br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:4px}
 /* Dimensions des tuiles — mobile (héros/équipement/arme agrandis). */
 .br-rail .br-slot,.br-rail .br-deck{width:44px;aspect-ratio:5/7;min-height:0;height:auto}
@@ -1409,6 +1415,7 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-rail .br-slot,#boardReplay .br-rail .br-deck{width:72px}
   #boardReplay .br-cluster>.br-gcard{width:92px}
   #boardReplay .br-cluster>.br-gcard.br-hero{width:118px}
+  #boardReplay .br-wpns>.br-gcard{width:92px}
   #boardReplay .br-lifetok{width:38px;height:38px;font-size:1rem;right:-11px;top:-11px}
   #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
 
