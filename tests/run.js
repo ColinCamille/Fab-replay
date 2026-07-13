@@ -366,6 +366,50 @@ console.log('Grabber merge —');
     'merge: re-rendus complets répétés → aucun doublon (journal = 1 seule copie)');
   // Re-rendu identique répété : longueur stable.
   eq(run([full2, full2, full2]).length, full2.length, 'merge: re-rendu identique → longueur stable');
+
+  // ── chatLogToLines : journal structuré (state.game.chatLog) → format parseur.
+  // Dépendances de la fonction (référencées par clôture lexicale à l'eval).
+  const TURN_START_RE = /\[\[TURN_START:(\d+):(\d+)\]\]/;
+  const stripHtmlText = x => String(x == null ? '' : x).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  const cl0 = src.indexOf('function chatLogToLines');
+  const clbs = src.indexOf('{', cl0);
+  let cd = 0, cl1 = clbs;
+  for (; cl1 < src.length; cl1++) { const c = src[cl1]; if (c === '{') cd++; else if (c === '}' && --cd === 0) { cl1++; break; } }
+  const chatLogToLines = eval('(' + src.slice(cl0, cl1) + ')');
+
+  // Échantillon réel (diag replay Oscilio vs Briar) : HTML, marqueurs de tour,
+  // « Player N », ligne de victoire, entrée vide.
+  const rawChat = [
+    "<span style='color:#cb0202;'>Player 1 activated <b>Oscilio</b></span>",
+    "Player 1 played <b>Nucleus Aetherbolt</b>",
+    "Player 2's Briar was targeted",
+    "Player 2 took 3 damage",
+    "[[TURN_START:1:2]]",
+    "Player 2 played Nimblism",
+    "[[TURN_START:1:1]]",
+    "Player 1 (-) won! 🎉",
+    ""
+  ];
+  const lines = chatLogToLines(rawChat, 'Oscilio', 'Briar');
+  eq(lines[0], 'Oscilio activated Oscilio', 'chatLog: HTML retiré + Player 1→héros');
+  eq(lines[1], 'Oscilio played Nucleus Aetherbolt', 'chatLog: play mappé');
+  eq(lines[3], 'Briar took 3 damage', 'chatLog: dégâts Player 2→héros');
+  eq(lines[4], "Briar's turn 1 has begun.", 'chatLog: TURN_START:1:2 → en-tête Briar');
+  eq(lines[6], "Oscilio's turn 1 has begun.", 'chatLog: TURN_START:1:1 → en-tête Oscilio');
+  eq(lines[7], 'Oscilio (-) won! 🎉', 'chatLog: ligne de victoire mappée');
+  eq(lines.length, 8, 'chatLog: entrée vide ignorée');
+  eq(chatLogToLines('pas un tableau', 'A', 'B').length, 0, 'chatLog: entrée non-tableau → []');
+
+  // Les en-têtes produits sont bien reconnus par le parseur (mêmes regex).
+  const thRe = /^(.+?)'s turn (\d+) has begun\.$/;
+  eq(thRe.test(lines[4]), true, 'chatLog: en-tête compatible turnHeaderRe du parseur');
+
+  // Intégration : re-rendus complets répétés du chatLog (comme en live) → aucun
+  // doublon via merge (le vrai correctif de la duplication).
+  const g1 = chatLogToLines(rawChat.slice(0, 6), 'Oscilio', 'Briar');
+  const g2 = chatLogToLines(rawChat, 'Oscilio', 'Briar');
+  eq(run([g1, g2, g2, g1, g2]).join('\n'), g2.join('\n'),
+    'chatLog+merge: journaux complets répétés → une seule copie');
 })();
 
 // ---------- 3. Clé DB ----------

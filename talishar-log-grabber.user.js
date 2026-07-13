@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.5
+// @version      1.14.6
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.5';
+  const VERSION = '1.14.6';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -38,6 +38,8 @@
   let gameName = '';
   let boxLogged = false;
   let storeLogged = false;
+  let logSource = 'dom';        // 'chatlog' (journal structuré) ou 'dom' (repli)
+  let chatLogAdopted = false;   // a-t-on déjà basculé cette partie sur le chatLog ?
 
   let handSnapshots = {};
   let arsenalSnapshots = {};
@@ -231,6 +233,67 @@
     return Array.from(box.children)
       .map(c => (c.innerText || '').replace(/\s+/g, ' ').trim())
       .filter(l => l && !CONDENSED_CHAIN_RE.test(l));
+  }
+
+  // ── Lecture DIRECTE du journal structuré (state.game.chatLog) ──────────────
+  // Talishar tient le journal dans un tableau d'état : chaque entrée y figure
+  // UNE seule fois. Le panneau DOM, lui, se re-rend en entier à chaque action
+  // (source de la duplication géante des logs). On lit donc ce tableau EN
+  // PRIORITÉ. Deux traductions suffisent pour retomber pile sur le format que
+  // le parseur attend déjà (celui du rendu DOM de Talishar) :
+  //   · « Player N »            → nom du héros (substitution que fait Talishar) ;
+  //   · « [[TURN_START:n:p]] »  → « <héros>'s turn n has begun. ».
+  // Le n° de tour de Talishar est repris tel quel (l'ouverture n'a pas de
+  // marqueur → le parseur la place en « Ouverture », comme pour un log normal).
+  const TURN_START_RE = /\[\[TURN_START:(\d+):(\d+)\]\]/;
+  function stripHtmlText(x) {
+    return String(x == null ? '' : x).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  }
+  function heroCardOf(pl) {
+    if (!pl) return null;
+    const h = pl.Hero;
+    return Array.isArray(h) ? h[0] : h;
+  }
+  // PURE (testable en Node) : chatLog brut + noms de héros par n° de joueur de
+  // partie (1/2) → lignes texte au format attendu par le parseur.
+  function chatLogToLines(rawChatLog, name1, name2) {
+    if (!Array.isArray(rawChatLog)) return [];
+    const out = [];
+    for (const raw of rawChatLog) {
+      const txt = stripHtmlText(raw);
+      if (!txt) continue;
+      const tm = txt.match(TURN_START_RE);
+      if (tm) {
+        const nm = tm[2] === '1' ? name1 : (tm[2] === '2' ? name2 : null);
+        // Sans nom résolu on garde une forme que matchTurnHeader reconnaît quand
+        // même (séparateur « Turn n<joueur> ») plutôt que de perdre le tour.
+        out.push(nm ? (nm + "'s turn " + tm[1] + ' has begun.') : ('Turn ' + tm[1] + 'Player ' + tm[2]));
+        continue;
+      }
+      let line = txt;
+      if (name1) line = line.split('Player 1').join(name1);
+      if (name2) line = line.split('Player 2').join(name2);
+      out.push(line);
+    }
+    return out;
+  }
+  // Lit le journal structuré du store et le traduit ; null si indisponible.
+  // Le mapping « Player N » → héros passe par gameInfo.playerID : playerOne du
+  // store est le joueur LOCAL (celui dont on voit la perspective), pas forcément
+  // « Player 1 » côté partie.
+  function readChatLogLines() {
+    const g = getGameState();
+    if (!g || !Array.isArray(g.chatLog) || !g.chatLog.length) return null;
+    const gi = g.gameInfo || {};
+    const myNum = Number(gi.playerID) === 2 ? 2 : 1;
+    const myHero = cardLabel(heroCardOf(g.playerOne));
+    const oppHero = cardLabel(heroCardOf(g.playerTwo));
+    const name1 = myNum === 1 ? myHero : oppHero;
+    const name2 = myNum === 2 ? myHero : oppHero;
+    // Sans les DEUX noms de héros, la substitution « Player N » serait bancale →
+    // on préfère retomber sur le DOM qu'émettre un log à moitié mappé.
+    if (!name1 || !name2) return null;
+    return chatLogToLines(g.chatLog, name1, name2);
   }
 
   function recordTsBatch(fromIdx, toIdx) {
@@ -590,14 +653,36 @@
       if (!onGamePage()) return;
       const gn = currentGameName();
       if (gn !== gameName) {
-        gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false;
+        gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false; chatLogAdopted = false;
         meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null; autoPushedCount = 0;
         loadExisting(); updateUI();
       }
-      const box = findLogBox();
-      if (box) {
-        if (!boxLogged) { console.log('[TLG] panneau log détecté ✔'); boxLogged = true; }
-        const visible = readVisibleLines(box);
+      // Priorité au journal structuré (state.game.chatLog) : chaque entrée y
+      // figure une seule fois → fini la duplication née du re-rendu du DOM.
+      // Repli sur le panneau DOM quand le store n'est pas accessible.
+      let visible = readChatLogLines();
+      if (visible) {
+        logSource = 'chatlog';
+        // Première lecture via chatLog pour cette partie : si l'accumulé provient
+        // d'une capture DOM antérieure (format différent → pas de chevauchement),
+        // on l'abandonne au profit du chatLog, complet et sans doublon. Gardé
+        // par chatLogAdopted pour ne se produire qu'UNE fois (sinon un éventuel
+        // fenêtrage du chatLog en live passerait pour un changement de format).
+        if (!chatLogAdopted) {
+          chatLogAdopted = true;
+          if (captured.length && captured[0] !== visible[0]) {
+            captured = []; tsBatches = []; lastVisibleSig = '';
+          }
+        }
+      } else {
+        logSource = 'dom';
+        const box = findLogBox();
+        if (box) {
+          if (!boxLogged) { console.log('[TLG] panneau log détecté ✔'); boxLogged = true; }
+          visible = readVisibleLines(box);
+        }
+      }
+      if (visible) {
         const sig = visible.join('\n');
         if (sig !== lastVisibleSig) {
           lastVisibleSig = sig; merge(visible); save(); updateUI();
@@ -715,7 +800,7 @@
   function updateUI() {
     const nbHands = Object.keys(handSnapshots).length;
     if (counter) {
-      const src = reduxStore ? '⚡ redux' : '🔍 dom';
+      const src = logSource === 'chatlog' ? '⚡ chatLog' : (reduxStore ? '⚡ redux' : '🔍 dom');
       const heroBit = (meta.myHero || '?') + ' vs ' + (meta.oppHero || '?');
       const fmtBit = meta.format ? ' · ' + meta.format : '';
       counter.innerHTML = captured.length + ' lignes · ' + nbHands + ' mains · ' + src + fmtBit
