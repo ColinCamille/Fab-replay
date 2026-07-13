@@ -556,8 +556,19 @@
       const availW = container.clientWidth - 24;   // marge → l'arsenal de droite (bord du champ) n'est jamais rogné
       let scale = Math.min(availW / natW, availH / natH, 1);
       scale = Math.max(scale, 0.38);                // plancher de lisibilité (au-delà : léger scroll)
-      wrap.style.transformOrigin = 'top center';
-      wrap.style.transform = 'scale(' + scale + ')';
+      // Origine TOP-LEFT + recentrage explicite : avec « top center », le contenu
+      // (dont la largeur RÉELLE natW dépasse le cadre offsetWidth) était mis à
+      // l'échelle autour du centre du CADRE, pas du centre du CONTENU → le
+      // plateau se retrouvait poussé/débordé vers la DROITE (gros vide à gauche).
+      // On ancre à gauche et on ajoute une translation pour des marges égales.
+      // Desktop (≥900px) : le wrap est une grille « table | boutons » censée
+      // occuper la largeur depuis le bord gauche → on laisse à gauche (dx=0).
+      // Mobile : on RECENTRE le plateau mis à l'échelle (marges égales).
+      const sw = natW * scale;
+      const deskLayout = container.clientWidth >= 900;
+      const dx = deskLayout ? 0 : Math.max(0, (container.clientWidth - sw) / 2);
+      wrap.style.transformOrigin = 'top left';
+      wrap.style.transform = 'translateX(' + dx + 'px) scale(' + scale + ')';
       // Hors plein écran, on fige la hauteur du conteneur (= plateau mis à l'échelle)
       // pour que le flux de la page suive. En plein écran, le conteneur est fixé
       // (inset:0) → on laisse le CSS le remplir.
