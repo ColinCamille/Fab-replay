@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.4
+// @version      1.14.5
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.4';
+  const VERSION = '1.14.5';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -915,27 +915,29 @@
   function reduxDiag() {
     const s = getRootState();
     if (!s) return 'store Redux introuvable (ouvre bien une PARTIE).';
+    const g = s.game || {};
+    const strip = x => String(x == null ? '' : x).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const zone = (pl, z) => { const a = pl && pl[z]; return Array.isArray(a) ? (a.map(c => c && (c.cardName || c.cardNumber)).filter(Boolean).join(', ') || '(vide)') : '(absent)'; };
     const out = [];
     out.push('STATE keys: ' + Object.keys(s).join(', '));
-    if (s.game) out.push('GAME keys: ' + Object.keys(s.game).join(', '));
-    const hits = [];
-    const scan = (o, p, d) => {
-      if (o == null || d > 4 || hits.length > 40) return;
-      if (Array.isArray(o)) {
-        const strs = o.filter(x => typeof x === 'string');
-        const looksLog = o.length > 3 && (strs.some(x => /played|Turn |damage|passed|blocked|Resolving|chain/i.test(x)) || (o[0] && typeof o[0] === 'object'));
-        if (looksLog) {
-          let sample = ''; try { sample = JSON.stringify(o.slice(0, 3)); } catch (e) { sample = '(non sérialisable)'; }
-          hits.push(p + '  (len ' + o.length + ')  ' + sample.slice(0, 400));
-        }
-        o.slice(0, 12).forEach((x, i) => scan(x, p + '[' + i + ']', d + 1));
-        return;
-      }
-      if (typeof o === 'object') Object.keys(o).forEach(k => scan(o[k], p + '.' + k, d + 1));
-    };
-    try { scan(s, 'state', 0); } catch (e) { out.push('scan err: ' + e.message); }
-    out.push('', 'CANDIDATS LOG (' + hits.length + '):');
-    hits.slice(0, 25).forEach(h => out.push('  ' + h));
+    out.push('GAME keys: ' + Object.keys(g).join(', '));
+    try { out.push('', 'gameInfo: ' + JSON.stringify(g.gameInfo)); } catch (e) { /* ignore */ }
+    // chatLog COMPLET, HTML retiré → est-ce le journal (avec tours/dégâts) ?
+    if (Array.isArray(g.chatLog)) {
+      out.push('', 'CHATLOG (' + g.chatLog.length + ' entrées, HTML retiré):');
+      g.chatLog.forEach((e, i) => out.push('  [' + i + '] ' + strip(e)));
+    } else out.push('', 'chatLog: ABSENT');
+    // events structurés (peut contenir les tours / la structure de combat).
+    if (g.events !== undefined) { try { out.push('', 'events: ' + JSON.stringify(g.events).slice(0, 1200)); } catch (e) { out.push('', 'events: (non sérialisable)'); } }
+    out.push('', 'turnPlayer=' + g.turnPlayer + ' turnPhase=' + g.turnPhase + ' amIActivePlayer=' + g.amIActivePlayer);
+    // Mains/arsenals des 2 joueurs → info cachée (main adverse) disponible ?
+    ['playerOne', 'playerTwo'].forEach(pk => {
+      const pl = g[pk];
+      if (!pl) { out.push('', pk + ': absent'); return; }
+      out.push('', pk + ' keys: ' + Object.keys(pl).join(', '));
+      out.push('  Hand: ' + zone(pl, 'Hand'));
+      out.push('  Arsenal: ' + zone(pl, 'Arsenal'));
+    });
     return out.join('\n');
   }
   function downloadDiag() {
