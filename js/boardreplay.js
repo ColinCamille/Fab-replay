@@ -518,7 +518,15 @@
       for (const s of steps) { stage.innerHTML = buildStage(s.stage); if (stage.offsetHeight > maxH) maxH = stage.offsetHeight; if (stage.offsetWidth > maxW) maxW = stage.offsetWidth; }
       if (!maxH) { stage.style.height = savedH; stage.style.minHeight = savedMin; stage.style.width = ''; render(null); return; }
       stage.style.minHeight = '0';
-      stage.style.height = maxH + 'px';
+      // PLAFOND (mobile) : une seule étape exceptionnellement haute (gros combat
+      // avec beaucoup de blocs) ne doit pas réserver un centre géant qui gâche
+      // l'espace sur les étapes courantes (bannières/plays) et écrase le plateau.
+      // On borne la hauteur figée à une fraction de la fenêtre ; la rare étape
+      // plus haute défile alors à l'intérieur (overflow). Desktop : pas de
+      // plafond (la place verticale y est suffisante).
+      const cap = wide ? maxH : Math.min(maxH, Math.round(window.innerHeight * 0.40));
+      stage.style.height = cap + 'px';
+      stage.style.overflowY = cap < maxH ? 'auto' : '';
       stage.style.width = wide && maxW ? maxW + 'px' : '';
       render(null);                                // ré-affiche l'étape courante dans la boîte figée
     }
