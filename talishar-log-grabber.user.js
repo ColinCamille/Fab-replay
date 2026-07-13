@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.3
+// @version      1.14.4
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.3';
+  const VERSION = '1.14.4';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -679,6 +679,7 @@
     btnRow.appendChild(mkBtn('Télécharger', downloadLog));
     btnRow.appendChild(mkBtn('🔗 Compte', () => sbConfigured() ? pushGameToSupabase(false) : pairOneClick()));
     btnRow.appendChild(mkBtn('⚙', () => sbConfigured() ? configurePairing() : pairOneClick()));
+    btnRow.appendChild(mkBtn('🔍 Diag', downloadDiag));
     btnRow.appendChild(mkBtn('Effacer', clearLog));
     fullBox.appendChild(btnRow);
 
@@ -905,6 +906,47 @@
     setTimeout(() => URL.revokeObjectURL(url), 2000);
     flash('Téléchargé ✔');
     console.log('[TLG] log téléchargé');
+  }
+
+  // DIAGNOSTIC (mobile-friendly) : décrit la structure du store Redux de Talishar
+  // et repère les tableaux qui ressemblent au journal de partie. Sert à savoir si
+  // le log est disponible en données STRUCTURÉES (fiable) plutôt que gratté du DOM
+  // (fragile face aux re-rendus). Téléchargé en .txt → l'utilisateur l'envoie.
+  function reduxDiag() {
+    const s = getRootState();
+    if (!s) return 'store Redux introuvable (ouvre bien une PARTIE).';
+    const out = [];
+    out.push('STATE keys: ' + Object.keys(s).join(', '));
+    if (s.game) out.push('GAME keys: ' + Object.keys(s.game).join(', '));
+    const hits = [];
+    const scan = (o, p, d) => {
+      if (o == null || d > 4 || hits.length > 40) return;
+      if (Array.isArray(o)) {
+        const strs = o.filter(x => typeof x === 'string');
+        const looksLog = o.length > 3 && (strs.some(x => /played|Turn |damage|passed|blocked|Resolving|chain/i.test(x)) || (o[0] && typeof o[0] === 'object'));
+        if (looksLog) {
+          let sample = ''; try { sample = JSON.stringify(o.slice(0, 3)); } catch (e) { sample = '(non sérialisable)'; }
+          hits.push(p + '  (len ' + o.length + ')  ' + sample.slice(0, 400));
+        }
+        o.slice(0, 12).forEach((x, i) => scan(x, p + '[' + i + ']', d + 1));
+        return;
+      }
+      if (typeof o === 'object') Object.keys(o).forEach(k => scan(o[k], p + '.' + k, d + 1));
+    };
+    try { scan(s, 'state', 0); } catch (e) { out.push('scan err: ' + e.message); }
+    out.push('', 'CANDIDATS LOG (' + hits.length + '):');
+    hits.slice(0, 25).forEach(h => out.push('  ' + h));
+    return out.join('\n');
+  }
+  function downloadDiag() {
+    const txt = '=== TLG REDUX DIAG — grabber v' + VERSION + ' — ' + new Date().toISOString() + ' ===\n\n' + reduxDiag() + '\n';
+    const blob = new Blob([txt], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'tlg-diag_' + gameName + '.txt';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    flash('Diagnostic téléchargé ✔');
   }
   function clearLog() {
     if (!confirm('Effacer le log, les snapshots et les métadonnées capturés de cette partie ?')) return;
