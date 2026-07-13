@@ -1455,7 +1455,11 @@ footer a{color:var(--text-dim)}
    → plus accessibles au pouce, et on occupe l'espace du bas. Le desktop garde
    son rail latéral (grille ci-dessus, non affectée par 'order'). */
 @media (max-width:899px){
-  #boardReplay .br-wrap{display:flex;flex-direction:column}
+  /* Le wrap épouse la largeur NATURELLE du tapis (max-content) : ainsi la
+     timeline et les boutons (centrés dans le wrap) partagent le même axe que
+     le plateau → boutons parfaitement centrés sous la table (et non décalés
+     parce que la barre serait plus étroite que le tapis). */
+  #boardReplay .br-wrap{display:flex;flex-direction:column;width:max-content;max-width:none;margin-inline:auto}
   /* Le tapis prend sa largeur NATURELLE (le cadre du champ englobe l'arsenal au
      lieu de le laisser déborder à droite) ; fitBoard met ensuite tout le plateau
      à l'échelle pour tenir dans l'écran. */

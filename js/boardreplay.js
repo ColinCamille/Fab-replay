@@ -567,8 +567,12 @@
       const sw = natW * scale;
       const deskLayout = container.clientWidth >= 900;
       const dx = deskLayout ? 0 : Math.max(0, (container.clientWidth - sw) / 2);
+      // En plein écran, le plateau (limité par la largeur) laisse un grand vide
+      // en bas → on le recentre VERTICALEMENT dans la fenêtre. Hors plein écran,
+      // le conteneur épouse la hauteur du plateau (dy=0), le flux de page suit.
+      const dy = fs ? Math.max(0, (availH - natH * scale) / 2) : 0;
       wrap.style.transformOrigin = 'top left';
-      wrap.style.transform = 'translateX(' + dx + 'px) scale(' + scale + ')';
+      wrap.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + scale + ')';
       // Hors plein écran, on fige la hauteur du conteneur (= plateau mis à l'échelle)
       // pour que le flux de la page suive. En plein écran, le conteneur est fixé
       // (inset:0) → on laisse le CSS le remplir.
