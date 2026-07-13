@@ -1467,4 +1467,12 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-mat{order:1}
   #boardReplay .br-timeline{order:2}
   #boardReplay .br-toolbar{order:3;margin:12px 0 2px}
+  /* Plein écran mobile : la place verticale récupérée (plateau recentré) sert à
+     AGRANDIR les cartes du centre (attaque/défense/carte jouée) — le focus du
+     replay. Sizes vérifiées pour ne PAS élargir le plateau (l'échelle globale
+     reste inchangée) : la piste centrale est plus étroite que les champs. */
+  #boardReplay.br-fs .br-lane .br-pcard{width:92px}
+  #boardReplay.br-fs .br-lane .br-cardrow .br-pcard{width:64px}
+  #boardReplay.br-fs .br-lane .br-pcard.br-lg{width:132px}
+  #boardReplay.br-fs .br-cardrow{max-width:230px}
 }
