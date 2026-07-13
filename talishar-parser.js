@@ -376,14 +376,30 @@
     }
 
     // 3) Découpage en tours
+    // Talishar émet DEUX formats de marqueur de début de tour selon le rendu :
+    //   · « <joueur>'s turn <n> has begun. »  (format habituel, ligne d'action)
+    //   · « Turn <n><joueur> »                 (libellé du séparateur de tour du
+    //       panneau, capté collé — nom accolé au numéro). Sur ce 2e format, si on
+    //       ne le reconnaît pas, le log se retrouve « sans tour » : tout tombe
+    //       dans l'Ouverture → courbe à 1 point, main de départ gonflée, attaques
+    //       affichées en réaction. Les deux formats ne coexistent jamais dans un
+    //       même log, donc les reconnaître tous les deux ne crée pas de doublon.
     const turnHeaderRe = /^(.+?)'s turn (\d+) has begun\.$/;
+    const turnDividerRe = /^Turn (\d+)\s*(\S.*)$/;
+    function matchTurnHeader(l) {
+      let m = l.match(turnHeaderRe);
+      if (m) return { player: m[1].trim(), turnNumber: parseInt(m[2], 10) };
+      m = l.match(turnDividerRe);
+      if (m) return { player: m[2].trim(), turnNumber: parseInt(m[1], 10) };
+      return null;
+    }
     const nameSet = new Set();
     const actionNameRe = /^([A-Za-zÀ-ÿ0-9_' .-]+?)\s+(?:played|pitched|passed|blocked with|activated|took \d+ damage|is about to take \d+ damage|auto-passed|conceded the game|gained \d+ life|undid their last action|did not sink a card)/;
     logLines.forEach(l => {
-      let m = l.match(turnHeaderRe);
-      if (m) nameSet.add(m[1]);
+      const th = matchTurnHeader(l);
+      if (th) nameSet.add(th.player);
       if (/^Resolving /.test(l)) return;
-      m = l.match(actionNameRe);
+      const m = l.match(actionNameRe);
       if (m) nameSet.add(m[1].trim());
     });
     const names = Array.from(nameSet);
@@ -394,9 +410,9 @@
     const turnCounts = {};
 
     logLines.forEach((l, idx) => {
-      const th = l.match(turnHeaderRe);
+      const th = matchTurnHeader(l);
       if (th) {
-        const player = th[1], turnNumber = parseInt(th[2], 10);
+        const player = th.player, turnNumber = th.turnNumber;
         const key = player + '#' + turnNumber;
         turnCounts[key] = (turnCounts[key] || 0) + 1;
         const suffix = turnCounts[key] > 1 ? ` (reprise ${turnCounts[key]})` : '';

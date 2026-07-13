@@ -53,6 +53,18 @@ eq(rec.turns[0].oppArsenalCount, 0, 'arsenal adverse : 0 forcé à l\'ouverture'
 const tPlay = rec.turns.find(t => t.turnNumber > 0);
 if (tPlay) eq(tPlay.oppArsenalCount, null, 'arsenal adverse : null si non capté (bloc absent du log)');
 
+// Découpage des tours : le format « Turn N<joueur> » (séparateur collé, certains
+// rendus Talishar) doit être reconnu comme « X's turn N has begun. » — sinon le
+// log tombe « sans tour » → 1 seul point sur la courbe, main de départ gonflée…
+const divLog = '=== Talishar game 42 — test ===\n\nTurn 1nissy\nnissy played Look Tuff\nEhecalt took 5 damage\nTurn 1Ehecalt\nEhecalt played Lightning Surge\nnissy took 3 damage\nTurn 2nissy\nnissy played Crash Down\nEhecalt took 2 damage\n';
+const divRec = Parser.parse(divLog);
+assert(divRec.turns.length >= 3, 'format « Turn N joueur » : tours segmentés (>=3, pas 1)');
+eq(divRec.lifeSeries.me.length, divRec.turns.length, 'courbe = 1 point par tour (fini le point unique)');
+assert(divRec.turns.some(t => t.player === 'nissy') && divRec.turns.some(t => t.player === 'Ehecalt'), 'joueurs déduits des séparateurs « Turn N joueur »');
+// Régression : le format habituel « has begun » reste reconnu.
+const hbRec = Parser.parse('=== Talishar game 43 — test ===\n\nnissy\'s turn 1 has begun.\nnissy played X\nEhecalt\'s turn 1 has begun.\nEhecalt played Y\n');
+assert(hbRec.turns.length >= 3, 'format « has begun » toujours segmenté (régression)');
+
 // Miroir : la main ne doit PAS avoir été filtrée par les cartes adverses.
 const t1 = rec.turns.find(t => t.player === 'Ehecalt' && t.turnNumber === 1);
 assert(t1 && Array.isArray(t1.hand) && t1.hand.indexOf('Bloodrush Bellow') >= 0, 'main tour 1 conservée (miroir)');
