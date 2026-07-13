@@ -558,6 +558,15 @@ footer a{color:var(--text-dim)}
 }
 .match-chip.warn{border-color:rgba(224,85,90,.4);color:var(--red);cursor:help}
 .match-chip.ai{border-color:rgba(201,162,39,.4);color:var(--gold)}
+/* Bandeau « analyse incertaine » (garde-fou anti-format-cassé) : volontairement
+   voyant, jamais masqué (même en mode compact). */
+.match-health{border:1px solid rgba(224,85,90,.55);background:rgba(224,85,90,.1);
+  border-radius:10px;padding:9px 12px;margin-bottom:12px;color:var(--text)}
+.match-health .mh-title{font-weight:700;color:var(--red);font-size:.86rem}
+.match-health .mh-list{margin:6px 0 6px 18px;padding:0;font-size:.78rem;color:var(--text-dim)}
+.match-health .mh-list li{margin:2px 0}
+.match-health .mh-hint{font-size:.72rem;color:var(--text-faint)}
+#scoreboard.sb-wide .match-card .match-health{display:block}
 
 /* Bandes d'équipement */
 .eq-strip{display:flex;align-items:center;gap:6px;padding-top:8px;border-top:1px solid var(--line)}

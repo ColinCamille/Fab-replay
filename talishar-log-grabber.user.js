@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.6
+// @version      1.14.7
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.6';
+  const VERSION = '1.14.7';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -40,6 +40,8 @@
   let storeLogged = false;
   let logSource = 'dom';        // 'chatlog' (journal structuré) ou 'dom' (repli)
   let chatLogAdopted = false;   // a-t-on déjà basculé cette partie sur le chatLog ?
+  let lastRawChatLog = null;    // dernier chatLog BRUT (verbatim) vu → conservé dans l'export
+  let canaryIssues = [];        // hypothèses Talishar cassées détectées à la capture
 
   let handSnapshots = {};
   let arsenalSnapshots = {};
@@ -290,10 +292,34 @@
     const oppHero = cardLabel(heroCardOf(g.playerTwo));
     const name1 = myNum === 1 ? myHero : oppHero;
     const name2 = myNum === 2 ? myHero : oppHero;
+    lastRawChatLog = g.chatLog;                 // source PURE conservée (verbatim)
+    runCanary(g, name1, name2);                 // Talishar a-t-il changé de format ?
     // Sans les DEUX noms de héros, la substitution « Player N » serait bancale →
     // on préfère retomber sur le DOM qu'émettre un log à moitié mappé.
     if (!name1 || !name2) return null;
     return chatLogToLines(g.chatLog, name1, name2);
+  }
+
+  // Canari : vérifie à la CAPTURE que les hypothèses sur l'état Talishar tiennent
+  // toujours. But : être prévenu le JOUR où Talishar change quelque chose (message
+  // dans le widget), avec le chatLog brut conservé pour déboguer — au lieu de le
+  // découvrir des semaines plus tard sur une stat bizarre.
+  function runCanary(g, name1, name2) {
+    const issues = [];
+    const gi = g.gameInfo || {};
+    if (gi.playerID == null) issues.push('gameInfo.playerID absent');
+    if (!name1 || !name2) issues.push('nom de héros illisible (playerOne/Two.Hero.cardName)');
+    // Marqueur de tour : si des tours se terminent mais aucun [[TURN_START]] n'existe,
+    // c'est que le format du marqueur a changé (le cœur du parsage des tours).
+    const strip = x => String(x == null ? '' : x).replace(/<[^>]+>/g, '');
+    let ends = 0, starts = 0;
+    for (const e of g.chatLog) { const t = strip(e); if (/Attempting to end turn/.test(t)) ends++; if (TURN_START_RE.test(t)) starts++; }
+    if (ends >= 1 && starts === 0) issues.push('marqueur de début de tour [[TURN_START]] introuvable (format changé ?)');
+    canaryIssues = issues;
+    if (issues.length && !runCanary._warned) {
+      runCanary._warned = true;
+      console.warn('[TLG] ⚠ hypothèses Talishar cassées :', issues.join(' · '));
+    }
   }
 
   function recordTsBatch(fromIdx, toIdx) {
@@ -803,8 +829,12 @@
       const src = logSource === 'chatlog' ? '⚡ chatLog' : (reduxStore ? '⚡ redux' : '🔍 dom');
       const heroBit = (meta.myHero || '?') + ' vs ' + (meta.oppHero || '?');
       const fmtBit = meta.format ? ' · ' + meta.format : '';
+      // Alerte canari : Talishar a change qqch → on prévient ICI, tout de suite.
+      const canaryBit = canaryIssues.length
+        ? '<br><span style="color:#ff6b6b;font-weight:700" title="' + canaryIssues.join(' · ').replace(/"/g, '') + '">⚠ format Talishar inattendu — préviens le mainteneur</span>'
+        : '';
       counter.innerHTML = captured.length + ' lignes · ' + nbHands + ' mains · ' + src + fmtBit
-        + '<br><span style="opacity:.7">' + heroBit + '</span>';
+        + '<br><span style="opacity:.7">' + heroBit + '</span>' + canaryBit;
     }
     // Compteur de la vue réduite : nombre de lignes capturées
     const mini = ui && ui.querySelector('#tlg-mini-count');
@@ -962,7 +992,17 @@
       + snapshotBlockText('LIFE SNAPSHOTS (vie et taille de deck : toi / adversaire)', lifeSnapshots, lifeLineFmt)
       + metaBlockText()
       + tsBlockText()
-      + endStatsBlockText();
+      + endStatsBlockText()
+      + rawChatLogBlockText();
+  }
+
+  // Journal STRUCTURÉ brut (state.game.chatLog) conservé verbatim, sur une seule
+  // ligne JSON. C'est la SOURCE PURE : si un jour la traduction chatLog→texte se
+  // trompe (changement Talishar), on peut ré-analyser à partir d'ici sans re-capture.
+  function rawChatLogBlockText() {
+    if (!Array.isArray(lastRawChatLog) || !lastRawChatLog.length) return '';
+    let json; try { json = JSON.stringify(lastRawChatLog); } catch (e) { return ''; }
+    return '\n=== RAW CHATLOG (state.game.chatLog, verbatim) ===\n' + json + '\n';
   }
 
   // Bloc JSON des stats officielles Talishar, si captées. Une seule ligne JSON

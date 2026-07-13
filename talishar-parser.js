@@ -342,6 +342,12 @@
     const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
     const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
+    // Journal structuré brut conservé par le grabber : on le RETIRE du corps (sinon
+    // son JSON polluerait les lignes d'événements) mais on le garde à disposition
+    // (source pure pour une ré-analyse future si un format change).
+    const rawChatRes = sliceBlock(text, '=== RAW CHATLOG'); text = rawChatRes.rest;
+    let rawChatLog = null;
+    if (rawChatRes.body) { try { rawChatLog = JSON.parse(rawChatRes.body.trim().split('\n')[0]); } catch (e) { /* garde null */ } }
 
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
@@ -700,6 +706,38 @@
       distinctCards: cardsSeen.size
     };
 
+    // 11.5) DIAGNOSTIC DE SANTÉ — invariants qui signalent une partie
+    // probablement MAL analysée (typiquement : Talishar change le format du
+    // journal). Objectif : rendre la casse VISIBLE (bandeau côté vue) au lieu
+    // de produire en silence des données fausses mais plausibles. Chaque test
+    // est calibré pour un TAUX DE FAUX POSITIFS quasi nul.
+    const health = { ok: true, issues: [] };
+    const flagHealth = m => { if (health.issues.indexOf(m) < 0) { health.issues.push(m); health.ok = false; } };
+    {
+      const realTurns = turns.filter(t => t.turnNumber > 0).length;   // hors Ouverture
+      const actionLines = logLines.filter(l => /\b(?:played|activated|pitched|blocked with)\b|took \d+ damage/.test(l)).length;
+      // Lignes RESSEMBLANT à un début de tour (tous formats connus + à venir).
+      const turnish = logLines.filter(l => /'s turn \d+ has begun|^Turn \d+\S|\[\[TURN_START/.test(l)).length;
+      // A. Beaucoup d'actions mais aucun tour découpé → format de tour non reconnu.
+      if (actionLines >= 25 && realTurns === 0)
+        flagHealth('Aucun tour détecté malgré ' + actionLines + ' actions — le format de début de tour n\'est peut-être plus reconnu.');
+      // B. Des marqueurs de tour existent mais n\'ont pas produit de tours.
+      else if (turnish >= 2 && realTurns <= 1)
+        flagHealth('Des débuts de tour ne sont pas reconnus (' + turnish + ' repérés, ' + realTurns + ' tour(s) construit(s)).');
+      // C. Un tour attribué à un joueur inconnu.
+      const known = new Set([myName, oppName].filter(Boolean));
+      if (known.size === 2) turns.forEach(t => { if (t.player && !known.has(t.player)) flagHealth('Tour attribué à un joueur inattendu : « ' + t.player + ' ».'); });
+      // D. Duplication probable du journal : une carte « jouée » un nombre
+      //    improbable de fois (un playset = 3 max ; 6+ = journal dupliqué).
+      const played = {};
+      logLines.forEach(l => { const m = l.match(/ played (.{4,60})$/); if (m) { const k = normName(m[1]); played[k] = (played[k] || 0) + 1; } });
+      let worst = 0, worstCard = '';
+      for (const k in played) if (played[k] > worst) { worst = played[k]; worstCard = k; }
+      if (worst >= 6) flagHealth('Duplication probable du journal : « ' + worstCard + ' » joué ' + worst + ' fois.');
+      // E. Joueurs non résolus.
+      if (!myName || !oppName) flagHealth('Joueurs non résolus (toi = ' + (myName || '?') + ', adversaire = ' + (oppName || '?') + ').');
+    }
+
     // 12) Assemblage du record normalisé
     const mkPlayer = (name, side) => ({
       name: name || null,
@@ -738,7 +776,9 @@
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,
       endStats: endStatsRes.endStats,
-      warnings
+      warnings,
+      health,
+      rawChatLog
     };
   }
 

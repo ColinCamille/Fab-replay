@@ -212,8 +212,21 @@
       return '<div class="eq-strip">' + label + '<div class="eq-slots">' + cells + '</div></div>';
     };
 
+    // Bandeau LOUD si l'analyse est douteuse (garde-fou anti-format-cassé) :
+    // on préfère prévenir que d'afficher en silence des stats potentiellement
+    // fausses. Le journal brut étant conservé, une MàJ du lecteur pourra
+    // ré-analyser la partie sans re-capture.
+    const health = GAME.health || { ok: true, issues: [] };
+    const healthHtml = health.ok ? '' :
+      '<div class="match-health" role="alert">' +
+        '<div class="mh-title">⚠ Analyse incertaine — cette partie a peut-être été mal lue (format Talishar inattendu).</div>' +
+        '<ul class="mh-list">' + health.issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('') + '</ul>' +
+        '<div class="mh-hint">Les statistiques ci-dessous peuvent être erronées. Le journal brut est conservé : une mise à jour du lecteur pourra ré-analyser cette partie.</div>' +
+      '</div>';
+
     el.innerHTML =
       '<div class="match-card">' +
+        healthHtml +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
           '<div class="match-mid"><span class="vs">VS</span></div>' +

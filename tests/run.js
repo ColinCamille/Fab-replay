@@ -65,6 +65,32 @@ assert(divRec.turns.some(t => t.player === 'nissy') && divRec.turns.some(t => t.
 const hbRec = Parser.parse('=== Talishar game 43 — test ===\n\nnissy\'s turn 1 has begun.\nnissy played X\nEhecalt\'s turn 1 has begun.\nEhecalt played Y\n');
 assert(hbRec.turns.length >= 3, 'format « has begun » toujours segmenté (régression)');
 
+// Diagnostic de santé (garde-fou anti-format-cassé) :
+assert(rec.health && rec.health.ok === true, 'santé : fixture normale → ok');
+assert(divRec.health.ok === true, 'santé : format « Turn N joueur » reconnu → ok');
+// Format de tour INCONNU + beaucoup d'actions → doit être signalé (pas silencieux).
+let broken = '=== Talishar game 44 — test ===\n\n';
+for (let k = 0; k < 30; k++) broken += 'nissy played Card' + k + '\nEhecalt took 1 damage\n';
+broken += 'ROUND 1 :: nissy\nnissy played Late\n';   // en-tête d'un format non géré
+const brokenRec = Parser.parse(broken);
+assert(brokenRec.health.ok === false, 'santé : format de tour inconnu + 25+ actions → signalé');
+assert(brokenRec.health.issues.some(i => /tour/i.test(i)), 'santé : le message mentionne les tours');
+// Duplication du journal → signalée (une carte jouée un nombre improbable de fois).
+let dup = '=== Talishar game 45 — test ===\n\nnissy\'s turn 1 has begun.\n';
+for (let k = 0; k < 8; k++) dup += 'nissy played Harness Lightning\n';
+dup += 'Ehecalt\'s turn 1 has begun.\nEhecalt played Y\n';
+assert(Parser.parse(dup).health.issues.some(i => /[Dd]uplication/.test(i)), 'santé : duplication du journal signalée');
+
+// RAW CHATLOG : bloc verbatim retiré du corps (ne pollue PAS les événements) et exposé.
+const withRaw = '=== Talishar game 46 — test ===\n\n' +
+  "nissy's turn 1 has begun.\nnissy played Look Tuff\nEhecalt took 3 damage\nEhecalt's turn 1 has begun.\nEhecalt played Y\n" +
+  '\n=== RAW CHATLOG (state.game.chatLog, verbatim) ===\n' +
+  JSON.stringify(['Player 1 played A', 'Player 1 played A', 'Player 1 played A', 'Player 1 played A', 'Player 1 played A', 'Player 1 played A', 'Player 1 played A', '[[TURN_START:1:2]]']) + '\n';
+const rawRec = Parser.parse(withRaw);
+assert(rawRec.health.ok === true, 'RAW CHATLOG : le bloc verbatim ne pollue pas l\'analyse (santé ok)');
+assert(Array.isArray(rawRec.rawChatLog) && rawRec.rawChatLog.length === 8, 'RAW CHATLOG : exposé et parsé (source pure conservée)');
+assert(!rawRec.turns.some(t => (t.events || []).some(e => e.card === 'A')), 'RAW CHATLOG : « played A » du bloc brut n\'est pas compté comme événement');
+
 // Miroir : la main ne doit PAS avoir été filtrée par les cartes adverses.
 const t1 = rec.turns.find(t => t.player === 'Ehecalt' && t.turnNumber === 1);
 assert(t1 && Array.isArray(t1.hand) && t1.hand.indexOf('Bloodrush Bellow') >= 0, 'main tour 1 conservée (miroir)');
