@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.7
+// @version      1.14.8
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.7';
+  const VERSION = '1.14.8';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -290,8 +290,20 @@
     const myNum = Number(gi.playerID) === 2 ? 2 : 1;
     const myHero = cardLabel(heroCardOf(g.playerOne));
     const oppHero = cardLabel(heroCardOf(g.playerTwo));
-    const name1 = myNum === 1 ? myHero : oppHero;
-    const name2 = myNum === 2 ? myHero : oppHero;
+    // MIROIR (mêmes héros) : « Player 1 » et « Player 2 » deviendraient tous deux
+    // « Aurora » → le parseur ne peut plus distinguer les camps (tours, vie et
+    // même le VAINQUEUR se mélangent). On désambiguïse avec les PSEUDOS (distincts)
+    // ; à défaut on suffixe le n° de joueur (« Aurora J1 » / « Aurora J2 »), en
+    // gardant des caractères que le parseur reconnaît (pas de parenthèses).
+    let meLabel = myHero, oppLabel = oppHero;
+    const same = (a, b) => a && b && a.trim().toLowerCase() === b.trim().toLowerCase();
+    if (same(myHero, oppHero)) {
+      const myUser = g.playerOne && g.playerOne.Name, oppUser = g.playerTwo && g.playerTwo.Name;
+      if (myUser && oppUser && !same(myUser, oppUser)) { meLabel = myUser; oppLabel = oppUser; }
+      else { meLabel = myHero + ' J' + myNum; oppLabel = oppHero + ' J' + (myNum === 1 ? 2 : 1); }
+    }
+    const name1 = myNum === 1 ? meLabel : oppLabel;
+    const name2 = myNum === 2 ? meLabel : oppLabel;
     lastRawChatLog = g.chatLog;                 // source PURE conservée (verbatim)
     runCanary(g, name1, name2);                 // Talishar a-t-il changé de format ?
     // Sans les DEUX noms de héros, la substitution « Player N » serait bancale →

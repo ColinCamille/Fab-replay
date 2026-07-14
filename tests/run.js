@@ -81,6 +81,21 @@ for (let k = 0; k < 8; k++) dup += 'nissy played Harness Lightning\n';
 dup += 'Ehecalt\'s turn 1 has begun.\nEhecalt played Y\n';
 assert(Parser.parse(dup).health.issues.some(i => /[Dd]uplication/.test(i)), 'santé : duplication du journal signalée');
 
+// MIROIR (mêmes héros) : la ligne « X won! » est ambiguë (les 2 = « Aurora ») →
+// on doit se fier aux stats officielles (numéro de joueur). Ici myPlayerID=1 et
+// winner=2 → j'ai PERDU, malgré « Aurora (...) won! ».
+const mirror = '=== Talishar game 47 — test ===\n\n' +
+  "Aurora's turn 1 has begun.\nAurora played Nova\nAurora took 4 damage\nAurora's turn 2 has begun.\nAurora played Bolt\n" +
+  'Aurora (moi) won! 🎉\n' +
+  '\n=== META ===\nschema: v1\nme: moi\nopp_hero: Aurora\nmy_hero: Aurora (aurora)\nopp_hero: Aurora (aurora)\n' +
+  '\n=== END GAME STATS (Talishar, JSON) ===\n' +
+  '{"myPlayerID":1,"byPlayer":{"1":{"winner":2,"turns":2},"2":{"winner":2,"turns":2}}}\n';
+const mRec = Parser.parse(mirror);
+assert(mRec.result && mRec.result.iWon === false, 'miroir : défaite correctement détectée via stats officielles (pas « victoire » à tort)');
+// Sans stats officielles, on retombe sur la ligne « won! » (comportement hérité).
+const noEs = Parser.parse('=== Talishar game 48 — test ===\n\nEhecalt\'s turn 1 has begun.\nEhecalt played X\nnissy\'s turn 1 has begun.\nnissy played Y\nEhecalt (u) won! 🎉\n\n=== META ===\nme: Ehecalt\n');
+assert(noEs.result && noEs.result.iWon === true, 'sans stats officielles : résultat déduit de la ligne « won! » (régression)');
+
 // RAW CHATLOG : bloc verbatim retiré du corps (ne pollue PAS les événements) et exposé.
 const withRaw = '=== Talishar game 46 — test ===\n\n' +
   "nissy's turn 1 has begun.\nnissy played Look Tuff\nEhecalt took 3 damage\nEhecalt's turn 1 has begun.\nEhecalt played Y\n" +

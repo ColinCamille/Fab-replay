@@ -674,7 +674,15 @@
     let result = null;
     const wonLine = logLines.find(l => /won! 🎉/.test(l));
     const concedeLine = logLines.find(l => /conceded the game\.$/.test(l));
-    if (wonLine) {
+    // Signal AUTORITAIRE : les stats officielles Talishar (endStats.me.won) se
+    // basent sur le NUMÉRO de joueur → fiables même en MIROIR (héros identiques),
+    // cas où la ligne « X won! » (par nom de héros) est ambiguë et donnait
+    // systématiquement « victoire ». On les privilégie quand elles existent.
+    const esMe = endStatsRes.endStats && endStatsRes.endStats.me;
+    if (esMe && typeof esMe.won === 'boolean') {
+      const iWon = esMe.won;
+      result = { winner: iWon ? myName : oppName, loser: iWon ? oppName : myName, byConcession: !!concedeLine, iWon };
+    } else if (wonLine) {
       const wm = wonLine.match(/^(.+?)\s*\(.+?\)\s*won! 🎉/);
       const winner = wm ? wm[1] : null;
       const loser = winner ? (winner === myName ? oppName : myName) : null;
