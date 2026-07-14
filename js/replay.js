@@ -659,6 +659,8 @@
   // uniquement sur les signaux fiables du log (combatResult + blocages) ; les
   // dégâts arcaniques ne sont pas attribués par carte (source ambiguë), mais le
   // total du tour reste exact dans le bandeau (damageToOpp/Me).
+  // Libellés courts des mots-clés FaB portés par une attaque (chaîne de combat).
+  const KW_LABEL = { goAgain: 'Go again', dominate: 'Dominate', overpower: 'Overpower', piercing: 'Piercing', combo: 'Combo', wager: 'Wager', phantasm: 'Phantasm', fusion: 'Fusion', tower: 'Tower', highTide: 'High Tide', confidence: 'Confidence' };
   function exchangeVerdict(ex, defender) {
     const dmgToMe = defender === myName;   // les dégâts vont-ils à moi ?
     const r = ex.result, amount = r ? r.amount : 0;
@@ -689,9 +691,11 @@
     else { verb = 'attaque'; vIcon = '⚔'; }
     const who = mine ? ('Ton ' + verb) : (cap(verb) + ' de ' + escapeHtml(active));
 
+    const pw = (verb === 'attaque' && ex.chainPower != null)
+      ? ' <span class="epw" title="Attaque effective (buffs compris)">⚔ ' + ex.chainPower + '</span>' : '';
     const head = document.createElement('div');
     head.className = 'ehead';
-    head.innerHTML = '<div class="eside">' + vIcon + ' ' + who + '</div>'
+    head.innerHTML = '<div class="eside">' + vIcon + ' ' + who + pw + '</div>'
       + (v.badge ? '<div class="eres ' + v.cls + '">' + v.badge + '</div>' : '');
     div.appendChild(head);
 
@@ -706,6 +710,7 @@
     if (ex.mode) subs.push('🔀 mode : <b>' + escapeHtml(ex.mode) + '</b>');
     if (ex.pitchCost.length) subs.push('🔥 pitch <b>' + ex.pitchCost.map(escapeHtml).join(', ') + '</b>');
     ex.reveals.forEach(c => subs.push('👁 révèle <b>' + escapeHtml(c) + '</b>'));
+    if (ex.chainKw && ex.chainKw.length) subs.push(ex.chainKw.map(k => '<span class="ekw">' + escapeHtml(KW_LABEL[k] || k) + '</span>').join(' '));
     meta.innerHTML = '<div class="ecn">' + escapeHtml(ex.card) + '</div>'
       + (subs.length ? '<div class="esub">' + subs.join(' · ') + '</div>' : '');
     cardrow.appendChild(meta);
@@ -842,6 +847,18 @@
     // la creuse dès qu'une autre passe de la même carte porte un vrai résultat.
     const withEffect = new Set(exchanges.filter(isMeaningful).map(ex => ex.card));
     const shown = exchanges.filter(ex => isMeaningful(ex) || !withEffect.has(ex.card));
+
+    // Attache l'attaque EFFECTIVE (buffs compris) + mots-clés à chaque attaque,
+    // depuis la chaîne de combat captée. Appariement par nom, repli sur l'ordre.
+    {
+      const nm = root.TalisharParser.normName, cq = (t.chain || []).slice();
+      shown.forEach(ex => {
+        if (ex.isActivation || !isMeaningful(ex)) return;
+        let i = cq.findIndex(c => nm(c.card) === nm(ex.card));
+        if (i < 0 && cq.length) i = 0;
+        if (i >= 0) { const lk = cq.splice(i, 1)[0]; ex.chainPower = lk.power; ex.chainKw = lk.kw || []; }
+      });
+    }
 
     if (shown.length) {
       const lbl = document.createElement('div');

@@ -392,6 +392,13 @@ header{
 #turnBoard .ecn{font-size:.94rem;font-weight:700;line-height:1.2}
 #turnBoard .esub{font-size:.72rem;color:var(--text-faint);margin-top:4px;line-height:1.45}
 #turnBoard .esub b{color:var(--text-dim)}
+/* Attaque effective (buffs compris) : pastille ⚔N dans l'en-tête + mots-clés. */
+#turnBoard .epw{display:inline-flex;align-items:center;font-family:'JetBrains Mono',monospace;
+  font-size:.72rem;font-weight:800;color:#fff;background:linear-gradient(160deg,#e0555a,#8a1418);
+  border:1px solid #ffffff33;border-radius:8px;padding:1px 7px;margin-left:8px;vertical-align:middle}
+#turnBoard .ekw{display:inline-block;font:700 .58rem/1 'JetBrains Mono',monospace;text-transform:uppercase;
+  letter-spacing:.03em;color:var(--gold,#e9c07a);background:rgba(201,162,39,.14);
+  border:1px solid rgba(201,162,39,.38);border-radius:5px;padding:2px 5px;margin-right:3px}
 #turnBoard .ediv{height:1px;background:var(--line);margin:11px -12px;position:relative}
 #turnBoard .ediv span{position:absolute;left:12px;top:-8px;background:var(--panel);padding:0 8px;
   font-size:.72rem;font-weight:600;color:var(--violet)}
@@ -1370,6 +1377,17 @@ footer a{color:var(--text-dim)}
 .br-verdict{margin-top:11px;font:700 .8rem 'JetBrains Mono',monospace;padding:5px 12px;border-radius:999px}
 .br-verdict.br-blocked{color:var(--green);background:#4fb87a1a;border:1px solid #4fb87a44}
 .br-verdict.br-through{color:var(--red);background:#e0555a1a;border:1px solid #e0555a55}
+/* Puissance d'attaque EFFECTIVE (buffs compris) : pastille rouge « ⚔N » en
+   coin de la carte d'attaque. + mots-clés (go again, dominate…) sous la carte. */
+.br-pw{position:absolute;top:-7px;left:-7px;z-index:3;min-width:22px;height:22px;padding:0 5px;
+  display:flex;align-items:center;justify-content:center;border-radius:11px;
+  font:800 .74rem/1 'JetBrains Mono',monospace;color:#fff;
+  background:linear-gradient(160deg,#e0555a,#8a1418);border:1px solid #ffffff40;box-shadow:0 2px 7px #0008}
+.br-pw::before{content:'⚔\FE0E';margin-right:2px;font-size:.64rem;opacity:.9}
+.br-kwline{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:5px;max-width:130px}
+.br-kw{font:700 .52rem/1 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;
+  color:var(--gold,#e9c07a);background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.38);
+  border-radius:5px;padding:2px 5px;white-space:nowrap}
 /* Récap « une action » : juste la carte en grand, liseré = qui joue. */
 .br-playone{display:flex;flex-direction:column;align-items:center;gap:9px}
 /* Cartes de la piste de combat (centre) — agrandies. */

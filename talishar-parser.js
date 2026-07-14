@@ -105,6 +105,19 @@
     return { rest, body };
   }
 
+  // Combats : attaque/défense EFFECTIVES (buffs compris) captées par le grabber
+  // depuis la chaîne de combat Talishar. Une ligne JSON par lien, dans l'ordre.
+  function parseChainBlock(text) {
+    const { rest, body } = sliceBlock(text, '=== COMBAT CHAIN');
+    if (body == null) return { rest: text, chain: [] };
+    const chain = [];
+    body.trim().split('\n').forEach(l => {
+      l = l.trim(); if (!l || l[0] !== '{') return;
+      try { const o = JSON.parse(l); if (o && o.card) chain.push(o); } catch (e) { /* ligne ignorée */ }
+    });
+    return { rest, chain };
+  }
+
   // Stats officielles Talishar embarquées par le grabber (bloc JSON).
   function parseEndStatsBlock(text) {
     const marker = '=== END GAME STATS (Talishar';
@@ -342,6 +355,7 @@
     const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
     const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
+    const chainRes = parseChainBlock(text); text = chainRes.rest;
     // Journal structuré brut conservé par le grabber : on le RETIRE du corps (sinon
     // son JSON polluerait les lignes d'événements) mais on le garde à disposition
     // (source pure pour une ré-analyse future si un format change).
@@ -689,6 +703,14 @@
       result = { winner, loser, byConcession: !!concedeLine, iWon: myName ? winner === myName : null };
     }
 
+    // 8b) Liens de combat (attaque/défense EFFECTIVES, buffs compris) rattachés
+    // aux tours dans l'ordre. Clé = « joueur#tour » (l'ouverture porte aussi la
+    // clé grabber '__opening__'). L'appariement carte↔lien se fait à l'affichage.
+    turns.forEach(t => {
+      const key = (t.player || '') + '#' + t.turnNumber;
+      t.chain = chainRes.chain.filter(c => c.turn === key || (t.turnNumber === 0 && c.turn === '__opening__'));
+    });
+
     // 9) Cartes vues
     const cardsSeen = new Set();
     turns.forEach(t => t.events.forEach(e => { if (e.card) cardsSeen.add(e.card); if (e.cards) e.cards.forEach(c => cardsSeen.add(c)); }));
@@ -786,7 +808,8 @@
       endStats: endStatsRes.endStats,
       warnings,
       health,
-      rawChatLog
+      rawChatLog,
+      chain: chainRes.chain
     };
   }
 

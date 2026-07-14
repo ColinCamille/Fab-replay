@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.9
+// @version      1.15.0
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.9';
+  const VERSION = '1.15.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -31,6 +31,7 @@
   const LS_META_PREFIX = 'taliMeta_';
   const LS_TS_PREFIX = 'taliTs_';
   const LS_ENDSTATS_PREFIX = 'taliEnd_';
+  const LS_CHAIN_PREFIX = 'taliChain_';
   const FORCE_SELECTOR = '';
 
   let captured = [];
@@ -50,6 +51,8 @@
   let graveSnapshots = {};  // clé tour -> { me, opp } (cimetière, zone publique)
   let banishSnapshots = {}; // clé tour -> { me, opp } (banni, zone publique)
   let lifeSnapshots = {};   // clé tour -> { me, opp, myDeck, oppDeck }
+  let chainLinks = [];      // combats : [{turn, card, power, defense, prevent, target, kw:[]}] — attaque/défense EFFECTIVES (buffs compris), lues dans activeChainLink
+  let pendingChain = null;  // lien de combat en cours de construction (figé quand la chaîne se ferme)
   let tsBatches = [];       // [{from, to, t}] : lignes captured[from..to] vues à l'epoch t (s)
   let meta = {};
   let endStats = null;       // { myPlayerID, byPlayer: {1:{...},2:{...}} } — stats officielles Talishar
@@ -401,6 +404,7 @@
       localStorage.setItem(LS_LIFE_PREFIX + gameName, JSON.stringify(lifeSnapshots));
       localStorage.setItem(LS_META_PREFIX + gameName, JSON.stringify(meta));
       localStorage.setItem(LS_TS_PREFIX + gameName, JSON.stringify(tsBatches));
+      localStorage.setItem(LS_CHAIN_PREFIX + gameName, JSON.stringify(chainLinks));
       if (endStats) localStorage.setItem(LS_ENDSTATS_PREFIX + gameName, JSON.stringify(endStats));
     } catch (e) {}
   }
@@ -419,6 +423,7 @@
     lifeSnapshots = read(LS_LIFE_PREFIX + gameName, {});
     meta = read(LS_META_PREFIX + gameName, {});
     tsBatches = read(LS_TS_PREFIX + gameName, []);
+    chainLinks = read(LS_CHAIN_PREFIX + gameName, []); pendingChain = null;
     endStats = read(LS_ENDSTATS_PREFIX + gameName, null);
   }
 
@@ -679,6 +684,32 @@
       const gr = extractTwoCamp('Graveyard'); if (gr) graveSnapshots[key] = gr;
       const bn = extractTwoCamp('Banish'); if (bn) banishSnapshots[key] = bn;
       lifeSnapshots[key] = extractLife();
+    }
+    captureCombatChain();
+  }
+
+  // Capture de l'attaque/défense EFFECTIVES (buffs compris) depuis la chaîne de
+  // combat Talishar (state.game.activeChainLink.totalPower/totalDefense). On suit
+  // le lien actif et on retient sa valeur la plus récente (les pumps s'ajoutent),
+  // puis on le FIGE quand la chaîne se ferme (ou qu'un autre attaquant arrive).
+  const CHAIN_KW = ['goAgain', 'dominate', 'overpower', 'piercing', 'combo', 'wager', 'phantasm', 'fusion', 'tower', 'highTide', 'confidence'];
+  function captureCombatChain() {
+    const g = getGameState(); if (!g) return;
+    const acl = g.activeChainLink;
+    const ac = acl && acl.attackingCard;
+    const card = ac && (ac.cardName || ac.cardNumber);
+    if (card && acl.totalPower != null) {
+      const turn = lastTurnKey || '__opening__';
+      const kw = CHAIN_KW.filter(k => acl[k]);
+      if (!pendingChain || pendingChain.card !== card || pendingChain.turn !== turn) {
+        if (pendingChain) chainLinks.push(pendingChain);      // fige le lien précédent
+        pendingChain = { turn: turn, card: card, power: acl.totalPower, defense: acl.totalDefense, prevent: acl.damagePrevention || 0, target: acl.attackTarget || null, kw: kw };
+      } else {                                                 // même lien → valeur la plus récente
+        pendingChain.power = acl.totalPower; pendingChain.defense = acl.totalDefense;
+        pendingChain.prevent = acl.damagePrevention || 0; if (kw.length) pendingChain.kw = kw;
+      }
+    } else if (pendingChain) {                                 // chaîne fermée → fige
+      chainLinks.push(pendingChain); pendingChain = null;
     }
   }
 
@@ -1004,8 +1035,20 @@
       + snapshotBlockText('LIFE SNAPSHOTS (vie et taille de deck : toi / adversaire)', lifeSnapshots, lifeLineFmt)
       + metaBlockText()
       + tsBlockText()
+      + chainBlockText()
       + endStatsBlockText()
       + rawChatLogBlockText();
+  }
+
+  // Combats : attaque/défense EFFECTIVES (buffs compris) lues dans la chaîne de
+  // combat Talishar. Une ligne JSON par lien, dans l'ordre du jeu → le lecteur
+  // les apparie aux combats du log (par tour + carte). Le lien en cours (non
+  // encore figé) est inclus pour ne pas perdre le dernier combat à l'export.
+  function chainBlockText() {
+    const all = pendingChain ? chainLinks.concat([pendingChain]) : chainLinks;
+    if (!all.length) return '';
+    return '\n=== COMBAT CHAIN (attaque/défense effectives, buffs compris) ===\n'
+      + all.map(l => JSON.stringify(l)).join('\n') + '\n';
   }
 
   // Journal STRUCTURÉ brut (state.game.chatLog) conservé verbatim, sur une seule
@@ -1109,6 +1152,7 @@
     if (!confirm('Effacer le log, les snapshots et les métadonnées capturés de cette partie ?')) return;
     captured = []; lastVisibleSig = ''; handSnapshots = {}; arsenalSnapshots = {}; oppArsenalSnapshots = {};
     fieldSnapshots = {}; graveSnapshots = {}; banishSnapshots = {}; lifeSnapshots = {}; tsBatches = []; meta = {};
+    chainLinks = []; pendingChain = null;
     lastTurnKey = null; openingSnapped = false;
     save(); updateUI();
   }

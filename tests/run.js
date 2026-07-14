@@ -96,6 +96,18 @@ assert(mRec.result && mRec.result.iWon === false, 'miroir : défaite correctemen
 const noEs = Parser.parse('=== Talishar game 48 — test ===\n\nEhecalt\'s turn 1 has begun.\nEhecalt played X\nnissy\'s turn 1 has begun.\nnissy played Y\nEhecalt (u) won! 🎉\n\n=== META ===\nme: Ehecalt\n');
 assert(noEs.result && noEs.result.iWon === true, 'sans stats officielles : résultat déduit de la ligne « won! » (régression)');
 
+// COMBAT CHAIN : attaque effective (buffs) parsée, rattachée au tour, sans polluer.
+const withChain = '=== Talishar game 49 — test ===\n\n' +
+  "Ehecalt's turn 1 has begun.\nEhecalt played Fry\nnissy took 6 damage\nCombat resolved with a hit for 6 damage\n" +
+  '\n=== META ===\nme: Ehecalt\n' +
+  '\n=== COMBAT CHAIN (attaque/défense effectives, buffs compris) ===\n' +
+  JSON.stringify({ turn: 'Ehecalt#1', card: 'Fry', power: 6, defense: 0, prevent: 0, target: 'nissy', kw: ['goAgain'] }) + '\n';
+const chRec = Parser.parse(withChain);
+assert(Array.isArray(chRec.chain) && chRec.chain.length === 1 && chRec.chain[0].power === 6, 'chain : lien parsé (power effectif 6)');
+const chT1 = chRec.turns.find(t => t.turnNumber === 1);
+assert(chT1 && chT1.chain && chT1.chain.length === 1, 'chain : rattaché au bon tour');
+assert(chRec.health.ok === true && !chT1.events.some(e => e.card === 'Fry' && e.type === 'played' && e.power), 'chain : bloc n\'a pas pollué les événements');
+
 // RAW CHATLOG : bloc verbatim retiré du corps (ne pollue PAS les événements) et exposé.
 const withRaw = '=== Talishar game 46 — test ===\n\n' +
   "nissy's turn 1 has begun.\nnissy played Look Tuff\nEhecalt took 3 damage\nEhecalt's turn 1 has begun.\nEhecalt played Y\n" +

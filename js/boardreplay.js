@@ -190,6 +190,13 @@
       }
 
       const evs = t.events || [], consumed = {};
+      // Liens de combat de ce tour (attaque/défense EFFECTIVES, buffs compris),
+      // consommés dans l'ordre au fil des attaques (appariés par nom de carte).
+      const chainQ = (t.chain || []).slice();
+      // Appariement : par nom de carte d'abord ; sinon 1er lien restant (repli
+      // d'ordre — utile quand une carte de pump jouée PAR-DESSUS l'attaque devient
+      // l'« attaquant » affiché alors que le lien porte la vraie carte d'attaque).
+      const takeChain = nm => { const k = norm(nm); let i = chainQ.findIndex(c => norm(c.card) === k); if (i < 0 && chainQ.length) i = 0; return i >= 0 ? chainQ.splice(i, 1)[0] : null; };
       let openAtk = null, curBlocks = [], curReactions = [];
       let lastAction = null, ended = false;   // dernière carte jouée/activée (cause du coup fatal) ; fin de partie atteinte
       // Affiche en carte SEULE une carte de l'attaquant restée sans combat
@@ -263,7 +270,8 @@
             const vt = dmg > 0 ? 'through' : 'blocked';
             const rtxt = dmg > 0 ? (dmg + ' dégât' + (dmg > 1 ? 's' : '') + ' pass' + (dmg > 1 ? 'ent' : 'e')) : '0 dégât — bloqué';
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
-            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, who: openAtk.side }, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+            const lk = takeChain(openAtk.nm);   // attaque/défense effectives (buffs) de CETTE attaque
+            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           openAtk = null; curBlocks = []; curReactions = [];
         } else if (e.type === 'gameWon' || e.type === 'conceded') {
@@ -392,14 +400,19 @@
     const slider = $('#br-slider'), stage = $('#br-stage');
     let i = 0, playing = false, timer = null; const prevCounts = {};
 
-    const pcard = (c, side, lg) => '<div class="br-pcard br-' + side + (lg ? ' br-lg' : '') + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"></div><div class="br-nm">' + esc(c.nm) + '</div></div>';
+    // Libellés courts des mots-clés FaB portés par l'attaque (chaîne de combat).
+    const KW_LABEL = { goAgain: 'Go again', dominate: 'Dominate', overpower: 'Overpower', piercing: 'Piercing', combo: 'Combo', wager: 'Wager', phantasm: 'Phantasm', fusion: 'Fusion', tower: 'Tower', highTide: 'High Tide', confidence: 'Confidence' };
+    // Badge de puissance EFFECTIVE (buffs compris) affiché sur la carte d'attaque.
+    const pwBadge = c => (c && c.power != null) ? '<span class="br-pw" title="Attaque effective (buffs compris)">' + c.power + '</span>' : '';
+    const pcard = (c, side, lg) => '<div class="br-pcard br-' + side + (lg ? ' br-lg' : '') + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"></div><div class="br-nm">' + esc(c.nm) + '</div>' + pwBadge(c) + '</div>';
+    const kwLine = c => (c && c.kw && c.kw.length) ? '<div class="br-kwline">' + c.kw.map(k => '<span class="br-kw">' + esc(KW_LABEL[k] || k) + '</span>').join('') + '</div>' : '';
     function buildStage(s) {
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
-        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div></div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
+        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div></div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
       }
       return '';
     }
