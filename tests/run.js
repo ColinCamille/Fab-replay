@@ -389,6 +389,29 @@ const arsInf = BR.buildTimeline({
 assert(arsInf.steps.some(s => s.turn === 'B — Tour 2' && s.stage.type === 'banner' && s.state.oppArsenalCount === 1), 'arsenal adverse inféré : dos affiché au tour où il joue depuis l\'arsenal');
 eq(arsInf.steps.slice(-1)[0].state.oppArsenalCount, 0, 'arsenal adverse inféré : vidé après la carte jouée');
 
+// Attaque effective + renfort : un pump joué SUR l'attaque (ciblant la carte
+// d'attaque) reste un renfort ; la VRAIE carte d'attaque reste l'attaquant, avec
+// sa puissance effective (buffs). Pas de doublon en « carte seule ».
+const pumpTl = BR.buildTimeline({
+  myName: 'Ehecalt', oppName: 'nissy',
+  players: { me: { hero: 'Aurora', equipment: {} }, opp: { hero: 'Riptide', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [ { player: 'Ehecalt', label: 'Ehecalt — Tour 1', hand: [], arsenal: [],
+    chain: [{ turn: 'Ehecalt#1', card: 'Fry', power: 6, defense: 0, prevent: 0, target: 'nissy', kw: ['goAgain'] }],
+    events: [
+      { type: 'played', player: 'Ehecalt', card: 'Fry' },
+      { type: 'played', player: 'Ehecalt', card: 'Lightning Press' },
+      { type: 'targetedSecondary', owner: 'Ehecalt', card: 'Fry' },
+      { type: 'damageTaken', player: 'nissy', amount: 6 },
+      { type: 'combatResult', hit: true, amount: 6 }
+    ] } ]
+});
+const pumpClash = pumpTl.steps.map(s => s.stage).find(st => st && st.type === 'clash');
+eq(pumpClash.atk.nm, 'Fry', 'renfort : la vraie carte d\'attaque (Fry) reste l\'attaquant');
+eq(pumpClash.atk.power, 6, 'renfort : puissance effective (6) portée par l\'attaque');
+eq((pumpClash.pumps || []).map(p => p.nm).join(','), 'Lightning Press', 'renfort : le pump reste visible sous l\'attaque');
+assert(pumpTl.steps.map(s => s.stage).filter(st => st && st.type === 'play').every(st => st.card.nm !== 'Fry'), 'renfort : pas de doublon (Fry pas aussi en carte seule)');
+
 // ---------- Grabber : fusion des instantanés de log (anti-duplication) ----------
 console.log('Grabber merge —');
 (function () {

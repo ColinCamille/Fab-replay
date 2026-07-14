@@ -1384,6 +1384,11 @@ footer a{color:var(--text-dim)}
   font:800 .74rem/1 'JetBrains Mono',monospace;color:#fff;
   background:linear-gradient(160deg,#e0555a,#8a1418);border:1px solid #ffffff40;box-shadow:0 2px 7px #0008}
 .br-pw::before{content:'⚔\FE0E';margin-right:2px;font-size:.64rem;opacity:.9}
+/* Renforts (pumps/réactions joués sur l'attaque, ex. Lightning Press) : petites
+   cartes sous l'attaquant, avec une étiquette « + renfort ». */
+.br-pumps{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:6px}
+.br-pumps-lbl{font:700 .5rem/1 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint)}
+.br-pumps .br-cardrow{max-width:150px}
 .br-kwline{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:5px;max-width:130px}
 .br-kw{font:700 .52rem/1 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;
   color:var(--gold,#e9c07a);background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.38);

@@ -205,6 +205,8 @@
       const flushAtk = () => {
         if (!openAtk) return;
         push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm }, pitch: openAtk.pitch, text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt });
+        // Renforts éventuels (attaque hors-combat) : affichés à part pour ne pas les perdre.
+        (openAtk.pumps || []).forEach(p => push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: p.nm }, reaction: true, text: HERO[openAtk.side] + ' joue ' + p.nm + (p.pTxt || '') }));
         openAtk = null;
       };
       evs.forEach((e, i) => {
@@ -218,8 +220,24 @@
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
           if (side === atkSide) {
-            flushAtk();   // attaque précédente restée sans combat → carte seule
-            openAtk = { nm: e.card, side, pitch: pitches.join(', '), pTxt: pTxt };
+            // Cette carte est-elle un RENFORT sur l'attaque en cours (pump/réaction
+            // d'attaque, ex. Lightning Press sur Fry) ou une NOUVELLE attaque ?
+            // Signal fiable : « <camp>'s <attaque> was targeted » (targetedSecondary)
+            // → la carte cible l'attaque en cours ⇒ renfort, on GARDE l'attaquant.
+            let isReinforce = false;
+            if (openAtk) {
+              for (let j = i + 1; j < evs.length; j++) {
+                const f = evs[j];
+                if (f.type === 'played' || f.type === 'combatResult') break;
+                if (f.type === 'targetedSecondary' && norm(f.card) === norm(openAtk.nm)) { isReinforce = true; break; }
+              }
+            }
+            if (isReinforce) {
+              (openAtk.pumps = openAtk.pumps || []).push({ nm: e.card, pTxt: pTxt });
+            } else {
+              flushAtk();   // attaque précédente restée sans combat → carte seule
+              openAtk = { nm: e.card, side, pitch: pitches.join(', '), pTxt: pTxt, pumps: [] };
+            }
           } else {
             curReactions.push({ card: e.card, owner: side });
             push(label, side, { type: 'play', side, card: { nm: e.card }, reaction: true, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt });
@@ -260,7 +278,7 @@
           const s = sideOf(e.player); st.life[s] = Math.max(0, st.life[s] - (e.amount || 0));
         } else if (e.type === 'combatResult') {
           const dmg = e.hit ? (e.amount || 0) : 0;
-          if (openAtk) toGrave(openAtk.side, openAtk.nm);
+          if (openAtk) { toGrave(openAtk.side, openAtk.nm); (openAtk.pumps || []).forEach(p => toGrave(openAtk.side, p.nm)); }
           curBlocks.forEach(b => { if (!b.eq) toGrave(b.owner, b.card); });
           curReactions.forEach(r => toGrave(r.owner, r.card));
           if (openAtk) {
@@ -271,7 +289,8 @@
             const rtxt = dmg > 0 ? (dmg + ' dégât' + (dmg > 1 ? 's' : '') + ' pass' + (dmg > 1 ? 'ent' : 'e')) : '0 dégât — bloqué';
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
             const lk = takeChain(openAtk.nm);   // attaque/défense effectives (buffs) de CETTE attaque
-            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+            const pumps = (openAtk.pumps || []).map(p => ({ nm: p.nm }));
+            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, pumps: pumps, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           openAtk = null; curBlocks = []; curReactions = [];
         } else if (e.type === 'gameWon' || e.type === 'conceded') {
@@ -412,7 +431,10 @@
       if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
-        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div></div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
+        // Renforts (pumps/réactions d'attaque, ex. Lightning Press) : petites
+        // cartes sous l'attaque, pour garder trace de ce qui a été joué dessus.
+        const pumps = (s.pumps && s.pumps.length) ? '<div class="br-pumps"><span class="br-pumps-lbl">+ renfort</span><div class="br-cardrow">' + s.pumps.map(p => pcard(p, s.atk.who)).join('') + '</div></div>' : '';
+        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + pumps + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div></div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
       }
       return '';
     }
