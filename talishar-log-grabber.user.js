@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.14.8
+// @version      1.14.9
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.14.8';
+  const VERSION = '1.14.9';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -1074,6 +1074,24 @@
       out.push('', pk + ' keys: ' + Object.keys(pl).join(', '));
       out.push('  Hand: ' + zone(pl, 'Hand'));
       out.push('  Arsenal: ' + zone(pl, 'Arsenal'));
+    });
+    // OBJET-CARTE COMPLET : tous les champs d'une carte (y a-t-il attaque/défense/
+    // pitch/coût ?). On prend la 1re carte trouvée dans une zone quelconque.
+    const firstCard = (() => {
+      for (const pk of ['playerOne', 'playerTwo']) {
+        const pl = g[pk]; if (!pl) continue;
+        for (const z of ['Hand', 'Arsenal', 'Deck', 'Graveyard', 'Banish', 'Permanents']) {
+          const a = pl[z]; if (Array.isArray(a) && a.length && typeof a[0] === 'object') return { where: pk + '.' + z, card: a[0] };
+        }
+      }
+      return null;
+    })();
+    if (firstCard) { try { out.push('', 'CARTE COMPLÈTE (' + firstCard.where + '[0], TOUS les champs):', JSON.stringify(firstCard.card)); } catch (e) {} }
+    // CHAÎNE DE COMBAT : c'est là que Talishar affiche la puissance EFFECTIVE
+    // (attaque buffée) et la défense. Objectif : voir si atk/def/power y figurent.
+    ['activeChainLink', 'oldCombatChain', 'activeLayers', 'combatChain', 'chainLinks'].forEach(k => {
+      if (g[k] === undefined) return;
+      try { out.push('', k + ': ' + JSON.stringify(g[k]).slice(0, 2000)); } catch (e) { out.push('', k + ': (non sérialisable)'); }
     });
     return out.join('\n');
   }
