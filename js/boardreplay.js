@@ -161,8 +161,22 @@
       if (opening) {
         // Bannière de début PUIS on rejoue les actions du 1er tour (comme le
         // Déroulé) au lieu de sauter le tour. Main de départ affichée.
-        st.meFaceUp = !!(t.hand && t.hand.length);
-        if (st.meFaceUp) st.meHandCards = (t.hand || []).slice();
+        // Reconstitution : le snapshot d'ouverture peut avoir été pris un peu
+        // TARD (après tes 1ers plays) → des cartes jouées ce tour-là manquaient
+        // (ex. Scar for a Scar joué après Nimblism). On rajoute les cartes venues
+        // de TA main ce tour-ci (plays hors-arsenal + pitches) si elles manquent,
+        // pour que la main de départ soit complète et visible AVANT d'être jouée.
+        let hand0 = (t.hand || []).slice();
+        if (actor === MY) {
+          const cnt = {};
+          (t.events || []).forEach(ev => {
+            if (sideOf(ev.player) !== 'me') return;
+            if ((ev.type === 'played' && !ev.fromArsenal) || ev.type === 'pitched') { const k = norm(ev.card); (cnt[k] = cnt[k] || { nm: ev.card, n: 0 }).n++; }
+          });
+          Object.keys(cnt).forEach(k => { const have = hand0.filter(c => norm(c) === k).length; for (let m = have; m < cnt[k].n; m++) hand0.push(cnt[k].nm); });
+        }
+        st.meFaceUp = !!hand0.length;
+        if (st.meFaceUp) st.meHandCards = hand0;
         if (actor === MY) st.oppHandCount = 4;
         push(t.label || 'Ouverture', atkSide, { type: 'banner', side: 'me', big: 'Début de la partie', sub: HERO.me + ' vs ' + HERO.opp });
         if (!actor || !(t.events || []).some(e => e.type === 'played' || e.type === 'activated')) return;   // ouverture sans action → juste la bannière
@@ -210,7 +224,13 @@
       let atkBuf = [];
       const looseNorm = s => norm(s).replace(/[^a-z0-9]/g, '');   // tolère apostrophe/ponctuation (« Hunter's Klaive » vs « Hunters Klaive »)
       const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm }, act: !!x.act, pitch: x.pitch, text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
-      const flushBuf = () => { atkBuf.forEach(x => { push(label, atkSide, bufEntryStep(x)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); }); atkBuf = []; };
+      // Matérialise une carte en « carte seule » MAINTENANT (photo de la main
+      // prise à cet instant → les cartes jouées ENSUITE y sont encore visibles).
+      const materialize = x => { push(label, atkSide, bufEntryStep(x)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); };
+      const flushBuf = () => { atkBuf.forEach(materialize); atkBuf = []; };
+      // La carte du PROCHAIN lien de combat = l'attaquant du combat en cours.
+      const nextAtkCard = () => (chainQ.length ? chainQ[0].card : null);
+      const isAtkCard = nm => { const nc = nextAtkCard(); return nc && looseNorm(nm) === looseNorm(nc); };
       // Affiche en carte SEULE une carte de l'attaquant restée sans combat
       // (action hors-combat). Une vraie carte d'ATTAQUE, elle, n'est montrée que
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
@@ -232,7 +252,10 @@
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
           if (side === atkSide && hasChain) {
-            atkBuf.push({ nm: e.card, pitch: pitches.join(', '), pTxt: pTxt, act: false });
+            const entry = { nm: e.card, pitch: pitches.join(', '), pTxt: pTxt, act: false };
+            if (atkBuf.length === 0 && isAtkCard(e.card)) atkBuf.push(entry);       // c'est l'attaquant
+            else if (atkBuf.length > 0) atkBuf.push(entry);                          // renfort (joué APRÈS l'attaquant)
+            else materialize(entry);                                                 // action PRÉ-attaque → carte seule, photo prise MAINTENANT
           } else if (side === atkSide) {
             // (vieux logs sans chaîne) Cette carte est-elle un RENFORT sur l'attaque
             // en cours (pump/réaction ciblant l'attaque, ex. Lightning Press sur Fry)
@@ -273,8 +296,9 @@
           // Une ARME activée par l'attaquant EST une attaque (ex. Hunter's Klaive) :
           // en mode chaîne on la met en attente pour qu'elle devienne l'attaquant
           // du combat (au lieu d'une carte seule que la 1re réaction remplacerait).
-          if (hasChain && side === atkSide && WPN[side][norm(e.card)]) {
-            atkBuf.push({ nm: e.card, pitch: pitches.join(', '), pTxt: pTxt, act: true });
+          const wpnEntry = { nm: e.card, pitch: pitches.join(', '), pTxt: pTxt, act: true };
+          if (hasChain && side === atkSide && WPN[side][norm(e.card)] && (atkBuf.length === 0 ? (isAtkCard(e.card) || !nextAtkCard()) : true)) {
+            atkBuf.push(wpnEntry);              // arme = attaquant (ou renfort si un attaquant est déjà en cours)
           } else {
             push(label, side, { type: 'play', side, card: { nm: e.card }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
           }
@@ -298,15 +322,13 @@
           const s = sideOf(e.player); st.life[s] = Math.max(0, st.life[s] - (e.amount || 0));
         } else if (e.type === 'combatResult' && hasChain) {
           // MODE CHAÎNE : l'attaquant est la carte du lien de combat (autoritaire).
+          // Les actions PRÉ-attaque ont déjà été affichées « en carte seule » au
+          // moment où elles ont été jouées (photo correcte) → atkBuf ne contient
+          // que l'attaquant (index 0) puis ses renforts.
           const dmg = e.hit ? (e.amount || 0) : 0;
           const link = chainQ.shift() || null;                 // un lien par combat, dans l'ordre
-          const atkName = link ? link.card : (atkBuf.length ? atkBuf[atkBuf.length - 1].nm : null);
-          let ai = atkName ? atkBuf.findIndex(x => looseNorm(x.nm) === looseNorm(atkName)) : -1;
-          if (ai < 0) ai = atkBuf.length - 1;                  // introuvable → dernière carte du buffer
-          const before = ai > 0 ? atkBuf.slice(0, ai) : [];
-          const attacker = atkBuf[ai] || (atkName ? { nm: atkName } : null);
-          const after = ai >= 0 ? atkBuf.slice(ai + 1) : [];
-          before.forEach(x => { push(label, atkSide, bufEntryStep(x)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); });
+          const attacker = atkBuf[0] || (link ? { nm: link.card } : null);
+          const after = atkBuf.slice(1);                        // renforts (pumps/réactions)
           if (attacker && !isEquip(atkSide, attacker.nm)) toGrave(atkSide, attacker.nm);
           after.forEach(x => { if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); });
           curBlocks.forEach(b => { if (!b.eq) toGrave(b.owner, b.card); });

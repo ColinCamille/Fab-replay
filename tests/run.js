@@ -435,6 +435,26 @@ eq(klvClash.atk.power, 4, 'arme : puissance effective (4) sur l\'attaque');
 eq((klvClash.pumps || []).map(p => p.nm).join(','), 'Tarantula Toxin', 'arme : la réaction non-ciblante est un renfort');
 eq((klvClash.atk.kw || []).join(','), 'goAgain,piercing', 'arme : mots-clés (go again, piercing) portés');
 
+// Ouverture : une carte jouée APRÈS un buff (Scar for a Scar après Nimblism)
+// doit rester en main tant qu'elle n'est pas jouée — la carte pré-attaque est
+// « photographiée » au bon moment (pas à la résolution du combat).
+const openHandTl = BR.buildTimeline({
+  myName: 'Briar', oppName: 'Marlynn',
+  players: { me: { hero: 'Briar', equipment: {} }, opp: { hero: 'Marlynn', equipment: {} } },
+  lifeSeries: { me: [20, 20], opp: [19, 19] },
+  turns: [{ player: null, label: 'Ouverture', turnNumber: 0, hand: ['Quick Succession'], arsenal: [],
+    chain: [{ turn: '__opening__', card: 'Scar for a Scar', power: 6, defense: 0, kw: ['goAgain'] }],
+    events: [
+      { type: 'played', player: 'Briar', card: 'Nimblism' },
+      { type: 'played', player: 'Briar', card: 'Scar for a Scar' },
+      { type: 'combatResult', hit: true, amount: 6 }
+    ] }]
+});
+const nimStep = openHandTl.steps.find(s => s.stage.type === 'play' && s.stage.card && s.stage.card.nm === 'Nimblism');
+assert(nimStep && nimStep.state.meHandCards.some(c => /scar for a scar/i.test(c)), 'ouverture : Scar encore en main à l\'étape où Nimblism est joué (buff avant l\'attaque)');
+const scarStep = openHandTl.steps.find(s => s.stage.type === 'clash');
+assert(scarStep && !scarStep.state.meHandCards.some(c => /scar for a scar/i.test(c)), 'ouverture : Scar retiré de la main une fois joué (à l\'échange)');
+
 // ---------- Grabber : fusion des instantanés de log (anti-duplication) ----------
 console.log('Grabber merge —');
 (function () {
