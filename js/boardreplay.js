@@ -199,6 +199,18 @@
       const takeChain = nm => { const k = norm(nm); let i = chainQ.findIndex(c => norm(c.card) === k); if (i < 0 && chainQ.length) i = 0; return i >= 0 ? chainQ.splice(i, 1)[0] : null; };
       let openAtk = null, curBlocks = [], curReactions = [];
       let lastAction = null, ended = false;   // dernière carte jouée/activée (cause du coup fatal) ; fin de partie atteinte
+      // MODE CHAÎNE (v1.15.0+) : quand la chaîne de combat est captée, elle est
+      // AUTORITAIRE sur l'attaquant. On met les cartes de l'attaquant du combat
+      // courant en attente (atkBuf), et au combat on prend l'attaquant = carte de
+      // la chaîne ; les cartes AVANT lui = actions préalables (cartes seules), les
+      // cartes APRÈS lui = renforts (pumps/réactions d'attaque, ex. Tarantula Toxin
+      // sur la dague — même sans qu'elles ciblent l'attaque). Sinon (vieux logs
+      // sans chaîne) on garde l'ancien modèle openAtk.
+      const hasChain = chainQ.length > 0;
+      let atkBuf = [];
+      const looseNorm = s => norm(s).replace(/[^a-z0-9]/g, '');   // tolère apostrophe/ponctuation (« Hunter's Klaive » vs « Hunters Klaive »)
+      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm }, act: !!x.act, pitch: x.pitch, text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
+      const flushBuf = () => { atkBuf.forEach(x => { push(label, atkSide, bufEntryStep(x)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); }); atkBuf = []; };
       // Affiche en carte SEULE une carte de l'attaquant restée sans combat
       // (action hors-combat). Une vraie carte d'ATTAQUE, elle, n'est montrée que
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
@@ -219,11 +231,12 @@
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
-          if (side === atkSide) {
-            // Cette carte est-elle un RENFORT sur l'attaque en cours (pump/réaction
-            // d'attaque, ex. Lightning Press sur Fry) ou une NOUVELLE attaque ?
-            // Signal fiable : « <camp>'s <attaque> was targeted » (targetedSecondary)
-            // → la carte cible l'attaque en cours ⇒ renfort, on GARDE l'attaquant.
+          if (side === atkSide && hasChain) {
+            atkBuf.push({ nm: e.card, pitch: pitches.join(', '), pTxt: pTxt, act: false });
+          } else if (side === atkSide) {
+            // (vieux logs sans chaîne) Cette carte est-elle un RENFORT sur l'attaque
+            // en cours (pump/réaction ciblant l'attaque, ex. Lightning Press sur Fry)
+            // ou une NOUVELLE attaque ? Signal : « <camp>'s <attaque> was targeted ».
             let isReinforce = false;
             if (openAtk) {
               for (let j = i + 1; j < evs.length; j++) {
@@ -257,7 +270,14 @@
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
-          push(label, side, { type: 'play', side, card: { nm: e.card }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
+          // Une ARME activée par l'attaquant EST une attaque (ex. Hunter's Klaive) :
+          // en mode chaîne on la met en attente pour qu'elle devienne l'attaquant
+          // du combat (au lieu d'une carte seule que la 1re réaction remplacerait).
+          if (hasChain && side === atkSide && WPN[side][norm(e.card)]) {
+            atkBuf.push({ nm: e.card, pitch: pitches.join(', '), pTxt: pTxt, act: true });
+          } else {
+            push(label, side, { type: 'play', side, card: { nm: e.card }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
+          }
         } else if (e.type === 'destroyed') {
           // Un ÉQUIPEMENT détruit (armure/Nullrune cassée…) est retiré du plateau
           // à partir d'ici (effet cumulatif, jamais annulé). On identifie le camp
@@ -276,6 +296,31 @@
           (e.cards || []).forEach(c => { const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq }); });
         } else if (e.type === 'damageTaken') {
           const s = sideOf(e.player); st.life[s] = Math.max(0, st.life[s] - (e.amount || 0));
+        } else if (e.type === 'combatResult' && hasChain) {
+          // MODE CHAÎNE : l'attaquant est la carte du lien de combat (autoritaire).
+          const dmg = e.hit ? (e.amount || 0) : 0;
+          const link = chainQ.shift() || null;                 // un lien par combat, dans l'ordre
+          const atkName = link ? link.card : (atkBuf.length ? atkBuf[atkBuf.length - 1].nm : null);
+          let ai = atkName ? atkBuf.findIndex(x => looseNorm(x.nm) === looseNorm(atkName)) : -1;
+          if (ai < 0) ai = atkBuf.length - 1;                  // introuvable → dernière carte du buffer
+          const before = ai > 0 ? atkBuf.slice(0, ai) : [];
+          const attacker = atkBuf[ai] || (atkName ? { nm: atkName } : null);
+          const after = ai >= 0 ? atkBuf.slice(ai + 1) : [];
+          before.forEach(x => { push(label, atkSide, bufEntryStep(x)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); });
+          if (attacker && !isEquip(atkSide, attacker.nm)) toGrave(atkSide, attacker.nm);
+          after.forEach(x => { if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); });
+          curBlocks.forEach(b => { if (!b.eq) toGrave(b.owner, b.card); });
+          curReactions.forEach(r => toGrave(r.owner, r.card));
+          if (attacker) {
+            const defSide = atkSide === 'me' ? 'opp' : 'me';
+            const defCards = curBlocks.map(b => ({ nm: b.card })).concat(curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card })));
+            const blockWho = curBlocks.length ? curBlocks[0].owner : defSide;
+            const vt = dmg > 0 ? 'through' : 'blocked';
+            const rtxt = dmg > 0 ? (dmg + ' dégât' + (dmg > 1 ? 's' : '') + ' pass' + (dmg > 1 ? 'ent' : 'e')) : '0 dégât — bloqué';
+            const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
+            push(label, atkSide, { type: 'clash', atk: { nm: attacker.nm, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm })), blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+          }
+          atkBuf = []; curBlocks = []; curReactions = [];
         } else if (e.type === 'combatResult') {
           const dmg = e.hit ? (e.amount || 0) : 0;
           if (openAtk) { toGrave(openAtk.side, openAtk.nm); (openAtk.pumps || []).forEach(p => toGrave(openAtk.side, p.nm)); }
@@ -299,7 +344,7 @@
           // le coup fatal n'apparaissait alors nulle part. On affiche le vainqueur,
           // les PV finaux (perdant à 0 sur une mort, PV réels sur un abandon) et
           // la dernière carte jouée/activée comme « coup fatal ».
-          flushAtk();
+          flushAtk(); flushBuf();
           const conceded = e.type === 'conceded';
           const winnerSide = conceded ? (sideOf(e.player) === 'me' ? 'opp' : 'me') : (e.player ? sideOf(e.player) : null);
           const meLife = (!conceded && winnerSide === 'opp') ? 0 : st.life.me;
@@ -311,7 +356,7 @@
           ended = true;
         }
       });
-      flushAtk();   // fin de tour : dernière action hors-combat affichée seule
+      flushAtk(); flushBuf();   // fin de tour : dernière action hors-combat affichée seule
     });
     return { players: GAME.players, myName: MY, oppName: OPP, hero: HERO, steps };
   }

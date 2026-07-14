@@ -412,6 +412,29 @@ eq(pumpClash.atk.power, 6, 'renfort : puissance effective (6) portée par l\'att
 eq((pumpClash.pumps || []).map(p => p.nm).join(','), 'Lightning Press', 'renfort : le pump reste visible sous l\'attaque');
 assert(pumpTl.steps.map(s => s.stage).filter(st => st && st.type === 'play').every(st => st.card.nm !== 'Fry'), 'renfort : pas de doublon (Fry pas aussi en carte seule)');
 
+// Attaque à l'ARME (activation) + réaction d'attaque qui NE cible PAS l'attaque
+// (ex. Tarantula Toxin sur Hunter's Klaive) : la chaîne de combat fait autorité →
+// l'arme reste l'attaquant, la réaction est un renfort. Gère aussi l'apostrophe
+// (« Hunter's Klaive » dans le log vs « Hunters Klaive » dans la chaîne).
+const klvTl = BR.buildTimeline({
+  myName: 'Ehecalt', oppName: 'nissy',
+  players: { me: { hero: 'Arakni', equipment: { weaponL: { name: "Hunter's Klaive" } } }, opp: { hero: 'Riptide', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [ { player: 'Ehecalt', label: 'Ehecalt — Tour 1', hand: [], arsenal: [],
+    chain: [{ turn: 'Ehecalt#1', card: 'Hunters Klaive', power: 4, defense: 0, kw: ['goAgain', 'piercing'] }],
+    events: [
+      { type: 'activated', player: 'Ehecalt', card: "Hunter's Klaive" },
+      { type: 'played', player: 'Ehecalt', card: 'Tarantula Toxin' },
+      { type: 'damageTaken', player: 'nissy', amount: 4 },
+      { type: 'combatResult', hit: true, amount: 4 }
+    ] } ]
+});
+const klvClash = klvTl.steps.map(s => s.stage).find(st => st && st.type === 'clash');
+eq(klvClash.atk.nm, "Hunter's Klaive", 'arme : l\'arme activée reste l\'attaquant (pas la réaction)');
+eq(klvClash.atk.power, 4, 'arme : puissance effective (4) sur l\'attaque');
+eq((klvClash.pumps || []).map(p => p.nm).join(','), 'Tarantula Toxin', 'arme : la réaction non-ciblante est un renfort');
+eq((klvClash.atk.kw || []).join(','), 'goAgain,piercing', 'arme : mots-clés (go again, piercing) portés');
+
 // ---------- Grabber : fusion des instantanés de log (anti-duplication) ----------
 console.log('Grabber merge —');
 (function () {
