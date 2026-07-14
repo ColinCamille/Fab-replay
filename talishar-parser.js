@@ -113,7 +113,8 @@
     const chain = [];
     body.trim().split('\n').forEach(l => {
       l = l.trim(); if (!l || l[0] !== '{') return;
-      try { const o = JSON.parse(l); if (o && o.card) chain.push(o); } catch (e) { /* ligne ignorée */ }
+      // « blank » = carte-fantôme Talishar (chaîne vide) → ignorée (lien parasite).
+      try { const o = JSON.parse(l); if (o && o.card && !/^blank$/i.test(String(o.card).trim())) chain.push(o); } catch (e) { /* ligne ignorée */ }
     });
     return { rest, chain };
   }

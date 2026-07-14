@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.15.0
+// @version      1.15.1
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.15.0';
+  const VERSION = '1.15.1';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -323,13 +323,16 @@
     const issues = [];
     const gi = g.gameInfo || {};
     if (gi.playerID == null) issues.push('gameInfo.playerID absent');
-    if (!name1 || !name2) issues.push('nom de héros illisible (playerOne/Two.Hero.cardName)');
-    // Marqueur de tour : si des tours se terminent mais aucun [[TURN_START]] n'existe,
-    // c'est que le format du marqueur a changé (le cœur du parsage des tours).
+    // Marqueur de tour : PLUSIEURS fins de tour SANS aucun [[TURN_START]] ⇒ le
+    // format du marqueur a changé. On exige >= 2 fins (une seule = simple bord de
+    // tour transitoire au moment de la capture, PAS une anomalie) → évite le faux
+    // positif en début de partie / menu de sélection d'équipement. Le nom de héros
+    // manquant n'est PAS signalé ici : c'est transitoire (adversaire pas encore
+    // chargé), et readChatLogLines retombe déjà sur le DOM dans ce cas.
     const strip = x => String(x == null ? '' : x).replace(/<[^>]+>/g, '');
     let ends = 0, starts = 0;
     for (const e of g.chatLog) { const t = strip(e); if (/Attempting to end turn/.test(t)) ends++; if (TURN_START_RE.test(t)) starts++; }
-    if (ends >= 1 && starts === 0) issues.push('marqueur de début de tour [[TURN_START]] introuvable (format changé ?)');
+    if (ends >= 2 && starts === 0) issues.push('marqueur de début de tour [[TURN_START]] introuvable (format changé ?)');
     canaryIssues = issues;
     if (issues.length && !runCanary._warned) {
       runCanary._warned = true;
@@ -697,7 +700,10 @@
     const g = getGameState(); if (!g) return;
     const acl = g.activeChainLink;
     const ac = acl && acl.attackingCard;
-    const card = ac && (ac.cardName || ac.cardNumber);
+    let card = ac && (ac.cardName || ac.cardNumber);
+    // « blank » = carte-fantôme de Talishar quand la chaîne est vide/en cours
+    // d'initialisation → à ignorer (sinon un lien parasite power=0 pollue).
+    if (card && /^blank$/i.test(String(card).trim())) card = null;
     if (card && acl.totalPower != null) {
       const turn = lastTurnKey || '__opening__';
       const kw = CHAIN_KW.filter(k => acl[k]);
