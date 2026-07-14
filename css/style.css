@@ -1349,7 +1349,11 @@ footer a{color:var(--text-dim)}
    partie — souvent hors combat (arcane, effet…) — soit toujours lisible. */
 .br-banner.br-end{padding:10px 12px;border:1px solid var(--accent,var(--gold));border-radius:10px;background:linear-gradient(160deg,rgba(201,162,39,.14),rgba(201,162,39,.04))}
 .br-banner.br-end .br-big{font-size:1.15rem}
-.br-sub{font-size:.76rem;color:var(--text-dim);margin-top:3px}
+/* Largeur bornée + retour à la ligne : un sous-titre à noms longs (miroir) ne
+   doit pas s'étaler sur une seule ligne — sinon il gonfle la largeur mesurée du
+   plateau (stabilizeStage) et pousse tout vers la droite. */
+.br-sub{font-size:.76rem;color:var(--text-dim);margin-top:3px;
+  max-width:min(90vw,340px);margin-inline:auto;overflow-wrap:anywhere}
 .br-duel{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
 .br-side{display:flex;flex-direction:column;align-items:center;gap:5px}
 .br-duel-who{font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);font-weight:700}

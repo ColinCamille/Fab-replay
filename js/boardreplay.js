@@ -180,8 +180,13 @@
           if (t.hand && t.hand.length) { st.meFaceUp = true; st.meHandCards = t.hand.slice(); }
           else { st.meFaceUp = false; st.meHandCount = 4; }
         }
+        // Sous-titre COMPACT (PV seuls) : le nom du héros est déjà dans les
+        // encarts de PV latéraux et la pastille de tour ; le répéter 3× ici
+        // (surtout en miroir « Aurora, Legacy of Tempest ») faisait une ligne
+        // énorme qui gonflait la largeur mesurée du plateau et poussait tout
+        // vers la droite sur mobile.
         push(label, atkSide, { type: 'banner', side: atkSide, big: actor === MY ? 'Ton tour' : 'Tour adverse',
-          sub: HERO[atkSide] + ' attaque · ' + HERO.me + ' ' + st.life.me + ' PV · ' + HERO.opp + ' ' + st.life.opp + ' PV' });
+          sub: 'Toi ' + st.life.me + ' · Adv ' + st.life.opp + ' PV' });
       }
 
       const evs = t.events || [], consumed = {};
