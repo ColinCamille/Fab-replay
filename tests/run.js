@@ -455,6 +455,24 @@ assert(nimStep && nimStep.state.meHandCards.some(c => /scar for a scar/i.test(c)
 const scarStep = openHandTl.steps.find(s => s.stage.type === 'clash');
 assert(scarStep && !scarStep.state.meHandCards.some(c => /scar for a scar/i.test(c)), 'ouverture : Scar retiré de la main une fois joué (à l\'échange)');
 
+// Ordre : une réaction de DÉFENSE jouée pendant l'attaque adverse (arme) ne doit
+// PAS apparaître en étape AVANT l'attaque — elle figure côté défense de l'échange.
+const defTl = BR.buildTimeline({
+  myName: 'Ziggy', oppName: 'Marilyn',
+  players: { me: { hero: 'Ziggy', equipment: {} }, opp: { hero: 'Marilyn', equipment: { weaponL: { name: 'Harpoon' } } } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [{ player: 'Marilyn', label: 'Marilyn — Tour 1', hand: [], arsenal: [],
+    chain: [{ turn: 'Marilyn#1', card: 'Harpoon', power: 4, defense: 0, kw: [] }],
+    events: [
+      { type: 'activated', player: 'Marilyn', card: 'Harpoon' },
+      { type: 'played', player: 'Ziggy', card: 'Sink Below' },
+      { type: 'combatResult', hit: false }
+    ] }]
+});
+assert(!defTl.steps.some(s => s.stage.type === 'play' && s.stage.card && s.stage.card.nm === 'Sink Below'), 'défense : la réaction n\'apparaît pas en étape séparée avant l\'attaque');
+const defClash = defTl.steps.map(s => s.stage).find(st => st.type === 'clash');
+assert(defClash && (defClash.blocks || []).some(b => b.nm === 'Sink Below'), 'défense : la réaction figure côté défense de l\'échange');
+
 // ---------- Grabber : fusion des instantanés de log (anti-duplication) ----------
 console.log('Grabber merge —');
 (function () {

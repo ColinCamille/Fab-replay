@@ -276,7 +276,14 @@
             }
           } else {
             curReactions.push({ card: e.card, owner: side });
-            push(label, side, { type: 'play', side, card: { nm: e.card }, reaction: true, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt });
+            // Réaction de défense PENDANT un combat (une attaque est en cours) :
+            // on ne l'affiche PAS en étape séparée — sinon elle apparaît AVANT
+            // l'attaque qu'elle pare (l'attaque, elle, n'est montrée qu'à l'échange).
+            // Elle figure déjà côté DÉFENSE de l'échange. Hors combat seulement,
+            // on la montre en carte seule.
+            if (!atkBuf.length && !openAtk) {
+              push(label, side, { type: 'play', side, card: { nm: e.card }, reaction: true, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt });
+            }
           }
         } else if (e.type === 'activated') {
           // Activation d'une capacité (arme, héros, item/permanent, ex. Grasp of
