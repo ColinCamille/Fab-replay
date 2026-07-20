@@ -675,12 +675,12 @@
       // l'échelle autour du centre du CADRE, pas du centre du CONTENU → le
       // plateau se retrouvait poussé/débordé vers la DROITE (gros vide à gauche).
       // On ancre à gauche et on ajoute une translation pour des marges égales.
-      // Desktop (≥900px) : le wrap est une grille « table | boutons » censée
-      // occuper la largeur depuis le bord gauche → on laisse à gauche (dx=0).
-      // Mobile : on RECENTRE le plateau mis à l'échelle (marges égales).
+      // Un plateau « portrait » dans un écran « paysage » est bridé par la HAUTEUR :
+      // une fois mis à l'échelle il ne remplit plus la largeur. On le RECENTRE donc
+      // toujours (desktop compris) — sinon il restait collé à gauche avec toute la
+      // moitié droite vide. Quand la hauteur suffit (scale ≈ 1), sw ≈ largeur → dx ≈ 0.
       const sw = natW * scale;
-      const deskLayout = container.clientWidth >= 900;
-      const dx = deskLayout ? 0 : Math.max(0, (container.clientWidth - sw) / 2);
+      const dx = Math.max(0, (container.clientWidth - sw) / 2);
       // En plein écran, le plateau (limité par la largeur) laisse un grand vide
       // en bas → on le recentre VERTICALEMENT dans la fenêtre. Hors plein écran,
       // le conteneur épouse la hauteur du plateau (dy=0), le flux de page suit.
