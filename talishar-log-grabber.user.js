@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.15.1
+// @version      1.15.2
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.15.1';
+  const VERSION = '1.15.2';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -771,6 +771,8 @@
 
   // ============ UI ============
   let ui = null, counter = null, fullBox = null, miniBox = null;
+  let acctBtn = null, toolsRow = null;   // bouton compte contextuel + tiroir d'outils « ⋯ »
+  let toolsOpen = false;
   const LS_COLLAPSED = 'tlg_collapsed';
   let collapsed = false;
   try { collapsed = localStorage.getItem(LS_COLLAPSED) === '1'; } catch (e) {}
@@ -826,22 +828,36 @@
     count.textContent = '0 lignes';
     fullBox.appendChild(count);
 
-    const btnRow = document.createElement('div');
-    const mkBtn = (label, fn) => {
+    // Bouton doré (action principale) ou discret (outil secondaire).
+    const mkBtn = (label, fn, subtle) => {
       const b = document.createElement('button');
       b.textContent = label;
-      b.style.cssText = 'margin:0 4px 0 0;padding:3px 8px;cursor:pointer;' +
-        'background:#c9a227;border:0;border-radius:5px;color:#111;font-weight:700';
+      b.style.cssText = 'margin:0 4px 0 0;padding:3px 8px;cursor:pointer;border-radius:5px;font-weight:700;' +
+        (subtle ? 'background:#333;border:1px solid #555;color:#ddd' : 'background:#c9a227;border:0;color:#111');
       b.onclick = fn;
       return b;
     };
-    btnRow.appendChild(mkBtn('Copier', copyLog));
-    btnRow.appendChild(mkBtn('Télécharger', downloadLog));
-    btnRow.appendChild(mkBtn('🔗 Compte', () => sbConfigured() ? pushGameToSupabase(false) : pairOneClick()));
-    btnRow.appendChild(mkBtn('⚙', () => sbConfigured() ? configurePairing() : pairOneClick()));
-    btnRow.appendChild(mkBtn('🔍 Diag', downloadDiag));
-    btnRow.appendChild(mkBtn('Effacer', clearLog));
+    // Rangée PRINCIPALE, minimale : bouton compte (seulement si à connecter, car
+    // l'envoi est automatique une fois appairé) + « ⋯ » pour déplier les outils.
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;align-items:center;gap:4px';
+    acctBtn = mkBtn('🔗 Connecter mon compte', () => sbConfigured() ? pushGameToSupabase(false) : pairOneClick());
+    const moreBtn = mkBtn('⋯', () => { toolsOpen = !toolsOpen; if (toolsRow) toolsRow.style.display = toolsOpen ? 'flex' : 'none'; }, true);
+    moreBtn.title = 'Outils (télécharger, diagnostic, ré-appairer, effacer…)';
+    btnRow.appendChild(acctBtn);
+    btnRow.appendChild(moreBtn);
     fullBox.appendChild(btnRow);
+
+    // Tiroir d'OUTILS (masqué par défaut) : secours + débogage.
+    toolsRow = document.createElement('div');
+    toolsRow.style.cssText = 'display:none;flex-wrap:wrap;gap:4px;margin-top:6px';
+    toolsRow.appendChild(mkBtn('⤓ Télécharger', downloadLog, true));
+    toolsRow.appendChild(mkBtn('⧉ Copier', copyLog, true));
+    toolsRow.appendChild(mkBtn('📤 Envoyer au compte', () => sbConfigured() ? pushGameToSupabase(false) : pairOneClick(), true));
+    toolsRow.appendChild(mkBtn('🔍 Diag', downloadDiag, true));
+    toolsRow.appendChild(mkBtn('⚙ Ré-appairer', () => sbConfigured() ? configurePairing() : pairOneClick(), true));
+    toolsRow.appendChild(mkBtn('🗑 Effacer', clearLog, true));
+    fullBox.appendChild(toolsRow);
 
     ui.appendChild(miniBox);
     ui.appendChild(fullBox);
@@ -883,8 +899,13 @@
         ? '<br><span style="color:#ff6b6b;font-weight:700" title="' + canaryIssues.join(' · ').replace(/"/g, '') + '">⚠ format Talishar inattendu — préviens le mainteneur</span>'
         : '';
       counter.innerHTML = captured.length + ' lignes · ' + nbHands + ' mains · ' + src + fmtBit
-        + '<br><span style="opacity:.7">' + heroBit + '</span>' + canaryBit;
+        + '<br><span style="opacity:.7">' + heroBit + '</span>'
+        + (sbConfigured() ? '<br><span style="opacity:.7;color:#7fd18a">✓ compte connecté · envoi automatique</span>' : '') + canaryBit;
     }
+    // Bouton « Connecter » : montré UNIQUEMENT tant que le compte n'est pas
+    // appairé. Une fois appairé, l'envoi est automatique → plus rien à cliquer
+    // (l'envoi manuel reste dispo dans les outils « ⋯ »).
+    if (acctBtn) acctBtn.style.display = sbConfigured() ? 'none' : '';
     // Compteur de la vue réduite : nombre de lignes capturées
     const mini = ui && ui.querySelector('#tlg-mini-count');
     if (mini) mini.textContent = captured.length;
