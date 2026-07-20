@@ -595,39 +595,37 @@
     slider.addEventListener('input', () => { stop(); go(parseInt(slider.value, 10), i); });
 
     // ---- Survol : aperçu de la carte en grand (lisibilité ; desktop) ----
-    // Le preview vit sur <body> (et non dans le conteneur) : position:fixed
-    // garantie relative à la fenêtre, jamais piégée/rognée par un éventuel
-    // ancêtre transformé (le plateau lui-même est mis à l'échelle via transform).
-    // Un seul exemplaire réutilisé + écouteurs posés une seule fois par conteneur
-    // (mount() peut être rappelé) pour éviter les doublons.
-    let preview = document.getElementById('br-preview-el');
-    if (!preview) {
-      preview = document.createElement('div');
-      preview.className = 'br-preview';
-      preview.id = 'br-preview-el';
-      document.body.appendChild(preview);
-    }
+    // L'aperçu vit DANS le conteneur : en plein écran NATIF (requestFullscreen
+    // sur #boardReplay) seul le sous-arbre du conteneur est rendu — un aperçu
+    // placé ailleurs (ex. <body>) n'apparaîtrait pas. Le conteneur n'est pas
+    // transformé (seul .br-wrap l'est, et l'aperçu en est un frère), donc
+    // position:fixed reste relative à la fenêtre. Recréé à chaque montage
+    // (container.innerHTML l'a effacé) ; les écouteurs sont posés une seule fois
+    // et retrouvent l'aperçu courant dynamiquement (pas de closure périmée).
+    container.querySelectorAll('.br-preview').forEach(e => e.remove());   // pas de doublon résiduel
+    const preview = document.createElement('div');
+    preview.className = 'br-preview';
+    container.appendChild(preview);
     const PW = 224, PH = 313;
     function showPreview(tile) {
+      const pv = container.querySelector('.br-preview'); if (!pv) return;
       const art = tile.matches('.br-art') ? tile : tile.querySelector('.br-art');
       if (!art || !art.classList.contains('has-img') || !art.style.backgroundImage) return;
-      preview.style.backgroundImage = art.style.backgroundImage;
+      pv.style.backgroundImage = art.style.backgroundImage;
       const r = tile.getBoundingClientRect();
       let left = r.left + r.width / 2 - PW / 2;
       let top = r.top - PH - 10;
       if (top < 8) top = Math.min(r.bottom + 10, window.innerHeight - PH - 8);
       left = Math.max(8, Math.min(left, window.innerWidth - PW - 8));
-      preview.style.left = left + 'px';
-      preview.style.top = Math.max(8, top) + 'px';
-      preview.classList.add('show');
+      pv.style.left = left + 'px';
+      pv.style.top = Math.max(8, top) + 'px';
+      pv.classList.add('show');
     }
-    const hidePreview = () => preview.classList.remove('show');
     if (!container.__brHoverBound) {
       container.__brHoverBound = true;
       container.addEventListener('mouseover', e => { const t = e.target.closest('[data-card]'); if (t) showPreview(t); });
-      container.addEventListener('mouseout', e => { const t = e.target.closest('[data-card]'); if (t) hidePreview(); });
+      container.addEventListener('mouseout', e => { const t = e.target.closest('[data-card]'); if (t) { const pv = container.querySelector('.br-preview'); if (pv) pv.classList.remove('show'); } });
     }
-    hidePreview();   // à chaque (re)montage : pas de preview résiduel affiché
 
     // ---- Hauteur du stage figée : sinon la « carte d'action » change de taille
     // d'une étape à l'autre (bannière courte vs carte jouée haute vs combat) et
