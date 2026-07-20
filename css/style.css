@@ -1064,7 +1064,10 @@ footer a{color:var(--text-dim)}
       "rail  hist  mu"
       "rail  hist  cards";}
   #dashboardBody .filters-row{grid-area:filt;padding:0}
+  /* « Tous formats » calé sur la largeur de la colonne de sélection à gauche. */
+  #dashboardBody .filters-row .fchip:first-child{flex:0 0 278px}
   #dashboardBody .caro-head{grid-area:rhead;padding:2px 2px 0}
+  #dashboardBody .caro-head .lbl{display:none}   /* « Choisis ton héros » inutile sur PC */
   #dashboardBody .caro{grid-area:rail}
   /* Les onglets et sous-onglets ne servent qu'à la navigation mobile. */
   #dashboardBody .tabs,#dashboardBody .substat{display:none}
@@ -1098,8 +1101,11 @@ footer a{color:var(--text-dim)}
   #dashboardBody #hxSubOverview{background:linear-gradient(120deg,rgba(var(--accent-rgb),.1),transparent 55%),var(--panel);
     border:1px solid var(--line);border-radius:16px;padding:16px 18px;
     display:grid;column-gap:20px;row-gap:12px;align-items:center;
-    grid-template-columns:auto auto minmax(120px,1fr) auto;
+    grid-template-columns:auto minmax(0,210px) minmax(120px,1fr) auto;
     grid-template-areas:"av meta trend wr" "kpis kpis kpis kpis"}
+  /* Nom du héros : bridé + repli sur 2 lignes → n'écrase plus le graph winrate. */
+  #dashboardBody #hxSubOverview .idmeta .iname{font-size:1.15rem;line-height:1.12;white-space:normal;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
   /* On dissout la carte d'identité pour placer ses morceaux dans la grille du résumé. */
   #dashboardBody #hxSubOverview .idcard,#dashboardBody #hxSubOverview #hxIdBody,#dashboardBody #hxSubOverview .idtop{display:contents}
   #dashboardBody #hxSubOverview .idcard{margin:0;border:0;background:none}

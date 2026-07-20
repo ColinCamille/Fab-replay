@@ -399,6 +399,13 @@ header{
 #turnBoard .ecn{font-size:.94rem;font-weight:700;line-height:1.2}
 #turnBoard .esub{font-size:.72rem;color:var(--text-faint);margin-top:4px;line-height:1.45}
 #turnBoard .esub b{color:var(--text-dim)}
+/* Attaque effective (buffs compris) : pastille ⚔N dans l'en-tête + mots-clés. */
+#turnBoard .epw{display:inline-flex;align-items:center;font-family:'JetBrains Mono',monospace;
+  font-size:.72rem;font-weight:800;color:#fff;background:linear-gradient(160deg,#e0555a,#8a1418);
+  border:1px solid #ffffff33;border-radius:8px;padding:1px 7px;margin-left:8px;vertical-align:middle}
+#turnBoard .ekw{display:inline-block;font:700 .58rem/1 'JetBrains Mono',monospace;text-transform:uppercase;
+  letter-spacing:.03em;color:var(--gold,#e9c07a);background:rgba(201,162,39,.14);
+  border:1px solid rgba(201,162,39,.38);border-radius:5px;padding:2px 5px;margin-right:3px}
 #turnBoard .ediv{height:1px;background:var(--line);margin:11px -12px;position:relative}
 #turnBoard .ediv span{position:absolute;left:12px;top:-8px;background:var(--panel);padding:0 8px;
   font-size:.72rem;font-weight:600;color:var(--violet)}
@@ -565,6 +572,15 @@ footer a{color:var(--text-dim)}
 }
 .match-chip.warn{border-color:rgba(224,85,90,.4);color:var(--red);cursor:help}
 .match-chip.ai{border-color:rgba(201,162,39,.4);color:var(--gold)}
+/* Bandeau « analyse incertaine » (garde-fou anti-format-cassé) : volontairement
+   voyant, jamais masqué (même en mode compact). */
+.match-health{border:1px solid rgba(224,85,90,.55);background:rgba(224,85,90,.1);
+  border-radius:10px;padding:9px 12px;margin-bottom:12px;color:var(--text)}
+.match-health .mh-title{font-weight:700;color:var(--red);font-size:.86rem}
+.match-health .mh-list{margin:6px 0 6px 18px;padding:0;font-size:.78rem;color:var(--text-dim)}
+.match-health .mh-list li{margin:2px 0}
+.match-health .mh-hint{font-size:.72rem;color:var(--text-faint)}
+#scoreboard.sb-wide .match-card .match-health{display:block}
 
 /* Bandes d'équipement */
 .eq-strip{display:flex;align-items:center;gap:6px;padding-top:8px;border-top:1px solid var(--line)}
@@ -1055,7 +1071,10 @@ footer a{color:var(--text-dim)}
       "rail  hist  mu"
       "rail  hist  cards";}
   #dashboardBody .filters-row{grid-area:filt;padding:0}
+  /* « Tous formats » calé sur la largeur de la colonne de sélection à gauche. */
+  #dashboardBody .filters-row .fchip:first-child{flex:0 0 278px}
   #dashboardBody .caro-head{grid-area:rhead;padding:2px 2px 0}
+  #dashboardBody .caro-head .lbl{display:none}   /* « Choisis ton héros » inutile sur PC */
   #dashboardBody .caro{grid-area:rail}
   /* Les onglets et sous-onglets ne servent qu'à la navigation mobile. */
   #dashboardBody .tabs,#dashboardBody .substat{display:none}
@@ -1089,8 +1108,11 @@ footer a{color:var(--text-dim)}
   #dashboardBody #hxSubOverview{background:linear-gradient(120deg,rgba(var(--accent-rgb),.1),transparent 55%),var(--panel);
     border:1px solid var(--line);border-radius:16px;padding:16px 18px;
     display:grid;column-gap:20px;row-gap:12px;align-items:center;
-    grid-template-columns:auto auto minmax(120px,1fr) auto;
+    grid-template-columns:auto minmax(0,210px) minmax(120px,1fr) auto;
     grid-template-areas:"av meta trend wr" "kpis kpis kpis kpis"}
+  /* Nom du héros : bridé + repli sur 2 lignes → n'écrase plus le graph winrate. */
+  #dashboardBody #hxSubOverview .idmeta .iname{font-size:1.15rem;line-height:1.12;white-space:normal;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
   /* On dissout la carte d'identité pour placer ses morceaux dans la grille du résumé. */
   #dashboardBody #hxSubOverview .idcard,#dashboardBody #hxSubOverview #hxIdBody,#dashboardBody #hxSubOverview .idtop{display:contents}
   #dashboardBody #hxSubOverview .idcard{margin:0;border:0;background:none}
@@ -1244,7 +1266,13 @@ footer a{color:var(--text-dim)}
 .br-rail.br-right{justify-self:end}
 .br-zpair{display:flex;flex-direction:column;align-items:center;gap:2px}
 .br-zlbl{font:600 .5rem/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);white-space:nowrap}
-.br-cluster{display:flex;align-items:center;justify-content:center;gap:5px}
+/* Cluster = équipement | HÉROS (ancre centrale) | armes. Les colonnes latérales
+   1fr sont symétriques → le héros est toujours au centre, quel que soit le
+   nombre d'armes → les deux camps s'alignent verticalement (fini le décalage). */
+.br-cluster{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;justify-items:center;gap:5px}
+.br-cluster>.br-equip{justify-self:end}
+.br-wpns{justify-self:start;display:flex;align-items:center;gap:5px}
+.br-wpns>.br-gcard{width:50px;aspect-ratio:5/7}
 .br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:4px}
 /* Dimensions des tuiles — mobile (héros/équipement/arme agrandis). */
 .br-rail .br-slot,.br-rail .br-deck{width:44px;aspect-ratio:5/7;min-height:0;height:auto}
@@ -1341,7 +1369,11 @@ footer a{color:var(--text-dim)}
    partie — souvent hors combat (arcane, effet…) — soit toujours lisible. */
 .br-banner.br-end{padding:10px 12px;border:1px solid var(--accent,var(--gold));border-radius:10px;background:linear-gradient(160deg,rgba(201,162,39,.14),rgba(201,162,39,.04))}
 .br-banner.br-end .br-big{font-size:1.15rem}
-.br-sub{font-size:.76rem;color:var(--text-dim);margin-top:3px}
+/* Largeur bornée + retour à la ligne : un sous-titre à noms longs (miroir) ne
+   doit pas s'étaler sur une seule ligne — sinon il gonfle la largeur mesurée du
+   plateau (stabilizeStage) et pousse tout vers la droite. */
+.br-sub{font-size:.76rem;color:var(--text-dim);margin-top:3px;
+  max-width:min(90vw,340px);margin-inline:auto;overflow-wrap:anywhere}
 .br-duel{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
 .br-side{display:flex;flex-direction:column;align-items:center;gap:5px}
 .br-duel-who{font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);font-weight:700}
@@ -1358,6 +1390,22 @@ footer a{color:var(--text-dim)}
 .br-verdict{margin-top:11px;font:700 .8rem 'JetBrains Mono',monospace;padding:5px 12px;border-radius:999px}
 .br-verdict.br-blocked{color:var(--green);background:#4fb87a1a;border:1px solid #4fb87a44}
 .br-verdict.br-through{color:var(--red);background:#e0555a1a;border:1px solid #e0555a55}
+/* Puissance d'attaque EFFECTIVE (buffs compris) : pastille rouge « ⚔N » en
+   coin de la carte d'attaque. + mots-clés (go again, dominate…) sous la carte. */
+.br-pw{position:absolute;top:-7px;left:-7px;z-index:3;min-width:22px;height:22px;padding:0 5px;
+  display:flex;align-items:center;justify-content:center;border-radius:11px;
+  font:800 .74rem/1 'JetBrains Mono',monospace;color:#fff;
+  background:linear-gradient(160deg,#e0555a,#8a1418);border:1px solid #ffffff40;box-shadow:0 2px 7px #0008}
+.br-pw::before{content:'⚔\FE0E';margin-right:2px;font-size:.64rem;opacity:.9}
+/* Renforts (pumps/réactions joués sur l'attaque, ex. Lightning Press) : petites
+   cartes sous l'attaquant, avec une étiquette « + renfort ». */
+.br-pumps{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:6px}
+.br-pumps-lbl{font:700 .5rem/1 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint)}
+.br-pumps .br-cardrow{max-width:150px}
+.br-kwline{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:5px;max-width:130px}
+.br-kw{font:700 .52rem/1 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;
+  color:var(--gold,#e9c07a);background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.38);
+  border-radius:5px;padding:2px 5px;white-space:nowrap}
 /* Récap « une action » : juste la carte en grand, liseré = qui joue. */
 .br-playone{display:flex;flex-direction:column;align-items:center;gap:9px}
 /* Cartes de la piste de combat (centre) — agrandies. */
@@ -1416,6 +1464,7 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-rail .br-slot,#boardReplay .br-rail .br-deck{width:72px}
   #boardReplay .br-cluster>.br-gcard{width:92px}
   #boardReplay .br-cluster>.br-gcard.br-hero{width:118px}
+  #boardReplay .br-wpns>.br-gcard{width:92px}
   #boardReplay .br-lifetok{width:38px;height:38px;font-size:1rem;right:-11px;top:-11px}
   #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
 
@@ -1455,7 +1504,11 @@ footer a{color:var(--text-dim)}
    → plus accessibles au pouce, et on occupe l'espace du bas. Le desktop garde
    son rail latéral (grille ci-dessus, non affectée par 'order'). */
 @media (max-width:899px){
-  #boardReplay .br-wrap{display:flex;flex-direction:column}
+  /* Le wrap épouse la largeur NATURELLE du tapis (max-content) : ainsi la
+     timeline et les boutons (centrés dans le wrap) partagent le même axe que
+     le plateau → boutons parfaitement centrés sous la table (et non décalés
+     parce que la barre serait plus étroite que le tapis). */
+  #boardReplay .br-wrap{display:flex;flex-direction:column;width:max-content;max-width:none;margin-inline:auto}
   /* Le tapis prend sa largeur NATURELLE (le cadre du champ englobe l'arsenal au
      lieu de le laisser déborder à droite) ; fitBoard met ensuite tout le plateau
      à l'échelle pour tenir dans l'écran. */
@@ -1463,6 +1516,14 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-mat{order:1}
   #boardReplay .br-timeline{order:2}
   #boardReplay .br-toolbar{order:3;margin:12px 0 2px}
+  /* Plein écran mobile : la place verticale récupérée (plateau recentré) sert à
+     AGRANDIR les cartes du centre (attaque/défense/carte jouée) — le focus du
+     replay. Sizes vérifiées pour ne PAS élargir le plateau (l'échelle globale
+     reste inchangée) : la piste centrale est plus étroite que les champs. */
+  #boardReplay.br-fs .br-lane .br-pcard{width:92px}
+  #boardReplay.br-fs .br-lane .br-cardrow .br-pcard{width:64px}
+  #boardReplay.br-fs .br-lane .br-pcard.br-lg{width:132px}
+  #boardReplay.br-fs .br-cardrow{max-width:230px}
 }
 
 </style>
@@ -1494,6 +1555,7 @@ footer a{color:var(--text-dim)}
       <button class="back-btn" id="backToDash">← Tableau de bord</button>
       <div class="topbar-title" id="replayMatchup"></div>
       <div class="spacer"></div>
+      <button class="back-btn" id="dlRaw" title="Télécharger le log brut (.txt) de cette partie — utile pour signaler un souci">⬇ Log brut</button>
     </div>
 
     <div class="empty-state" id="replayEmpty">Aucune partie sélectionnée.</div>
@@ -1691,6 +1753,20 @@ footer a{color:var(--text-dim)}
     const body = text.slice(blockStart, blockEnd);
     const rest = text.slice(0, idx) + text.slice(blockEnd);
     return { rest, body };
+  }
+
+  // Combats : attaque/défense EFFECTIVES (buffs compris) captées par le grabber
+  // depuis la chaîne de combat Talishar. Une ligne JSON par lien, dans l'ordre.
+  function parseChainBlock(text) {
+    const { rest, body } = sliceBlock(text, '=== COMBAT CHAIN');
+    if (body == null) return { rest: text, chain: [] };
+    const chain = [];
+    body.trim().split('\n').forEach(l => {
+      l = l.trim(); if (!l || l[0] !== '{') return;
+      // « blank » = carte-fantôme Talishar (chaîne vide) → ignorée (lien parasite).
+      try { const o = JSON.parse(l); if (o && o.card && !/^blank$/i.test(String(o.card).trim())) chain.push(o); } catch (e) { /* ligne ignorée */ }
+    });
+    return { rest, chain };
   }
 
   // Stats officielles Talishar embarquées par le grabber (bloc JSON).
@@ -1930,6 +2006,13 @@ footer a{color:var(--text-dim)}
     const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
     const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
+    const chainRes = parseChainBlock(text); text = chainRes.rest;
+    // Journal structuré brut conservé par le grabber : on le RETIRE du corps (sinon
+    // son JSON polluerait les lignes d'événements) mais on le garde à disposition
+    // (source pure pour une ré-analyse future si un format change).
+    const rawChatRes = sliceBlock(text, '=== RAW CHATLOG'); text = rawChatRes.rest;
+    let rawChatLog = null;
+    if (rawChatRes.body) { try { rawChatLog = JSON.parse(rawChatRes.body.trim().split('\n')[0]); } catch (e) { /* garde null */ } }
 
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
@@ -2256,12 +2339,28 @@ footer a{color:var(--text-dim)}
     let result = null;
     const wonLine = logLines.find(l => /won! 🎉/.test(l));
     const concedeLine = logLines.find(l => /conceded the game\.$/.test(l));
-    if (wonLine) {
+    // Signal AUTORITAIRE : les stats officielles Talishar (endStats.me.won) se
+    // basent sur le NUMÉRO de joueur → fiables même en MIROIR (héros identiques),
+    // cas où la ligne « X won! » (par nom de héros) est ambiguë et donnait
+    // systématiquement « victoire ». On les privilégie quand elles existent.
+    const esMe = endStatsRes.endStats && endStatsRes.endStats.me;
+    if (esMe && typeof esMe.won === 'boolean') {
+      const iWon = esMe.won;
+      result = { winner: iWon ? myName : oppName, loser: iWon ? oppName : myName, byConcession: !!concedeLine, iWon };
+    } else if (wonLine) {
       const wm = wonLine.match(/^(.+?)\s*\(.+?\)\s*won! 🎉/);
       const winner = wm ? wm[1] : null;
       const loser = winner ? (winner === myName ? oppName : myName) : null;
       result = { winner, loser, byConcession: !!concedeLine, iWon: myName ? winner === myName : null };
     }
+
+    // 8b) Liens de combat (attaque/défense EFFECTIVES, buffs compris) rattachés
+    // aux tours dans l'ordre. Clé = « joueur#tour » (l'ouverture porte aussi la
+    // clé grabber '__opening__'). L'appariement carte↔lien se fait à l'affichage.
+    turns.forEach(t => {
+      const key = (t.player || '') + '#' + t.turnNumber;
+      t.chain = chainRes.chain.filter(c => c.turn === key || (t.turnNumber === 0 && c.turn === '__opening__'));
+    });
 
     // 9) Cartes vues
     const cardsSeen = new Set();
@@ -2287,6 +2386,38 @@ footer a{color:var(--text-dim)}
       myTurns: turns.filter(t => t.player === myName).length,
       distinctCards: cardsSeen.size
     };
+
+    // 11.5) DIAGNOSTIC DE SANTÉ — invariants qui signalent une partie
+    // probablement MAL analysée (typiquement : Talishar change le format du
+    // journal). Objectif : rendre la casse VISIBLE (bandeau côté vue) au lieu
+    // de produire en silence des données fausses mais plausibles. Chaque test
+    // est calibré pour un TAUX DE FAUX POSITIFS quasi nul.
+    const health = { ok: true, issues: [] };
+    const flagHealth = m => { if (health.issues.indexOf(m) < 0) { health.issues.push(m); health.ok = false; } };
+    {
+      const realTurns = turns.filter(t => t.turnNumber > 0).length;   // hors Ouverture
+      const actionLines = logLines.filter(l => /\b(?:played|activated|pitched|blocked with)\b|took \d+ damage/.test(l)).length;
+      // Lignes RESSEMBLANT à un début de tour (tous formats connus + à venir).
+      const turnish = logLines.filter(l => /'s turn \d+ has begun|^Turn \d+\S|\[\[TURN_START/.test(l)).length;
+      // A. Beaucoup d'actions mais aucun tour découpé → format de tour non reconnu.
+      if (actionLines >= 25 && realTurns === 0)
+        flagHealth('Aucun tour détecté malgré ' + actionLines + ' actions — le format de début de tour n\'est peut-être plus reconnu.');
+      // B. Des marqueurs de tour existent mais n\'ont pas produit de tours.
+      else if (turnish >= 2 && realTurns <= 1)
+        flagHealth('Des débuts de tour ne sont pas reconnus (' + turnish + ' repérés, ' + realTurns + ' tour(s) construit(s)).');
+      // C. Un tour attribué à un joueur inconnu.
+      const known = new Set([myName, oppName].filter(Boolean));
+      if (known.size === 2) turns.forEach(t => { if (t.player && !known.has(t.player)) flagHealth('Tour attribué à un joueur inattendu : « ' + t.player + ' ».'); });
+      // D. Duplication probable du journal : une carte « jouée » un nombre
+      //    improbable de fois (un playset = 3 max ; 6+ = journal dupliqué).
+      const played = {};
+      logLines.forEach(l => { const m = l.match(/ played (.{4,60})$/); if (m) { const k = normName(m[1]); played[k] = (played[k] || 0) + 1; } });
+      let worst = 0, worstCard = '';
+      for (const k in played) if (played[k] > worst) { worst = played[k]; worstCard = k; }
+      if (worst >= 6) flagHealth('Duplication probable du journal : « ' + worstCard + ' » joué ' + worst + ' fois.');
+      // E. Joueurs non résolus.
+      if (!myName || !oppName) flagHealth('Joueurs non résolus (toi = ' + (myName || '?') + ', adversaire = ' + (oppName || '?') + ').');
+    }
 
     // 12) Assemblage du record normalisé
     const mkPlayer = (name, side) => ({
@@ -2326,7 +2457,10 @@ footer a{color:var(--text-dim)}
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,
       endStats: endStatsRes.endStats,
-      warnings
+      warnings,
+      health,
+      rawChatLog,
+      chain: chainRes.chain
     };
   }
 
@@ -3541,8 +3675,21 @@ footer a{color:var(--text-dim)}
       return '<div class="eq-strip">' + label + '<div class="eq-slots">' + cells + '</div></div>';
     };
 
+    // Bandeau LOUD si l'analyse est douteuse (garde-fou anti-format-cassé) :
+    // on préfère prévenir que d'afficher en silence des stats potentiellement
+    // fausses. Le journal brut étant conservé, une MàJ du lecteur pourra
+    // ré-analyser la partie sans re-capture.
+    const health = GAME.health || { ok: true, issues: [] };
+    const healthHtml = health.ok ? '' :
+      '<div class="match-health" role="alert">' +
+        '<div class="mh-title">⚠ Analyse incertaine — cette partie a peut-être été mal lue (format Talishar inattendu).</div>' +
+        '<ul class="mh-list">' + health.issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('') + '</ul>' +
+        '<div class="mh-hint">Les statistiques ci-dessous peuvent être erronées. Le journal brut est conservé : une mise à jour du lecteur pourra ré-analyser cette partie.</div>' +
+      '</div>';
+
     el.innerHTML =
       '<div class="match-card">' +
+        healthHtml +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
           '<div class="match-mid"><span class="vs">VS</span></div>' +
@@ -3975,6 +4122,8 @@ footer a{color:var(--text-dim)}
   // uniquement sur les signaux fiables du log (combatResult + blocages) ; les
   // dégâts arcaniques ne sont pas attribués par carte (source ambiguë), mais le
   // total du tour reste exact dans le bandeau (damageToOpp/Me).
+  // Libellés courts des mots-clés FaB portés par une attaque (chaîne de combat).
+  const KW_LABEL = { goAgain: 'Go again', dominate: 'Dominate', overpower: 'Overpower', piercing: 'Piercing', combo: 'Combo', wager: 'Wager', phantasm: 'Phantasm', fusion: 'Fusion', tower: 'Tower', highTide: 'High Tide', confidence: 'Confidence' };
   function exchangeVerdict(ex, defender) {
     const dmgToMe = defender === myName;   // les dégâts vont-ils à moi ?
     const r = ex.result, amount = r ? r.amount : 0;
@@ -4005,9 +4154,11 @@ footer a{color:var(--text-dim)}
     else { verb = 'attaque'; vIcon = '⚔'; }
     const who = mine ? ('Ton ' + verb) : (cap(verb) + ' de ' + escapeHtml(active));
 
+    const pw = (verb === 'attaque' && ex.chainPower != null)
+      ? ' <span class="epw" title="Attaque effective (buffs compris)">⚔ ' + ex.chainPower + '</span>' : '';
     const head = document.createElement('div');
     head.className = 'ehead';
-    head.innerHTML = '<div class="eside">' + vIcon + ' ' + who + '</div>'
+    head.innerHTML = '<div class="eside">' + vIcon + ' ' + who + pw + '</div>'
       + (v.badge ? '<div class="eres ' + v.cls + '">' + v.badge + '</div>' : '');
     div.appendChild(head);
 
@@ -4022,6 +4173,7 @@ footer a{color:var(--text-dim)}
     if (ex.mode) subs.push('🔀 mode : <b>' + escapeHtml(ex.mode) + '</b>');
     if (ex.pitchCost.length) subs.push('🔥 pitch <b>' + ex.pitchCost.map(escapeHtml).join(', ') + '</b>');
     ex.reveals.forEach(c => subs.push('👁 révèle <b>' + escapeHtml(c) + '</b>'));
+    if (ex.chainKw && ex.chainKw.length) subs.push(ex.chainKw.map(k => '<span class="ekw">' + escapeHtml(KW_LABEL[k] || k) + '</span>').join(' '));
     meta.innerHTML = '<div class="ecn">' + escapeHtml(ex.card) + '</div>'
       + (subs.length ? '<div class="esub">' + subs.join(' · ') + '</div>' : '');
     cardrow.appendChild(meta);
@@ -4158,6 +4310,18 @@ footer a{color:var(--text-dim)}
     // la creuse dès qu'une autre passe de la même carte porte un vrai résultat.
     const withEffect = new Set(exchanges.filter(isMeaningful).map(ex => ex.card));
     const shown = exchanges.filter(ex => isMeaningful(ex) || !withEffect.has(ex.card));
+
+    // Attache l'attaque EFFECTIVE (buffs compris) + mots-clés à chaque attaque,
+    // depuis la chaîne de combat captée. Appariement par nom, repli sur l'ordre.
+    {
+      const nm = root.TalisharParser.normName, cq = (t.chain || []).slice();
+      shown.forEach(ex => {
+        if (ex.isActivation || !isMeaningful(ex)) return;
+        let i = cq.findIndex(c => nm(c.card) === nm(ex.card));
+        if (i < 0 && cq.length) i = 0;
+        if (i >= 0) { const lk = cq.splice(i, 1)[0]; ex.chainPower = lk.power; ex.chainKw = lk.kw || []; }
+      });
+    }
 
     if (shown.length) {
       const lbl = document.createElement('div');
@@ -5502,8 +5666,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=112"></script>
-<script src="js/cloud.js?v=112"></script>
+<script src="js/cloud-config.js?v=127"></script>
+<script src="js/cloud.js?v=127"></script>
 
 <script>
 // ============================================================
@@ -5606,13 +5770,27 @@ footer a{color:var(--text-dim)}
   }
   document.querySelectorAll('.replay-tab-btn').forEach(b => b.addEventListener('click', () => setReplayTab(b.dataset.tab)));
 
+  let _openRaw = null, _openId = null;   // log brut de la partie ouverte (pour le bouton « ⬇ Log brut »)
   function openGame(entry) {
+    _openRaw = entry.raw || null; _openId = entry.gameId || null;
+    const dl = $('#dlRaw'); if (dl) dl.style.display = _openRaw ? '' : 'none';
     window.Replay.show(entry.record);
     setReplayTab('table');   // vue Table par défaut (rejeu sur plateau)
     showView('replay');
     if (history.replaceState) history.replaceState(null, '', '#game=' + encodeURIComponent(entry.gameId));
     else location.hash = 'game=' + encodeURIComponent(entry.gameId);
   }
+  // Télécharge le log brut de la partie ouverte (.txt) — pour signaler un souci.
+  (function () {
+    const dl = document.getElementById('dlRaw');
+    if (dl) dl.addEventListener('click', () => {
+      if (!_openRaw) { alert('Log brut indisponible pour cette partie (recapture-la pour l\'obtenir).'); return; }
+      const blob = new Blob([_openRaw], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'game_' + (_openId || 'export') + '.txt';
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    });
+  })();
 
   async function deleteGame(id) {
     if (!confirm('Supprimer cette partie de la bibliothèque ?')) return;
