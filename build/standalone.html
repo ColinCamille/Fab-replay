@@ -1067,7 +1067,9 @@ footer a{color:var(--text-dim)}
   /* Grille maîtresse : filtres (haut) · rail (gauche) · résumé · historique · matchups · cartes.
      Rail élargi, colonne droite (matchups/cartes) élargie, historique un peu réduit. */
   #dashboardBody .hxwrap{display:grid;gap:16px;align-items:start;
+    min-height:calc(100vh - 96px);
     grid-template-columns:278px minmax(0,1.18fr) minmax(0,1fr);
+    grid-template-rows:auto auto minmax(0,1fr) minmax(0,1fr);
     grid-template-areas:
       "filt filt filt"
       "rail summ summ"
@@ -1090,8 +1092,7 @@ footer a{color:var(--text-dim)}
 
   /* ---- Rail héros vertical (cartes en ligne compactes) ---- */
   #dashboardBody .caro{flex-direction:column;overflow-x:hidden;overflow-y:auto;gap:8px;padding:8px 4px;
-    position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);scroll-snap-type:none}
-  #dashboardBody .caro-head{display:flex;flex-direction:column;gap:2px}
+    align-self:stretch;min-height:0;scroll-snap-type:none}   /* remplit la colonne → bas aligné avec les panneaux */
   #dashboardBody .hcard{flex-direction:row;width:100%;align-items:center;gap:10px;padding:6px 8px;
     background:var(--panel);border:1px solid var(--line);border-radius:12px}
   #dashboardBody .hcard:hover .frame{transform:none}
@@ -1136,9 +1137,8 @@ footer a{color:var(--text-dim)}
   /* ---- Panneaux bas : cadre sur le panneau, corps qui défile ---- */
   #dashboardBody #hxSubMatchups,#dashboardBody #hxSubCards,#dashboardBody #hxPanelHist{
     background:var(--panel);border:1px solid var(--line);border-radius:14px;
-    display:flex;flex-direction:column;min-height:0;overflow:hidden}
-  #dashboardBody #hxSubMatchups,#dashboardBody #hxSubCards{max-height:calc(50vh - 24px)}
-  #dashboardBody #hxPanelHist{max-height:calc(100vh - 60px)}
+    display:flex;flex-direction:column;min-height:0;overflow:hidden;
+    align-self:stretch}   /* remplit sa rangée → bas alignés (plus de hauteurs max divergentes) */
   #dashboardBody #hxSubMatchups>.card{margin:0;border:0;background:none;border-radius:0;display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1}
   #dashboardBody #hxSubMatchups>.card>h2{flex:0 0 auto}
   #dashboardBody #hxSubMatchups .cbody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
@@ -5676,8 +5676,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=129"></script>
-<script src="js/cloud.js?v=129"></script>
+<script src="js/cloud-config.js?v=131"></script>
+<script src="js/cloud.js?v=131"></script>
 
 <script>
 // ============================================================
