@@ -905,6 +905,10 @@ footer a{color:var(--text-dim)}
 #dashboardBody .trend-holder{position:relative;aspect-ratio:400/150;touch-action:pan-y}
 #dashboardBody .trend-svg{width:100%;height:100%;display:block}
 #dashboardBody .trend-dot{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+/* Chiffres de l'axe Y en HTML (non déformés par l'étirement du SVG). */
+#dashboardBody .trend-yax{position:absolute;left:0;top:0;bottom:0;width:100%;pointer-events:none}
+#dashboardBody .trend-yax span{position:absolute;left:0;width:20px;text-align:right;transform:translateY(-50%);
+  font-family:'JetBrains Mono',monospace;font-size:.56rem;color:#565b6e;line-height:1}
 #dashboardBody .trend-guide{position:absolute;top:0;bottom:0;width:1px;background:rgba(233,230,218,.35);pointer-events:none;opacity:0;transition:opacity .08s}
 #dashboardBody .trend-guide.show{opacity:1}
 #dashboardBody .trend-tip{position:absolute;transform:translate(-50%,calc(-100% - 10px));background:rgba(16,18,26,.97);border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:.74rem;color:var(--text);pointer-events:none;opacity:0;white-space:nowrap;z-index:5;box-shadow:0 3px 12px rgba(0,0,0,.55);transition:opacity .08s}
@@ -1065,16 +1069,14 @@ footer a{color:var(--text-dim)}
   #dashboardBody .hxwrap{display:grid;gap:16px;align-items:start;
     grid-template-columns:278px minmax(0,1.18fr) minmax(0,1fr);
     grid-template-areas:
-      "filt  filt  filt"
-      "rhead summ  summ"
-      "rail  summ  summ"
-      "rail  hist  mu"
-      "rail  hist  cards";}
+      "filt filt filt"
+      "rail summ summ"
+      "rail hist mu"
+      "rail hist cards";}
   #dashboardBody .filters-row{grid-area:filt;padding:0}
   /* « Tous formats » calé sur la largeur de la colonne de sélection à gauche. */
   #dashboardBody .filters-row .fchip:first-child{flex:0 0 278px}
-  #dashboardBody .caro-head{grid-area:rhead;padding:2px 2px 0}
-  #dashboardBody .caro-head .lbl{display:none}   /* « Choisis ton héros » inutile sur PC */
+  #dashboardBody .caro-head{display:none}   /* en-tête du rail (label + héros courant) retiré sur PC */
   #dashboardBody .caro{grid-area:rail}
   /* Les onglets et sous-onglets ne servent qu'à la navigation mobile. */
   #dashboardBody .tabs,#dashboardBody .substat{display:none}
@@ -1110,9 +1112,11 @@ footer a{color:var(--text-dim)}
     display:grid;column-gap:20px;row-gap:12px;align-items:center;
     grid-template-columns:auto minmax(0,210px) minmax(120px,1fr) auto;
     grid-template-areas:"av meta trend wr" "kpis kpis kpis kpis"}
-  /* Nom du héros : bridé + repli sur 2 lignes → n'écrase plus le graph winrate. */
-  #dashboardBody #hxSubOverview .idmeta .iname{font-size:1.15rem;line-height:1.12;white-space:normal;
-    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  /* Nom du héros : largeur bridée (le graph winrate n'est plus écrasé) MAIS
+     nom COMPLET — il s'enroule librement sur autant de lignes que nécessaire,
+     jamais tronqué. */
+  #dashboardBody #hxSubOverview .idmeta{align-self:center}
+  #dashboardBody #hxSubOverview .idmeta .iname{font-size:1.1rem;line-height:1.15;white-space:normal;overflow-wrap:anywhere}
   /* On dissout la carte d'identité pour placer ses morceaux dans la grille du résumé. */
   #dashboardBody #hxSubOverview .idcard,#dashboardBody #hxSubOverview #hxIdBody,#dashboardBody #hxSubOverview .idtop{display:contents}
   #dashboardBody #hxSubOverview .idcard{margin:0;border:0;background:none}
@@ -5136,6 +5140,7 @@ footer a{color:var(--text-dim)}
           '<div class="card trendcard"><h2>Tendance du winrate</h2><div class="cbody">' +
             '<div class="trend-holder" id="hxTrendHolder">' +
               '<svg class="trend-svg" id="hxTrendSvg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>' +
+              '<div class="trend-yax" id="hxTrendYax"></div>' +
               '<div class="trend-guide" id="hxTrendGuide"></div>' +
               '<div class="trend-dot" id="hxTrendDot"></div>' +
               '<div class="trend-tip" id="hxTrendTip"></div>' +
@@ -5253,7 +5258,12 @@ footer a{color:var(--text-dim)}
     const x = i => padL + i / (pts.length - 1) * plotW, y = v => padT + plotH - (v / 100) * plotH;
     const line = pts.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
     const area = line + ' L' + x(pts.length - 1).toFixed(1) + ',' + (padT + plotH) + ' L' + padL + ',' + (padT + plotH) + ' Z';
-    const grid = [0, 50, 100].map(v => '<line x1="' + padL + '" y1="' + y(v).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y(v).toFixed(1) + '" stroke="#262c3d"/><text x="' + (padL - 4) + '" y="' + (y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="8.5" fill="#565b6e">' + v + '</text>').join('');
+    // Gridlines dans le SVG (les traits sont OK étirés) ; les CHIFFRES de l'axe
+    // sont posés en HTML (hxTrendYax) pour ne PAS être déformés par le
+    // preserveAspectRatio="none" (sinon ils apparaissent « écrasés »).
+    const grid = [0, 50, 100].map(v => '<line x1="' + padL + '" y1="' + y(v).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y(v).toFixed(1) + '" stroke="#262c3d"/>').join('');
+    const yax = D.getElementById('hxTrendYax');
+    if (yax) yax.innerHTML = [0, 50, 100].map(v => '<span style="top:' + (y(v) / H * 100).toFixed(2) + '%">' + v + '</span>').join('');
     // Couleur d'accent courante (réelle si posée sur :root, sinon table du héros).
     const acc = (D.documentElement.style.getPropertyValue('--accent') || '').trim();
     const col = acc[0] === '#' ? acc : (state.hero ? heroColor(state.hero) : DEFAULT_ACCENT);
@@ -5666,8 +5676,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=127"></script>
-<script src="js/cloud.js?v=127"></script>
+<script src="js/cloud-config.js?v=129"></script>
+<script src="js/cloud.js?v=129"></script>
 
 <script>
 // ============================================================

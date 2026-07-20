@@ -353,6 +353,7 @@
           '<div class="card trendcard"><h2>Tendance du winrate</h2><div class="cbody">' +
             '<div class="trend-holder" id="hxTrendHolder">' +
               '<svg class="trend-svg" id="hxTrendSvg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>' +
+              '<div class="trend-yax" id="hxTrendYax"></div>' +
               '<div class="trend-guide" id="hxTrendGuide"></div>' +
               '<div class="trend-dot" id="hxTrendDot"></div>' +
               '<div class="trend-tip" id="hxTrendTip"></div>' +
@@ -470,7 +471,12 @@
     const x = i => padL + i / (pts.length - 1) * plotW, y = v => padT + plotH - (v / 100) * plotH;
     const line = pts.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
     const area = line + ' L' + x(pts.length - 1).toFixed(1) + ',' + (padT + plotH) + ' L' + padL + ',' + (padT + plotH) + ' Z';
-    const grid = [0, 50, 100].map(v => '<line x1="' + padL + '" y1="' + y(v).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y(v).toFixed(1) + '" stroke="#262c3d"/><text x="' + (padL - 4) + '" y="' + (y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="8.5" fill="#565b6e">' + v + '</text>').join('');
+    // Gridlines dans le SVG (les traits sont OK étirés) ; les CHIFFRES de l'axe
+    // sont posés en HTML (hxTrendYax) pour ne PAS être déformés par le
+    // preserveAspectRatio="none" (sinon ils apparaissent « écrasés »).
+    const grid = [0, 50, 100].map(v => '<line x1="' + padL + '" y1="' + y(v).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y(v).toFixed(1) + '" stroke="#262c3d"/>').join('');
+    const yax = D.getElementById('hxTrendYax');
+    if (yax) yax.innerHTML = [0, 50, 100].map(v => '<span style="top:' + (y(v) / H * 100).toFixed(2) + '%">' + v + '</span>').join('');
     // Couleur d'accent courante (réelle si posée sur :root, sinon table du héros).
     const acc = (D.documentElement.style.getPropertyValue('--accent') || '').trim();
     const col = acc[0] === '#' ? acc : (state.hero ? heroColor(state.hero) : DEFAULT_ACCENT);

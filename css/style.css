@@ -898,6 +898,10 @@ footer a{color:var(--text-dim)}
 #dashboardBody .trend-holder{position:relative;aspect-ratio:400/150;touch-action:pan-y}
 #dashboardBody .trend-svg{width:100%;height:100%;display:block}
 #dashboardBody .trend-dot{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+/* Chiffres de l'axe Y en HTML (non déformés par l'étirement du SVG). */
+#dashboardBody .trend-yax{position:absolute;left:0;top:0;bottom:0;width:100%;pointer-events:none}
+#dashboardBody .trend-yax span{position:absolute;left:0;width:20px;text-align:right;transform:translateY(-50%);
+  font-family:'JetBrains Mono',monospace;font-size:.56rem;color:#565b6e;line-height:1}
 #dashboardBody .trend-guide{position:absolute;top:0;bottom:0;width:1px;background:rgba(233,230,218,.35);pointer-events:none;opacity:0;transition:opacity .08s}
 #dashboardBody .trend-guide.show{opacity:1}
 #dashboardBody .trend-tip{position:absolute;transform:translate(-50%,calc(-100% - 10px));background:rgba(16,18,26,.97);border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:.74rem;color:var(--text);pointer-events:none;opacity:0;white-space:nowrap;z-index:5;box-shadow:0 3px 12px rgba(0,0,0,.55);transition:opacity .08s}
@@ -1058,16 +1062,14 @@ footer a{color:var(--text-dim)}
   #dashboardBody .hxwrap{display:grid;gap:16px;align-items:start;
     grid-template-columns:278px minmax(0,1.18fr) minmax(0,1fr);
     grid-template-areas:
-      "filt  filt  filt"
-      "rhead summ  summ"
-      "rail  summ  summ"
-      "rail  hist  mu"
-      "rail  hist  cards";}
+      "filt filt filt"
+      "rail summ summ"
+      "rail hist mu"
+      "rail hist cards";}
   #dashboardBody .filters-row{grid-area:filt;padding:0}
   /* « Tous formats » calé sur la largeur de la colonne de sélection à gauche. */
   #dashboardBody .filters-row .fchip:first-child{flex:0 0 278px}
-  #dashboardBody .caro-head{grid-area:rhead;padding:2px 2px 0}
-  #dashboardBody .caro-head .lbl{display:none}   /* « Choisis ton héros » inutile sur PC */
+  #dashboardBody .caro-head{display:none}   /* en-tête du rail (label + héros courant) retiré sur PC */
   #dashboardBody .caro{grid-area:rail}
   /* Les onglets et sous-onglets ne servent qu'à la navigation mobile. */
   #dashboardBody .tabs,#dashboardBody .substat{display:none}
@@ -1103,9 +1105,11 @@ footer a{color:var(--text-dim)}
     display:grid;column-gap:20px;row-gap:12px;align-items:center;
     grid-template-columns:auto minmax(0,210px) minmax(120px,1fr) auto;
     grid-template-areas:"av meta trend wr" "kpis kpis kpis kpis"}
-  /* Nom du héros : bridé + repli sur 2 lignes → n'écrase plus le graph winrate. */
-  #dashboardBody #hxSubOverview .idmeta .iname{font-size:1.15rem;line-height:1.12;white-space:normal;
-    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  /* Nom du héros : largeur bridée (le graph winrate n'est plus écrasé) MAIS
+     nom COMPLET — il s'enroule librement sur autant de lignes que nécessaire,
+     jamais tronqué. */
+  #dashboardBody #hxSubOverview .idmeta{align-self:center}
+  #dashboardBody #hxSubOverview .idmeta .iname{font-size:1.1rem;line-height:1.15;white-space:normal;overflow-wrap:anywhere}
   /* On dissout la carte d'identité pour placer ses morceaux dans la grille du résumé. */
   #dashboardBody #hxSubOverview .idcard,#dashboardBody #hxSubOverview #hxIdBody,#dashboardBody #hxSubOverview .idtop{display:contents}
   #dashboardBody #hxSubOverview .idcard{margin:0;border:0;background:none}
