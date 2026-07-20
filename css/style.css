@@ -1245,7 +1245,10 @@ footer a{color:var(--text-dim)}
   background:radial-gradient(150% 100% at 50% 42%,#16223b,#0a0e18 82%);
   border:1px solid var(--line);border-radius:14px;padding:9px 8px;
   box-shadow:inset 0 0 90px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.02)}
-.br-hand{display:flex;gap:4px;justify-content:center;min-height:46px;align-items:center;flex-wrap:nowrap;overflow-x:auto;padding:2px}
+/* Hauteur RÉSERVÉE = celle d'une carte en main (54px × 5/7 ≈ 76px) : la ligne
+   ne se réduit pas quand une main se vide (« main vide »), donc le plateau ne
+   saute plus entre étapes sur mobile. Desktop : override à 100px plus bas. */
+.br-hand{display:flex;gap:4px;justify-content:center;min-height:80px;align-items:center;flex-wrap:nowrap;overflow-x:auto;padding:2px}
 .br-handempty{font:.6rem 'JetBrains Mono',monospace;color:var(--text-faint)}
 .br-back{width:34px;height:46px;flex:0 0 auto;border-radius:5px;border:1px solid #5b1e22;background:linear-gradient(160deg,#7a2a2f,#3c1417);position:relative;box-shadow:inset 0 0 0 2px #0000002e}
 .br-back::after{content:"FaB";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 .5rem/1 'JetBrains Mono',monospace;color:#e9c07a99;letter-spacing:.05em}
