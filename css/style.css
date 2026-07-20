@@ -1060,7 +1060,7 @@ footer a{color:var(--text-dim)}
   /* Grille maîtresse : filtres (haut) · rail (gauche) · résumé · historique · matchups · cartes.
      Rail élargi, colonne droite (matchups/cartes) élargie, historique un peu réduit. */
   #dashboardBody .hxwrap{display:grid;gap:16px;align-items:start;
-    height:calc(100vh - 84px);   /* tient dans l'écran : chaque panneau défile en interne, bas alignés */
+    height:calc(100vh + 60px);   /* borné (pas de croissance à l'infini) mais un peu plus haut que l'écran ; chaque panneau défile en interne, bas alignés */
     grid-template-columns:278px minmax(0,1.18fr) minmax(0,1fr);
     grid-template-rows:auto auto minmax(0,1fr) minmax(0,1fr);
     grid-template-areas:
