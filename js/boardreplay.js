@@ -668,8 +668,14 @@
       const top = fs ? 0 : container.getBoundingClientRect().top;
       const availH = (fs ? window.innerHeight : window.innerHeight - top) - 12;
       const availW = container.clientWidth - 24;   // marge → l'arsenal de droite (bord du champ) n'est jamais rogné
-      let scale = Math.min(availW / natW, availH / natH, 1);
-      scale = Math.max(scale, 0.38);                // plancher de lisibilité (au-delà : léger scroll)
+      const deskInline = !fs && container.clientWidth >= 900;
+      // Desktop hors plein écran : on remplit la LARGEUR (même emprise que le
+      // bandeau d'onglets au-dessus), quitte à défiler un peu verticalement.
+      // Ailleurs (mobile, plein écran) : on tient dans la fenêtre (largeur ET
+      // hauteur) avec un plancher de lisibilité.
+      let scale = deskInline
+        ? Math.min(availW / natW, 1)
+        : Math.max(Math.min(availW / natW, availH / natH, 1), 0.38);
       // Origine TOP-LEFT + recentrage explicite : avec « top center », le contenu
       // (dont la largeur RÉELLE natW dépasse le cadre offsetWidth) était mis à
       // l'échelle autour du centre du CADRE, pas du centre du CONTENU → le
