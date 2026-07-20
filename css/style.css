@@ -1342,13 +1342,11 @@ footer a{color:var(--text-dim)}
 .br-life.br-me{border-color:rgba(201,162,39,.5)} .br-life.br-me .br-life-who{color:var(--accent,var(--gold))}
 .br-life-n.br-hit{animation:brHit .55s ease}
 @keyframes brHit{0%{transform:scale(1)}30%{transform:scale(1.3);color:var(--red)}100%{transform:scale(1)}}
-/* Tokens en jeu : petites cartes dans le coin droit de la piste (miroir des PV
-   à gauche) — adversaire en haut, toi en bas. */
-/* Mobile : tokens en overlay dans les coins droits (n'empiètent pas sur la
-   largeur de la piste → le combat ne se replie pas, la table reste courte). */
-.br-tokenside{position:absolute;right:3px;top:5px;bottom:5px;z-index:4;pointer-events:none;
-  display:flex;flex-direction:column;justify-content:space-between;gap:8px}
-.br-tokrow{display:flex;flex-direction:row;gap:4px;align-items:center}
+/* Compteur de vie + tokens de son propriétaire, groupés sur une ligne : les
+   permanents qui restent en jeu s'affichent EN LIGNE À DROITE du compteur de
+   vie (adversaire en haut, toi en bas — miroir des PV). */
+.br-liferow{display:flex;flex-direction:row;align-items:center;gap:8px;min-width:0}
+.br-tokrow{display:flex;flex-direction:row;flex-wrap:wrap;gap:4px;align-items:center;max-width:230px}
 .br-tok{position:relative;width:40px;aspect-ratio:5/7;flex:0 0 auto;border-radius:7px;overflow:hidden;
   border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel))}
 .br-tok.br-opp{border-color:#8b6bff66} .br-tok.br-me{border-color:rgba(201,162,39,.5)}
@@ -1476,9 +1474,8 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-lane .br-pcard.br-lg{width:194px}
   #boardReplay .br-life-n{font-size:1.6rem}
   #boardReplay .br-life-who{font-size:.56rem;max-width:120px}
-  /* Desktop : tokens en colonne in-flow à droite de la piste (place dispo). */
-  #boardReplay .br-tokenside{position:static;flex:0 0 auto}
-  #boardReplay .br-tokrow{flex-direction:column;gap:6px}
+  /* Desktop : tokens en ligne à droite du compteur de vie (place dispo). */
+  #boardReplay .br-tokrow{gap:6px;max-width:300px}
   #boardReplay .br-tok{width:62px}
   #boardReplay .br-playone{max-width:100%}
   #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}

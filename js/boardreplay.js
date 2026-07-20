@@ -444,17 +444,10 @@
     const data = buildTimeline(GAME), steps = data.steps, P = data.players;
     if (!steps.length) { container.innerHTML = '<div class="br-empty">Pas d\'action à rejouer pour cette partie.</div>'; return; }
 
-    // Tokens en jeu (coin droit de la piste centrale ; adversaire en haut, toi
-    // en bas — miroir des PV). Conteneurs remplis à chaque étape depuis l'état
-    // (terrain réel capté par le grabber, sinon repli par héros). Masqués si la
-    // partie n'a aucun token.
-    const hasTokens = steps.some(s => (s.state.meTokens && s.state.meTokens.length) || (s.state.oppTokens && s.state.oppTokens.length));
-    const tokSide = hasTokens
-      ? '<div class="br-tokenside">' +
-          '<div class="br-tokrow br-opp" id="br-oppTok"></div>' +
-          '<div class="br-tokrow br-me" id="br-meTok"></div>' +
-        '</div>'
-      : '';
+    // Tokens/permanents qui RESTENT en jeu : affichés en ligne à droite du
+    // compteur de vie de leur propriétaire (adversaire en haut, toi en bas —
+    // miroir des PV). Conteneurs remplis à chaque étape depuis l'état (terrain
+    // réel capté par le grabber, sinon repli par héros) ; vides = invisibles.
 
     container.innerHTML =
       '<div class="br-wrap">' +
@@ -470,11 +463,16 @@
           '<div class="br-mid">' +
             '<span class="br-turnchip" id="br-turnPill"> </span>' +
             '<div class="br-lifeside">' +
-              '<div class="br-life br-opp"><span class="br-life-who">' + esc(data.hero.opp) + '</span><span class="br-life-n" id="br-oLifeTok">0</span></div>' +
-              '<div class="br-life br-me"><span class="br-life-who">' + esc(data.hero.me) + '</span><span class="br-life-n" id="br-mLifeTok">0</span></div>' +
+              '<div class="br-liferow br-opp">' +
+                '<div class="br-life br-opp"><span class="br-life-who">' + esc(data.hero.opp) + '</span><span class="br-life-n" id="br-oLifeTok">0</span></div>' +
+                '<div class="br-tokrow br-opp" id="br-oppTok"></div>' +
+              '</div>' +
+              '<div class="br-liferow br-me">' +
+                '<div class="br-life br-me"><span class="br-life-who">' + esc(data.hero.me) + '</span><span class="br-life-n" id="br-mLifeTok">0</span></div>' +
+                '<div class="br-tokrow br-me" id="br-meTok"></div>' +
+              '</div>' +
             '</div>' +
             '<div class="br-lane" id="br-stage"></div>' +
-            tokSide +
           '</div>' +
           '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me) + '</div>' +
           '<div class="br-hand br-me" id="br-myHand"></div>' +
@@ -597,9 +595,18 @@
     slider.addEventListener('input', () => { stop(); go(parseInt(slider.value, 10), i); });
 
     // ---- Survol : aperçu de la carte en grand (lisibilité ; desktop) ----
-    const preview = document.createElement('div');
-    preview.className = 'br-preview';
-    container.appendChild(preview);
+    // Le preview vit sur <body> (et non dans le conteneur) : position:fixed
+    // garantie relative à la fenêtre, jamais piégée/rognée par un éventuel
+    // ancêtre transformé (le plateau lui-même est mis à l'échelle via transform).
+    // Un seul exemplaire réutilisé + écouteurs posés une seule fois par conteneur
+    // (mount() peut être rappelé) pour éviter les doublons.
+    let preview = document.getElementById('br-preview-el');
+    if (!preview) {
+      preview = document.createElement('div');
+      preview.className = 'br-preview';
+      preview.id = 'br-preview-el';
+      document.body.appendChild(preview);
+    }
     const PW = 224, PH = 313;
     function showPreview(tile) {
       const art = tile.matches('.br-art') ? tile : tile.querySelector('.br-art');
@@ -614,8 +621,13 @@
       preview.style.top = Math.max(8, top) + 'px';
       preview.classList.add('show');
     }
-    container.addEventListener('mouseover', e => { const t = e.target.closest('[data-card]'); if (t) showPreview(t); });
-    container.addEventListener('mouseout', e => { const t = e.target.closest('[data-card]'); if (t) preview.classList.remove('show'); });
+    const hidePreview = () => preview.classList.remove('show');
+    if (!container.__brHoverBound) {
+      container.__brHoverBound = true;
+      container.addEventListener('mouseover', e => { const t = e.target.closest('[data-card]'); if (t) showPreview(t); });
+      container.addEventListener('mouseout', e => { const t = e.target.closest('[data-card]'); if (t) hidePreview(); });
+    }
+    hidePreview();   // à chaque (re)montage : pas de preview résiduel affiché
 
     // ---- Hauteur du stage figée : sinon la « carte d'action » change de taille
     // d'une étape à l'autre (bannière courte vs carte jouée haute vs combat) et
