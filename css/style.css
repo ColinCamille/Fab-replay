@@ -1484,7 +1484,10 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-cardrow{max-width:none}
 
   /* Mains agrandies. */
-  #boardReplay .br-hand{min-height:0;gap:8px;padding:2px}
+  /* Hauteur RÉSERVÉE = celle d'une carte en main (68px × 5/7 ≈ 95px) : la ligne
+     ne se réduit pas au texte « main vide » quand une main se vide → le plateau
+     ne saute plus verticalement d'une étape à l'autre. */
+  #boardReplay .br-hand{min-height:100px;gap:8px;padding:2px}
   #boardReplay .br-hand .br-pcard{width:68px}
   #boardReplay .br-hand .br-pcard.br-inhand{width:66px}
   #boardReplay .br-hand .br-back{width:54px;height:auto;aspect-ratio:5/7}
