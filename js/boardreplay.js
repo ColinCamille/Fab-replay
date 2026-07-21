@@ -668,7 +668,7 @@
       const wrap = container.querySelector('.br-wrap');
       if (!wrap || !wrap.offsetParent) return;
       const fs = container.classList.contains('br-fs');   // plein écran → toute la fenêtre
-      wrap.style.transform = ''; container.style.height = '';   // remise à zéro pour mesurer
+      wrap.style.transform = ''; wrap.style.marginRight = ''; wrap.style.marginBottom = ''; container.style.height = '';   // remise à zéro pour mesurer
       // On prend l'EMPREINTE RÉELLE du contenu (scrollWidth/Height) et pas juste
       // offsetWidth : sur mobile la table peut être plus large que son cadre
       // (sinon, en plein écran, l'arsenal de droite était rogné).
@@ -677,36 +677,31 @@
       if (!natW || !natH) return;
       const top = fs ? 0 : container.getBoundingClientRect().top;
       const availH = (fs ? window.innerHeight : window.innerHeight - top) - 12;
-      const availW = container.clientWidth - 24;   // marge → l'arsenal de droite (bord du champ) n'est jamais rogné
-      const deskInline = !fs && container.clientWidth >= 900;
-      // Desktop hors plein écran : on remplit la LARGEUR (même emprise que le
-      // bandeau d'onglets au-dessus), quitte à défiler un peu verticalement.
-      // Ailleurs (mobile, plein écran) : on tient dans la fenêtre (largeur ET
-      // hauteur) avec un plancher de lisibilité.
-      let scale = deskInline
-        ? Math.min(availW / natW, 1)
-        : Math.max(Math.min(availW / natW, availH / natH, 1), 0.38);
-      // Origine TOP-LEFT + recentrage explicite : avec « top center », le contenu
-      // (dont la largeur RÉELLE natW dépasse le cadre offsetWidth) était mis à
-      // l'échelle autour du centre du CADRE, pas du centre du CONTENU → le
-      // plateau se retrouvait poussé/débordé vers la DROITE (gros vide à gauche).
-      // On ancre à gauche et on ajoute une translation pour des marges égales.
-      // Un plateau « portrait » dans un écran « paysage » est bridé par la HAUTEUR :
-      // une fois mis à l'échelle il ne remplit plus la largeur. On le RECENTRE donc
-      // toujours (desktop compris) — sinon il restait collé à gauche avec toute la
-      // moitié droite vide. Quand la hauteur suffit (scale ≈ 1), sw ≈ largeur → dx ≈ 0.
-      const sw = natW * scale;
-      const dx = Math.max(0, (container.clientWidth - sw) / 2);
-      // En plein écran, le plateau (limité par la largeur) laisse un grand vide
-      // en bas → on le recentre VERTICALEMENT dans la fenêtre. Hors plein écran,
-      // le conteneur épouse la hauteur du plateau (dy=0), le flux de page suit.
-      const dy = fs ? Math.max(0, (availH - natH * scale) / 2) : 0;
+      // Largeur dispo = largeur de CONTENU (on retire le padding du conteneur,
+      // ex. 6px en plein écran) → le plateau remplit pile la zone sans déborder.
+      const _cs = window.getComputedStyle(container);
+      const availW = container.clientWidth - (parseFloat(_cs.paddingLeft) || 0) - (parseFloat(_cs.paddingRight) || 0);
+      // Hors plein écran (desktop ET mobile) : on remplit la LARGEUR, quitte à
+      // défiler un peu verticalement. Sur mobile, dépendre de la hauteur rendait
+      // le plateau étroit à l'ouverture (barre d'adresse visible → hauteur dispo
+      // réduite → mise à l'échelle sur la hauteur), puis pleine largeur après un
+      // scroll (barre repliée) — incohérent. La largeur ne dépend pas de la barre
+      // d'adresse → plateau pleine largeur dès l'ouverture, partout.
+      // On remplit la LARGEUR dans TOUS les cas (normal ET plein écran) : le
+      // comportement est identique dans les deux modes (le plateau ne « bouge »
+      // pas en basculant) et ne dépend JAMAIS de la hauteur → largeur stable dès
+      // l'ouverture (barre d'adresse mobile sans effet) et d'une étape à l'autre.
+      const scale = Math.min(availW / natW, 1);
+      const sw = natW * scale, sh = natH * scale;
+      const dx = Math.max(0, (availW - sw) / 2);
       wrap.style.transformOrigin = 'top left';
-      wrap.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + scale + ')';
-      // Hors plein écran, on fige la hauteur du conteneur (= plateau mis à l'échelle)
-      // pour que le flux de la page suive. En plein écran, le conteneur est fixé
-      // (inset:0) → on laisse le CSS le remplir.
-      if (!fs) container.style.height = Math.ceil(natH * scale) + 'px';
+      wrap.style.transform = 'translate(' + dx + 'px,0) scale(' + scale + ')';
+      // transform NE change PAS la taille de LAYOUT : le conteneur verrait sinon
+      // une largeur/hauteur « fantôme » (= taille NON réduite) → barre de scroll
+      // horizontale en plein écran + flux vertical faux. On retire cet espace
+      // fantôme par des marges négatives : l'empreinte de layout = taille VISIBLE.
+      wrap.style.marginRight = Math.round(sw - natW) + 'px';
+      wrap.style.marginBottom = Math.round(sh - natH) + 'px';
     }
     // Ordre : figer la piste (hauteur stable), PUIS mettre à l'échelle l'ensemble.
     function relayout() { const w = container.querySelector('.br-wrap'); if (w) w.style.transform = ''; stabilizeStage(); fitBoard(); }
