@@ -1390,7 +1390,8 @@ footer a{color:var(--text-dim)}
 .br-pcard.br-me .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#4a3a1e,#1a1710)}
 .br-pcard.br-opp .br-art{background-image:radial-gradient(120% 90% at 30% 10%,#2d2a4d,#15142a)}
 .br-pcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:9px 3px 3px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.45) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
-.br-pitch-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#82b4dd;background:#16273655;border:1px solid #2c4a6366;border-radius:999px;padding:1px 7px;margin-top:2px}
+.br-pitch-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#82b4dd;background:#16273655;border:1px solid #2c4a6366;border-radius:999px;padding:1px 7px;margin-top:2px;
+  max-width:200px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center;border-radius:12px}   /* plafond ABSOLU (indépendant du conteneur) → la liste des cartes pitchées s'enroule et n'élargit jamais le plateau */
 .br-arrow{color:var(--text-faint);font-size:1.2rem}
 .br-verdict{margin-top:11px;font:700 .8rem 'JetBrains Mono',monospace;padding:5px 12px;border-radius:999px}
 .br-verdict.br-blocked{color:var(--green);background:#4fb87a1a;border:1px solid #4fb87a44}
@@ -1412,7 +1413,9 @@ footer a{color:var(--text-dim)}
   color:var(--gold,#e9c07a);background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.38);
   border-radius:5px;padding:2px 5px;white-space:nowrap}
 /* Récap « une action » : juste la carte en grand, liseré = qui joue. */
-.br-playone{display:flex;flex-direction:column;align-items:center;gap:9px}
+/* align-self:stretch → prend la largeur de la piste (qui est en align-items:center)
+   pour que la pastille pitch s'enroule DEDANS au lieu d'élargir la piste. */
+.br-playone{display:flex;flex-direction:column;align-items:center;gap:9px;max-width:100%;min-width:0;align-self:stretch}
 /* Cartes de la piste de combat (centre) — agrandies. */
 .br-lane .br-pcard{width:66px}
 /* Cartes de DÉFENSE (dans l'échange) plus petites → elles tiennent sur une
@@ -5712,8 +5715,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=142"></script>
-<script src="js/cloud.js?v=142"></script>
+<script src="js/cloud-config.js?v=143"></script>
+<script src="js/cloud.js?v=143"></script>
 
 <script>
 // ============================================================

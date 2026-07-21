@@ -20,19 +20,6 @@
   const norm = s => (TP.normName ? TP.normName(s) : String(s || '').trim().toLowerCase());
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  // Tokens (permanents/auras) créés par certains héros. Talishar NE journalise
-  // PAS leur création (ils n'apparaissent que via leur effet, ex. « Embodiment
-  // of Lightning grants go again », et l'Earth jamais) → on les rattache au
-  // héros et on les montre comme présents sur la partie. Étendre au besoin.
-  const HERO_TOKENS = {
-    briar: ['Embodiment of Lightning', 'Embodiment of Earth'],
-    oscilio: ['Embodiment of Lightning', 'Embodiment of Earth']
-  };
-  function tokensForHero(hero) {
-    const k = norm(hero).split(/[ ,]/)[0];
-    return HERO_TOKENS[k] || [];
-  }
-
   // ---------- Images (cache local ; CardImages cache déjà côté réseau) ----------
   const _img = {};
   function resolveImg(name, hero) {
@@ -71,7 +58,6 @@
   function buildTimeline(GAME) {
     const MY = GAME.myName, OPP = GAME.oppName;
     const HERO = { me: (GAME.players.me && GAME.players.me.hero) || MY, opp: (GAME.players.opp && GAME.players.opp.hero) || OPP };
-    const HEROTOK = { me: tokensForHero(HERO.me), opp: tokensForHero(HERO.opp) };
     const EQ = { me: equipSet(GAME.players.me), opp: equipSet(GAME.players.opp) };
     const WPN = { me: weaponSet(GAME.players.me), opp: weaponSet(GAME.players.opp) };
     const sideOf = p => (p === MY ? 'me' : 'opp');
@@ -113,10 +99,12 @@
       // que soit le tour. Mon arsenal est donc toujours à jour — y compris une
       // carte mise en arsenal en fin de mon tour, visible dès le tour suivant.
       st.meArsenal = (t.arsenal || []).slice();
-      // Tokens/permanents en jeu : données réelles du terrain (2 camps) si le
-      // grabber les a captées, sinon repli par héros (constant sur la partie).
+      // Tokens/permanents en jeu : UNIQUEMENT les données réelles du terrain
+      // captées par le grabber. On n'invente plus de tokens « par héros » : ça
+      // affichait des auras (Embodiments de Briar…) dès le tour 0 alors qu'elles
+      // ne sont créées qu'en jouant → trompeur. Sans capture : aucun token.
       if (t.field) { st.meTokens = (t.field.me || []).slice(); st.oppTokens = (t.field.opp || []).slice(); }
-      else { st.meTokens = HEROTOK.me.slice(); st.oppTokens = HEROTOK.opp.slice(); }
+      else { st.meTokens = []; st.oppTokens = []; }
       // Cimetière/banni réels (2 camps) si captés : on cale l'état exact en début
       // de tour ; le cimetière continue de grandir via le log pendant le tour.
       // Sinon (vieux logs), on garde la reconstruction cumulée depuis le récit.
