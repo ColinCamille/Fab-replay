@@ -544,7 +544,7 @@
     if (!list.length) { host.innerHTML = '<div class="empty">Aucune carte avec au moins ' + state.cwlMin + ' partie(s). Baisse le seuil ci-dessus.</div>'; return; }
     host.innerHTML = list.map(c => {
       const d = c.winrate - 50, pos = d >= 0, segW = Math.min(50, Math.abs(d) / 50 * 50);
-      return '<div class="dv' + (c.decided < 3 ? ' mu-low' : '') + '"><div class="dv-nm">' + esc2(c.name) + '</div>' +
+      return '<div class="dv' + (c.decided < 3 ? ' mu-low' : '') + '"><div class="dv-nm" data-card="' + esc2(c.name) + '">' + esc2(c.name) + '</div>' +
         '<div class="dv-track"><div class="mid"></div><div class="dv-seg ' + (pos ? 'pos' : 'neg') + '" style="width:' + segW + '%"></div></div>' +
         '<div class="dv-pc ' + (pos ? 'good' : 'bad') + '">' + c.winrate + '%</div><div class="dv-vl">' + c.gamesWon + 'V·' + c.gamesLost + 'D</div></div>';
     }).join('') + '<div class="note">Winrate des parties où la carte a été jouée. Les faibles échantillons (&lt; 3 parties) sont grisés — ajuste le seuil ci-dessus.</div>';
@@ -574,7 +574,7 @@
       const arrow = state.cardSort.key === col.key ? (state.cardSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
       return '<th class="sortable" data-key="' + col.key + '"' + (col.tip ? ' title="' + esc2(col.tip) + '"' : '') + '>' + esc2(col.label) + arrow + '</th>';
     }).join('');
-    const body = shown.map(c => '<tr>' + CARD_COLS.map(col => col.key === 'name' ? '<td>' + esc2(c.name) + '</td>' : '<td' + (col.hit && c.timesHit ? ' class="hit"' : '') + '>' + fmtCell(col, c) + '</td>').join('') + '</tr>').join('');
+    const body = shown.map(c => '<tr>' + CARD_COLS.map(col => col.key === 'name' ? '<td data-card="' + esc2(c.name) + '">' + esc2(c.name) + '</td>' : '<td' + (col.hit && c.timesHit ? ' class="hit"' : '') + '>' + fmtCell(col, c) + '</td>').join('') + '</tr>').join('');
     const note = state.cardMode === 'pct' ? '<div class="note">Par ligne : <b>Jouée + Défense + Pitch ≈ 100 %</b> (à quoi sert la carte). <b>Coups</b> = taux de coups portés (touché ÷ jouée).</div>' : '';
     host.innerHTML = '<table class="tbl"><tr>' + head + '</tr>' + body + '</table>' + note;
   }
@@ -803,8 +803,41 @@
     if (t) t.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.cv === which));
   }
 
+  // ---------- Survol : aperçu grande carte (section Cartes, desktop) ----------
+  // Les noms de cartes portent data-card ; au survol on résout l'image (paresseux
+  // + cache) et on affiche un aperçu. L'aperçu vit sur <body> (le tableau de bord
+  // n'a pas de plein écran natif → aucun risque qu'il soit hors sous-arbre rendu).
+  function setupCardPreview(host) {
+    if (!root.CardImages || !root.CardImages.resolveCardImage || !D) return;
+    let pv = D.getElementById('hx-cardpop');
+    if (!pv) { pv = D.createElement('div'); pv.id = 'hx-cardpop'; pv.className = 'br-preview'; D.body.appendChild(pv); }
+    const PW = 224, PH = 313, cache = {};
+    function place(el) {
+      const r = el.getBoundingClientRect();
+      let left = r.left + r.width / 2 - PW / 2;
+      let top = r.top - PH - 10;
+      if (top < 8) top = Math.min(r.bottom + 10, window.innerHeight - PH - 8);
+      left = Math.max(8, Math.min(left, window.innerWidth - PW - 8));
+      pv.style.left = left + 'px'; pv.style.top = Math.max(8, top) + 'px';
+    }
+    function show(el) {
+      const name = el.getAttribute('data-card'); if (!name) return;
+      const url = cache[name];
+      if (url === null) return;                       // image inconnue → rien
+      if (url) { pv.style.backgroundImage = 'url("' + url + '")'; place(el); pv.classList.add('show'); return; }
+      root.CardImages.resolveCardImage(name).then(u => {
+        cache[name] = u || null;
+        if (!u || pv._cur !== el) return;             // n'affiche que si on survole toujours cette carte
+        pv.style.backgroundImage = 'url("' + u + '")'; place(el); pv.classList.add('show');
+      });
+    }
+    host.addEventListener('mouseover', e => { const t = e.target.closest('[data-card]'); if (t) { pv._cur = t; show(t); } });
+    host.addEventListener('mouseout', e => { const t = e.target.closest('[data-card]'); if (t) { pv._cur = null; pv.classList.remove('show'); } });
+  }
+
   // ---------- Câblage (une seule fois) ----------
   function wire(host) {
+    setupCardPreview(host);
     host.querySelector('#hxTabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       state.tab = b.dataset.tab; host.querySelector('#hxTabs').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
       host.querySelector('#hxPanelStats').classList.toggle('active', state.tab === 'stats');
