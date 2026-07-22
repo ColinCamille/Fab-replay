@@ -515,6 +515,37 @@ const colClash = BR.buildTimeline(colGame).steps.map(s => s.stage).find(st => st
 assert(colClash && colClash.atk && colClash.atk.cp === 3, 'couleur Table : attaquant Lightning Press → bleu (cp 3)');
 assert(colClash && (colClash.blocks || []).some(b => b.nm === 'Sink Below' && b.cp === 2), 'couleur Table : bloc Sink Below → jaune (cp 2)');
 
+// ---------- Transformation de héros (Arakni) : instant exact + renfort ----------
+console.log('Transform —');
+(function () {
+  eq(Parser.classifyLine('Arakni, Marionette becomes Arakni, Funnel Web').type, 'transform', 'classifyLine: « becomes » → transform');
+  const trRaw = [
+    '=== Talishar game 88 — test ===', '',
+    "Ehecalt's turn 1 has begun.",
+    'Ehecalt activated Hunters Klaive',
+    'nissy auto-passed',
+    'Ehecalt activated Flick Knives',                 // équipement activé PENDANT l'attaque
+    "Ehecalt's Hunters Klaive was targeted",
+    'nissy took 5 damage',
+    'Combat resolved with a hit for 5 damage',
+    'Arakni, Marionette becomes Arakni, Funnel Web',  // transformation en fin de tour
+    '', '=== META ===', 'me: Ehecalt', 'opp: nissy',
+    'my_hero: Arakni, Marionette (arakni_marionette)',
+    'my_equipment: arms=Flick Knives (flick_knives) | weaponL=Hunters Klaive (hunters_klaive)',
+    '', '=== COMBAT CHAIN (attaque/défense effectives, buffs compris) ===',
+    JSON.stringify({ turn: 'Ehecalt#1', card: 'Hunters Klaive', power: 5, defense: 0, prevent: 0, target: 'nissy', kw: [] })
+  ].join('\n');
+  const tr = Parser.parse(trRaw);
+  const stages = BR.buildTimeline(tr).steps.map(s => s.stage);
+  // Flick Knives (réaction sur la dague) : PAS une étape isolée…
+  assert(!stages.some(st => st.type === 'play' && st.card && st.card.nm === 'Flick Knives'), 'transform: Flick Knives pas en étape isolée avant l\'attaque');
+  // …mais un renfort DANS l'échange de la dague.
+  const clash = stages.find(st => st.type === 'clash');
+  assert(clash && (clash.pumps || []).some(p => p.nm === 'Flick Knives'), 'transform: Flick Knives = renfort de l\'échange');
+  // Une étape de transformation apparaît (à l'instant du « becomes »).
+  assert(stages.some(st => st.type === 'transform' && /Funnel Web/.test(st.sub || '')), 'transform: étape de transformation présente');
+})();
+
 // ---------- Undo : action annulée retirée (+ re-log dédupliqué) ----------
 console.log('Undo —');
 (function () {

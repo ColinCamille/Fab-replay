@@ -80,6 +80,9 @@
     if (/^The combat chain was closed\.$/.test(line)) return { type: 'chainClosed', text: line };
     if ((m = line.match(/^(.+?) is dealing (\d+) arcane damage(?: from (.+))?$/))) return { type: 'arcaneDamage', text: line };
     if (/is dealing \d+ arcane damage\.?$/.test(line)) return { type: 'info', text: line };
+    // Transformation de héros (ex. Arakni) : « <forme> becomes <nouvelle forme> ».
+    // Placée en dernier : aucune autre règle ne matche « becomes ».
+    if ((m = line.match(/^(.+?) becomes (.+?)\.?$/))) return { type: 'transform', from: m[1].trim(), to: m[2].trim(), text: line };
     return { type: 'unknown', text: line };
   }
 

@@ -65,6 +65,10 @@
     // partie). Mise à jour tour par tour depuis t.heroForm ; chaque étape en
     // garde une copie pour que le plateau affiche la bonne forme.
     const curForm = { me: HERO.me, opp: HERO.opp };
+    // Même héros ? Comparaison qui ignore virgule/apostrophe/casse/espaces :
+    // « Arakni, Marionette » (méta) == « Arakni Marionette » (forme captée) →
+    // pas de FAUSSE transformation au 1er tour. (norm() seul ne retire pas la virgule.)
+    const sameHero = (a, b) => norm(a).replace(/[^a-z0-9]/g, '') === norm(b).replace(/[^a-z0-9]/g, '');
     const EQ = { me: equipSet(GAME.players.me), opp: equipSet(GAME.players.opp) };
     const WPN = { me: weaponSet(GAME.players.me), opp: weaponSet(GAME.players.opp) };
     const sideOf = p => (p === MY ? 'me' : 'opp');
@@ -148,9 +152,7 @@
       if (t.heroForm) {
         ['me', 'opp'].forEach(sd => {
           const nf = t.heroForm[sd];
-          // Comparaison normalisée (virgule/casse) : « Arakni, Marionette » et
-          // « Arakni Marionette » = même héros → pas de fausse transformation.
-          if (nf && norm(nf) !== norm(curForm[sd])) {
+          if (nf && !sameHero(nf, curForm[sd])) {
             const prev = curForm[sd];
             curForm[sd] = nf;
             push(t.label || label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + nf });
@@ -315,8 +317,13 @@
           // en mode chaîne on la met en attente pour qu'elle devienne l'attaquant
           // du combat (au lieu d'une carte seule que la 1re réaction remplacerait).
           const wpnEntry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: true };
-          if (hasChain && side === atkSide && WPN[side][norm(e.card)] && (atkBuf.length === 0 ? (isAtkCard(e.card) || !nextAtkCard()) : true)) {
-            atkBuf.push(wpnEntry);              // arme = attaquant (ou renfort si un attaquant est déjà en cours)
+          if (hasChain && side === atkSide && atkBuf.length > 0) {
+            // Activation PENDANT l'attaque en cours (ex. Flick Knives, une réaction
+            // sur la dague déjà déclarée) → c'est un RENFORT : il apparaît DANS
+            // l'échange, plus en étape isolée AVANT l'attaque.
+            atkBuf.push(wpnEntry);
+          } else if (hasChain && side === atkSide && WPN[side][norm(e.card)] && (atkBuf.length === 0 ? (isAtkCard(e.card) || !nextAtkCard()) : true)) {
+            atkBuf.push(wpnEntry);              // arme = attaquant
           } else {
             push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
           }
@@ -333,6 +340,16 @@
           if (gside) { const arr = gside === 'me' ? st.meEquipGone : st.oppEquipGone; if (arr.indexOf(k) < 0) arr.push(k); }
         } else if (e.type === 'pitched') {
           const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
+        } else if (e.type === 'transform') {
+          // Transformation de héros (ex. Arakni) AU MOMENT EXACT où elle survient
+          // dans le log (« <forme> becomes <nouvelle forme> »), pas seulement au
+          // tour suivant. On identifie le camp par la forme de départ.
+          flushAtk(); flushBuf();
+          const sd = sameHero(e.from, curForm.me) ? 'me' : (sameHero(e.from, curForm.opp) ? 'opp' : null);
+          if (sd && e.to && !sameHero(e.to, curForm[sd])) {
+            const prev = curForm[sd]; curForm[sd] = e.to;
+            push(label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + e.to });
+          }
         } else if (e.type === 'blocked') {
           const s = sideOf(e.player);
           (e.cards || []).forEach((c, ci) => { const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq, cp: (e.pitches && e.pitches[ci]) || null }); });

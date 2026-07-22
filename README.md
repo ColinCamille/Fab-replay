@@ -76,7 +76,6 @@ Tes parties ne sont visibles **que par toi** (via ton compte). Rien n'est public
 | `js/dashboard.js` | **Agrégations** multi-parties + rendu (cœur pur testable en Node). |
 | `css/style.css` | Styles (mobile-first). |
 | `talishar-log-grabber.user.js` | **Grabber** (userscript Tampermonkey/Violentmonkey) — envoie la partie dans **ton compte Supabase** (auto-update). |
-| `build/standalone.html` | Version fichier-unique régénérée (usage hors-ligne). |
 
 ## Utilisation
 
@@ -121,12 +120,11 @@ Mise en place (une fois) :
 ```bash
 npm test      # tests parser + agrégation dashboard + clé DB (sans dépendance)
 npm run check # node --check sur tous les modules JS
-npm run build # régénère build/standalone.html
 ```
 
 > **Convention** : la logique du parseur vit dans `talishar-parser.js` (chargé
-> par `index.html`). Le standalone est **régénéré** par le build — ne pas
-> l'éditer à la main.
+> par `index.html`) ; c'est la source de vérité, réutilisée par le replay, la
+> Table et le tableau de bord.
 
 ## Feuille de route
 
