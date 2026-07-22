@@ -1171,12 +1171,12 @@ footer a{color:var(--text-dim)}
   #dashboardBody #hxPanelHist #hxList{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-bottom:12px}
 
   /* ---- Mode focus : le panneau agrandi prend toute la zone basse ---- */
-  #dashboardBody .hxwrap[data-max="hist"]{grid-template-areas:"filt filt filt" "rhead summ summ" "rail summ summ" "rail hist hist" "rail hist hist"}
+  #dashboardBody .hxwrap[data-max="hist"]{grid-template-areas:"filt filt filt" "rail summ summ" "rail hist hist" "rail hist hist"}
   #dashboardBody .hxwrap[data-max="hist"] #hxSubMatchups,#dashboardBody .hxwrap[data-max="hist"] #hxSubCards{display:none}
-  #dashboardBody .hxwrap[data-max="mu"]{grid-template-areas:"filt filt filt" "rhead summ summ" "rail summ summ" "rail mu mu" "rail mu mu"}
+  #dashboardBody .hxwrap[data-max="mu"]{grid-template-areas:"filt filt filt" "rail summ summ" "rail mu mu" "rail mu mu"}
   #dashboardBody .hxwrap[data-max="mu"] #hxPanelHist,#dashboardBody .hxwrap[data-max="mu"] #hxSubCards{display:none}
   #dashboardBody .hxwrap[data-max="mu"] #hxSubMatchups{max-height:calc(100vh - 60px)}
-  #dashboardBody .hxwrap[data-max="cards"]{grid-template-areas:"filt filt filt" "rhead summ summ" "rail summ summ" "rail cards cards" "rail cards cards"}
+  #dashboardBody .hxwrap[data-max="cards"]{grid-template-areas:"filt filt filt" "rail summ summ" "rail cards cards" "rail cards cards"}
   #dashboardBody .hxwrap[data-max="cards"] #hxPanelHist,#dashboardBody .hxwrap[data-max="cards"] #hxSubMatchups{display:none}
   #dashboardBody .hxwrap[data-max="cards"] #hxSubCards{max-height:calc(100vh - 60px)}
 
