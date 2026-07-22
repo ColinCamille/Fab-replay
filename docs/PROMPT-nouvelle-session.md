@@ -1,56 +1,28 @@
-# Prompt de démarrage — nouvelle conversation LLM
+# Démarrer une nouvelle conversation Claude — économiser des tokens
 
-Copie-colle l'un des blocs ci-dessous au **début** d'une nouvelle conversation,
-puis décris ta demande. Le but : que le LLM soit **opérationnel tout de suite**
-sans re-explorer le repo (donc moins de tokens consommés).
+## Tu n'as RIEN à copier-coller
 
----
+`CLAUDE.md` (à la racine) est **chargé automatiquement** par Claude quand la
+session travaille sur ce dépôt. Ouvre une nouvelle conversation et **décris
+directement ta demande** — Claude a déjà tout le contexte (archi, schéma BDD,
+conventions, savoir Talishar, pièges).
 
-## A. Avec Claude Code / claude.ai (sur le dépôt Fab-replay)
-
-> `CLAUDE.md` (à la racine) est **chargé automatiquement**. Prompt minimal :
-
-```
-Lis d'abord CLAUDE.md à la racine (contexte, archi, schéma BDD, conventions,
-pièges) et respecte-le : réponses et commits en FRANÇAIS, bump du cache-bust
-?v=N dans index.html à chaque modif JS/CSS, `npm test` + `npm run check` verts,
-un test par correctif, push sur main (rebase avant push).
-
-Ma demande : <DÉCRIS LE BUG / LA FEATURE ICI, avec les symptômes précis>.
-
-Si c'est un bug propre à une partie, je peux te fournir le ⬇ Log brut (.txt).
-Va droit au but : diagnostique, corrige, teste, commit, push.
-```
-
----
-
-## B. Avec un LLM générique (ChatGPT, etc.)
-
-> Le fichier n'est pas chargé tout seul → **colle le contenu de `CLAUDE.md`**
-> juste après cette consigne, puis ta demande :
+Exemple de demande :
 
 ```
-Tu reprends un projet perso. Voici son contexte complet (à lire en entier avant
-de répondre). Réponds en FRANÇAIS, propose des diffs minimaux et ciblés, et
-respecte les conventions décrites (cache-bust ?v=N, tests, pas de bundler).
-
-<COLLE ICI LE CONTENU DE CLAUDE.md>
-
-Ma demande : <DÉCRIS LE BUG / LA FEATURE ICI>.
+Bug dans la vue Table : <symptômes précis>. (capture jointe si visuel,
+ou ⬇ Log brut .txt si c'est propre à une partie)
 ```
-
----
 
 ## Astuces pour économiser des tokens
 
-- **Une conversation = un sujet.** Ouvre une nouvelle conversation par bug/feature
-  plutôt qu'un fil géant (le contexte accumulé coûte cher à chaque message).
+- **Une conversation = un sujet.** Ouvre une nouvelle conversation par
+  bug/feature plutôt qu'un fil géant : le contexte accumulé est renvoyé à chaque
+  message, donc un long fil coûte de plus en plus cher.
 - **Donne les symptômes précis + une capture** si c'est visuel. Pour un bug de
-  partie, joins le **⬇ Log brut** (contient tous les blocs nécessaires).
-- **Ne demande pas au LLM de tout re-lire** : CLAUDE.md suffit ; il n'ouvre les
-  fichiers que si nécessaire.
-- Quand une réponse est bonne, **stoppe** — pas besoin de « merci » qui relance un
-  tour de contexte.
-- Si le LLM part explorer longtemps, rappelle-lui : « CLAUDE.md décrit déjà ça ».
-- Pense à **mettre à jour CLAUDE.md** quand l'archi/les conventions changent (une
-  ligne suffit) — c'est ce qui garde les futures sessions courtes.
+  partie, joins le **⬇ Log brut** (il contient tous les blocs nécessaires).
+- Quand une réponse te convient, **stoppe** — pas besoin de « merci » qui
+  relance un tour de contexte.
+- Si Claude part explorer longtemps, rappelle-lui : « c'est déjà dans CLAUDE.md ».
+- **Garde CLAUDE.md à jour** quand l'archi ou les conventions changent (une ligne
+  suffit) : c'est LUI qui garde les futures sessions courtes.

@@ -172,3 +172,45 @@ des parties d'un **ami accepté**).
 - Pour un bug spécifique à une partie, demander le **⬇ Log brut** (.txt) : il
   contient tous les blocs (`RAW CHATLOG`, `COMBAT CHAIN`, `HERO FORMS`, `END GAME
   STATS`) nécessaires pour reproduire.
+
+## 11. Naviguer la source Talishar (on y va souvent)
+
+Pour comprendre le format des logs, le comportement d'une carte, les mots-clés,
+les transformations, etc., on lit la source **open-source** de Talishar. Le
+réseau **GitHub marche** dans le sandbox → on peut cloner en shallow (mettre le
+clone dans le scratchpad de session, PAS dans le repo Fab-replay) :
+
+```
+git clone --depth 1 https://github.com/Talishar/Talishar.git      # serveur (PHP)
+git clone --depth 1 https://github.com/Talishar/Talishar-FE.git   # front (React/TS)
+```
+
+### Serveur `Talishar/Talishar` (PHP) — écrit le log
+- `WriteLog.php` — `WriteLog()` écrit chaque ligne ; **`JSONLog()`** assemble le
+  `chatLog` renvoyé au front (lignes jointes par `<br>`).
+- `Libraries/UILibraries.php` — **`CardLink($cardNumber)`** : c'est ici que la
+  **couleur** est encodée dans le log (pitch → couleur ; identifiant de carte
+  coloré). Point d'entrée pour comprendre le format d'une carte dans le log.
+- `BuildGameState.php` — construit l'état envoyé au front (`$isReactFE = true`,
+  `$response->chatLog = JSONLog(...)`).
+- `CardDictionaries/<Set>/…` — **logique par carte, par set**. Ex. décisifs pour
+  les transformations de héros :
+  - `Hunted/HNTShared.php` → `ChaosTransform()` (Arakni) **loggue** `X becomes Y`.
+  - `DuskTillDawn/DTDShared.php` → `ResolveTransformHero()` (Levia) **ne loggue
+    rien** (change juste le héros dans l'état) → d'où la détection par `HERO FORMS`.
+- `GameLogic.php`, `CardLogic.php`, `CoreLogic.php`, `CombatChain.php` — moteur.
+
+### Front `Talishar/Talishar-FE` (React/TS) — stocke/affiche le log
+- `src/app/ParseGameState.ts` — ingère la réponse serveur ; garde le `chatLog`
+  en **tableau de chaînes brutes** (ne résout PAS les marqueurs de carte).
+- `src/routes/game/components/elements/chatBox/GameLogMessages.tsx` —
+  `plainText()` : c'est **au rendu seulement** que les `<span>`/marqueurs de carte
+  sont transformés en simple **nom**.
+- `src/features/GameState.ts` — types (`chatLog?: string[]`, forme de `state.game`).
+- `src/mocks/api/GetNextTurn3.ts` — un **vrai échantillon** de `state.game`
+  (précieux pour voir le format réel d'un `chatLog` sans lancer de partie).
+- `src/utils/multilanguage/multilanguage.ts` — `getCollectionCardImagePath()`
+  (URL d'image par n° de collection).
+
+> Rappel réseau : cloner Talishar via GitHub **marche** ; interroger **goagain.dev**
+> ou le **CDN d'images** Talishar **ne marche pas** dans le sandbox (cf. §8).
