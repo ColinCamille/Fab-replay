@@ -515,6 +515,33 @@ const colClash = BR.buildTimeline(colGame).steps.map(s => s.stage).find(st => st
 assert(colClash && colClash.atk && colClash.atk.cp === 3, 'couleur Table : attaquant Lightning Press → bleu (cp 3)');
 assert(colClash && (colClash.blocks || []).some(b => b.nm === 'Sink Below' && b.cp === 2), 'couleur Table : bloc Sink Below → jaune (cp 2)');
 
+// ---------- Formes de héros par tour (Arakni se transforme) ----------
+console.log('Hero forms —');
+(function () {
+  const rawHF = [
+    '=== Talishar game 999 — test ===',
+    '',
+    '🎲 you rolled 5 and Gravy Bones rolled 3.',
+    "Arakni Marionette's turn 1 has begun.",
+    'Arakni Marionette played Sharpen',
+    "Gravy Bones's turn 2 has begun.",
+    'Gravy Bones played Rig',
+    "Arakni Orb Weaver's turn 3 has begun.",
+    'Arakni Orb Weaver played Web',
+    'Arakni Orb Weaver (Zup) won! 🎉',
+    '',
+    '=== HERO FORMS (forme du héros par tour : toi | adversaire) ===',
+    '[Arakni Marionette #1] me: Arakni, Marionette | opp: Gravy Bones, Shipwrecked Looter',
+    '[Arakni Orb Weaver #3] me: Arakni, Orb Weaver | opp: Gravy Bones, Shipwrecked Looter',
+  ].join('\n');
+  const hf = Parser.parse(rawHF);
+  // Nom de héros avec virgule (« Arakni, Marionette ») : surtout PAS de split.
+  eq((hf.snapshots.heroForm['Arakni Marionette#1'] || {}).me, 'Arakni, Marionette', 'hero forms: forme de départ, virgule préservée');
+  eq((hf.snapshots.heroForm['Arakni Orb Weaver#3'] || {}).me, 'Arakni, Orb Weaver', 'hero forms: forme après transformation captée');
+  const t3 = (hf.turns || []).find(t => t.turnNumber === 3);
+  assert(t3 && t3.heroForm && t3.heroForm.me === 'Arakni, Orb Weaver', 'hero forms: forme attachée au bon tour');
+})();
+
 // ---------- Grabber : fusion des instantanés de log (anti-duplication) ----------
 console.log('Grabber merge —');
 (function () {

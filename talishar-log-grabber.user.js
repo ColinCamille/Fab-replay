@@ -32,6 +32,7 @@
   const LS_TS_PREFIX = 'taliTs_';
   const LS_ENDSTATS_PREFIX = 'taliEnd_';
   const LS_CHAIN_PREFIX = 'taliChain_';
+  const LS_HEROFORM_PREFIX = 'taliHeroForm_';
   const FORCE_SELECTOR = '';
 
   let captured = [];
@@ -41,6 +42,7 @@
   let storeLogged = false;
   let logSource = 'dom';        // 'chatlog' (journal structuré) ou 'dom' (repli)
   let chatLogAdopted = false;   // a-t-on déjà basculé cette partie sur le chatLog ?
+  let frozenPlayers = null;     // { name1, name2 } figés pour la partie (anti-transformation Arakni)
   let lastRawChatLog = null;    // dernier chatLog BRUT (verbatim) vu → conservé dans l'export
   let canaryIssues = [];        // hypothèses Talishar cassées détectées à la capture
 
@@ -50,6 +52,7 @@
   let fieldSnapshots = {};  // clé tour -> { me: [noms], opp: [noms] } (permanents/tokens en jeu)
   let graveSnapshots = {};  // clé tour -> { me, opp } (cimetière, zone publique)
   let banishSnapshots = {}; // clé tour -> { me, opp } (banni, zone publique)
+  let heroFormSnapshots = {}; // clé tour -> { me, opp } (FORME du héros ce tour-là : Arakni se transforme)
   let lifeSnapshots = {};   // clé tour -> { me, opp, myDeck, oppDeck }
   let chainLinks = [];      // combats : [{turn, card, power, defense, prevent, target, kw:[]}] — attaque/défense EFFECTIVES (buffs compris), lues dans activeChainLink
   let pendingChain = null;  // lien de combat en cours de construction (figé quand la chaîne se ferme)
@@ -259,6 +262,15 @@
     const h = pl.Hero;
     return Array.isArray(h) ? h[0] : h;
   }
+  // Forme COURANTE du héros de chaque camp (lue en live). Certains héros (Arakni)
+  // changent de forme en cours de partie → on la relève tour par tour.
+  function extractHeroForms() {
+    const g = getGameState(); if (!g) return null;
+    const me = cardLabel(heroCardOf(g.playerOne));
+    const opp = cardLabel(heroCardOf(g.playerTwo));
+    if (!me && !opp) return null;
+    return { me: me || null, opp: opp || null };
+  }
   // PURE (testable en Node) : chatLog brut + noms de héros par n° de joueur de
   // partie (1/2) → lignes texte au format attendu par le parseur.
   function chatLogToLines(rawChatLog, name1, name2) {
@@ -305,8 +317,18 @@
       if (myUser && oppUser && !same(myUser, oppUser)) { meLabel = myUser; oppLabel = oppUser; }
       else { meLabel = myHero + ' J' + myNum; oppLabel = oppHero + ' J' + (myNum === 1 ? 2 : 1); }
     }
-    const name1 = myNum === 1 ? meLabel : oppLabel;
-    const name2 = myNum === 2 ? meLabel : oppLabel;
+    let name1 = myNum === 1 ? meLabel : oppLabel;
+    let name2 = myNum === 2 ? meLabel : oppLabel;
+    // ANTI-TRANSFORMATION : certains héros (Arakni) CHANGENT de forme en cours de
+    // partie → heroCardOf() renvoie un nom différent au fil des ticks. Comme on
+    // re-traduit TOUT le chatLog à chaque tick, ce changement modifierait des
+    // lignes déjà émises → mergeLines les croit « disjointes » et DUPLIQUE tout le
+    // log (partie gonflée, tours multipliés, plusieurs « won! »). On fige donc les
+    // libellés à leur 1ʳᵉ valeur valide pour la partie (remis à null au changement
+    // de partie dans tick()). La forme de DÉPART sert d'identité — cohérent avec
+    // le méta (my_hero) qui, lui aussi, retient le premier héros vu.
+    if (!frozenPlayers && name1 && name2) frozenPlayers = { name1: name1, name2: name2 };
+    if (frozenPlayers) { name1 = frozenPlayers.name1; name2 = frozenPlayers.name2; }
     lastRawChatLog = g.chatLog;                 // source PURE conservée (verbatim)
     runCanary(g, name1, name2);                 // Talishar a-t-il changé de format ?
     // Sans les DEUX noms de héros, la substitution « Player N » serait bancale →
@@ -404,6 +426,7 @@
       localStorage.setItem(LS_FIELD_PREFIX + gameName, JSON.stringify(fieldSnapshots));
       localStorage.setItem(LS_GRAVE_PREFIX + gameName, JSON.stringify(graveSnapshots));
       localStorage.setItem(LS_BANISH_PREFIX + gameName, JSON.stringify(banishSnapshots));
+      localStorage.setItem(LS_HEROFORM_PREFIX + gameName, JSON.stringify(heroFormSnapshots));
       localStorage.setItem(LS_LIFE_PREFIX + gameName, JSON.stringify(lifeSnapshots));
       localStorage.setItem(LS_META_PREFIX + gameName, JSON.stringify(meta));
       localStorage.setItem(LS_TS_PREFIX + gameName, JSON.stringify(tsBatches));
@@ -423,6 +446,7 @@
     fieldSnapshots = read(LS_FIELD_PREFIX + gameName, {});
     graveSnapshots = read(LS_GRAVE_PREFIX + gameName, {});
     banishSnapshots = read(LS_BANISH_PREFIX + gameName, {});
+    heroFormSnapshots = read(LS_HEROFORM_PREFIX + gameName, {});
     lifeSnapshots = read(LS_LIFE_PREFIX + gameName, {});
     meta = read(LS_META_PREFIX + gameName, {});
     tsBatches = read(LS_TS_PREFIX + gameName, []);
@@ -666,6 +690,7 @@
         oppArsenalSnapshots['__opening__'] = extractOppArsenalCount();
         lifeSnapshots['__opening__'] = extractLife();
         const f0 = extractField(); if (f0) fieldSnapshots['__opening__'] = f0;
+        const hf0 = extractHeroForms(); if (hf0) heroFormSnapshots['__opening__'] = hf0;
         const gr0 = extractTwoCamp('Graveyard'); if (gr0) graveSnapshots['__opening__'] = gr0;
         const bn0 = extractTwoCamp('Banish'); if (bn0) banishSnapshots['__opening__'] = bn0;
       } else if (prev.length && hand.length < prev.length) {
@@ -684,6 +709,7 @@
       arsenalSnapshots[key] = arsenal;
       oppArsenalSnapshots[key] = extractOppArsenalCount();
       const f = extractField(); if (f) fieldSnapshots[key] = f;
+      const hf = extractHeroForms(); if (hf) heroFormSnapshots[key] = hf;
       const gr = extractTwoCamp('Graveyard'); if (gr) graveSnapshots[key] = gr;
       const bn = extractTwoCamp('Banish'); if (bn) banishSnapshots[key] = bn;
       lifeSnapshots[key] = extractLife();
@@ -728,7 +754,7 @@
       if (!onGamePage()) return;
       const gn = currentGameName();
       if (gn !== gameName) {
-        gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false; chatLogAdopted = false;
+        gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false; chatLogAdopted = false; frozenPlayers = null;
         meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null; autoPushedCount = 0;
         loadExisting(); updateUI();
       }
@@ -937,6 +963,19 @@
     });
     return '\n=== ' + title + ' ===\n' + lines.join('\n') + '\n';
   }
+  // Bloc « forme du héros par tour » : [tour] me: Arakni Orb Weaver | opp: …
+  // (valeur = UN nom, pas une liste → jamais de split sur la virgule du nom).
+  function heroFormBlockText() {
+    const keys = Object.keys(heroFormSnapshots);
+    if (!keys.length) return '';
+    const fmt = v => v || '(inconnu)';
+    const lines = keys.map(k => {
+      const label = k === '__opening__' ? 'OUVERTURE' : k.replace('#', ' #');
+      const s = heroFormSnapshots[k] || {};
+      return '[' + label + '] me: ' + fmt(s.me) + ' | opp: ' + fmt(s.opp);
+    });
+    return '\n=== HERO FORMS (forme du héros par tour : toi | adversaire) ===\n' + lines.join('\n') + '\n';
+  }
   function fieldBlockText() { return twoCampBlock('FIELD SNAPSHOTS (permanents/tokens en jeu : toi | adversaire)', fieldSnapshots); }
   function graveBlockText() { return twoCampBlock('GRAVEYARD SNAPSHOTS (cimetière : toi | adversaire)', graveSnapshots); }
   function banishBlockText() { return twoCampBlock('BANISH SNAPSHOTS (banni : toi | adversaire)', banishSnapshots); }
@@ -1059,6 +1098,7 @@
       + fieldBlockText()
       + graveBlockText()
       + banishBlockText()
+      + heroFormBlockText()
       + snapshotBlockText('LIFE SNAPSHOTS (vie et taille de deck : toi / adversaire)', lifeSnapshots, lifeLineFmt)
       + metaBlockText()
       + tsBlockText()

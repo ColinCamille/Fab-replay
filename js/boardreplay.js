@@ -61,6 +61,10 @@
   function buildTimeline(GAME) {
     const MY = GAME.myName, OPP = GAME.oppName;
     const HERO = { me: (GAME.players.me && GAME.players.me.hero) || MY, opp: (GAME.players.opp && GAME.players.opp.hero) || OPP };
+    // Forme COURANTE du héros (certains — Arakni — se transforment en cours de
+    // partie). Mise à jour tour par tour depuis t.heroForm ; chaque étape en
+    // garde une copie pour que le plateau affiche la bonne forme.
+    const curForm = { me: HERO.me, opp: HERO.opp };
     const EQ = { me: equipSet(GAME.players.me), opp: equipSet(GAME.players.opp) };
     const WPN = { me: weaponSet(GAME.players.me), opp: weaponSet(GAME.players.opp) };
     const sideOf = p => (p === MY ? 'me' : 'opp');
@@ -82,7 +86,7 @@
       meEquipGone: st.meEquipGone.slice(), oppEquipGone: st.oppEquipGone.slice(),
       meEquipUsed: st.meEquipUsed.slice(), oppEquipUsed: st.oppEquipUsed.slice(), life: { me: st.life.me, opp: st.life.opp }
     });
-    const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, state: snap() });
+    const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, form: { me: curForm.me, opp: curForm.opp }, state: snap() });
     const rm = (a, n) => { const k = a.findIndex(x => norm(x) === norm(n)); if (k >= 0) { a.splice(k, 1); return true; } return false; };
     const removeCard = (side, card) => {
       if (side === 'me') { if (st.meFaceUp) { if (!rm(st.meHandCards, card)) rm(st.meArsenal, card); } else st.meHandCount = Math.max(0, st.meHandCount - 1); }
@@ -137,6 +141,22 @@
       }
       const atkSide = actor === MY ? 'me' : 'opp';
       const label = String(t.label || '').replace(MY, HERO.me).replace(OPP, HERO.opp);
+
+      // Transformation de héros (Arakni) : si la forme relevée en début de ce tour
+      // diffère de la forme courante, on la met à jour ET on annonce le changement
+      // par une étape dédiée (visible dans la timeline + le plateau qui suit).
+      if (t.heroForm) {
+        ['me', 'opp'].forEach(sd => {
+          const nf = t.heroForm[sd];
+          // Comparaison normalisée (virgule/casse) : « Arakni, Marionette » et
+          // « Arakni Marionette » = même héros → pas de fausse transformation.
+          if (nf && norm(nf) !== norm(curForm[sd])) {
+            const prev = curForm[sd];
+            curForm[sd] = nf;
+            push(t.label || label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + nf });
+          }
+        });
+      }
 
       // Arsenal ADVERSE (dos de carte face cachée — nom inconnu par règle FaB) :
       //  · compte capté par le grabber (playerTwo.Arsenal) si disponible → fiable ;
@@ -492,6 +512,7 @@
     function buildStage(s) {
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
+      if (s.type === 'transform') return '<div class="br-banner br-transform br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
@@ -539,6 +560,24 @@
         el.classList.toggle('br-used', !broken && used.indexOf(k) >= 0); // activé ce tour → grisé
       });
     }
+    // Applique la forme courante du héros (Arakni se transforme) : nom dans le
+    // panneau de vie + libellé/image de la carte-héros. paintArt() (fin de render)
+    // repeint l'image de la nouvelle forme.
+    function setHeroForm(side, name, fieldSel) {
+      if (!name) return;
+      const who = $('.br-liferow.br-' + side + ' .br-life-who');
+      if (who && who.textContent !== name) who.textContent = name;
+      const field = $(fieldSel); if (!field) return;
+      const hero = field.querySelector('.br-hero'); if (!hero) return;
+      const lab = hero.querySelector('.br-lab'); if (lab && lab.textContent !== name) lab.textContent = name;
+      const art = hero.querySelector('.br-art');
+      if (art && art.getAttribute('data-card') !== name) {
+        art.setAttribute('data-card', name);
+        delete art.dataset.painted;            // force le repaint de la nouvelle forme
+        art.style.backgroundImage = ''; art.classList.remove('has-img');
+        const tile = art.closest('.br-gcard'); if (tile) tile.classList.remove('br-imgok');
+      }
+    }
     function render(prev) {
       const s = steps[i], stt = s.state;
       stage.innerHTML = buildStage(s.stage);
@@ -574,6 +613,7 @@
       container.querySelector('[data-act="prev"]').disabled = (i === 0);
       container.querySelector('[data-act="next"]').disabled = (i === steps.length - 1);
       if (s.hit && prev != null && prev < i) { const el = $(s.hit === 'me' ? '#br-mLifeTok' : '#br-oLifeTok'); if (el) { el.classList.remove('br-hit'); void el.offsetWidth; el.classList.add('br-hit'); } }
+      if (s.form) { setHeroForm('me', s.form.me, '#br-fMe'); setHeroForm('opp', s.form.opp, '#br-fOpp'); }
       paintArt(container);
     }
     function go(n, prev) { i = Math.max(0, Math.min(steps.length - 1, n)); render(prev); container.__brIndex = i; }

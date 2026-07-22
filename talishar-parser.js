@@ -226,6 +226,25 @@
     return { rest, snapshots: out };
   }
 
+  // Forme du héros par tour (Arakni se transforme en cours de partie). Valeur =
+  // UN nom par camp — surtout PAS de split sur la virgule (« Arakni, Marionette »
+  // en contient une). null si non capté / inconnu.
+  function parseHeroFormBlock(text, marker) {
+    const out = {};
+    const { rest, body } = sliceBlock(text, marker);
+    if (body == null) return { rest: text, snapshots: out };
+    const lineRe = /^\[(.+?)\]\s*(.*)$/gm;
+    const clean = s => { s = (s || '').trim(); return (!s || /^\((?:inconnu|vide|non capté)\)$/i.test(s)) ? null : s; };
+    let hm;
+    while ((hm = lineRe.exec(body))) {
+      const key = labelToKey(hm[1].trim());
+      if (!key) continue;
+      const mm = hm[2].match(/me:\s*(.*?)\s*\|\s*opp:\s*(.*)$/i);
+      out[key] = mm ? { me: clean(mm[1]), opp: clean(mm[2]) } : { me: null, opp: null };
+    }
+    return { rest, snapshots: out };
+  }
+
   // Bloc de COMPTES par tour (ex. arsenal adverse : un entier par tour).
   function parseCountSnapshotBlock(text, marker) {
     const out = {};
@@ -355,6 +374,7 @@
     const fieldRes = parseFieldSnapshotBlock(text, '=== FIELD SNAPSHOTS'); text = fieldRes.rest;
     const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
     const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
+    const heroFormRes = parseHeroFormBlock(text, '=== HERO FORMS'); text = heroFormRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
     const chainRes = parseChainBlock(text); text = chainRes.rest;
     // Journal structuré brut conservé par le grabber : on le RETIRE du corps (sinon
@@ -375,6 +395,7 @@
     const fieldSnapshots = fieldRes.snapshots;
     const graveSnapshots = graveRes.snapshots;
     const banishSnapshots = banishRes.snapshots;
+    const heroFormSnapshots = heroFormRes.snapshots;
     const lifeSnapshots = lifeRes.snapshots;
 
     // 2) Corps du log : header + lignes d'événements.
@@ -588,6 +609,8 @@
       t.field = (key in fieldSnapshots) ? fieldSnapshots[key] : null;
       t.grave = (key in graveSnapshots) ? graveSnapshots[key] : null;
       t.banish = (key in banishSnapshots) ? banishSnapshots[key] : null;
+      // Forme du héros à ce tour (Arakni se transforme) : { me, opp } ou null.
+      t.heroForm = (key in heroFormSnapshots) ? heroFormSnapshots[key] : null;
       t.life = (key in lifeSnapshots) ? lifeSnapshots[key] : null;
       t.side = t.player === myName ? 'me' : (t.player === oppName ? 'opp' : null);
       // timing depuis les événements horodatés du tour
@@ -815,7 +838,7 @@
       lifeHistory,
       lifeSeries,
       life: finalLife,
-      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, grave: graveSnapshots, banish: banishSnapshots, life: lifeSnapshots },
+      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, grave: graveSnapshots, banish: banishSnapshots, heroForm: heroFormSnapshots, life: lifeSnapshots },
       timeline: { startTs, endTs, durationSec, lineTs: lineTs || null },
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,

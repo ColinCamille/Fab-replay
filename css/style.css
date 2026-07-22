@@ -1367,6 +1367,10 @@ footer a{color:var(--text-dim)}
    partie — souvent hors combat (arcane, effet…) — soit toujours lisible. */
 .br-banner.br-end{padding:10px 12px;border:1px solid var(--accent,var(--gold));border-radius:10px;background:linear-gradient(160deg,rgba(201,162,39,.14),rgba(201,162,39,.04))}
 .br-banner.br-end .br-big{font-size:1.15rem}
+/* Transformation de héros (Arakni change de forme en cours de partie). */
+.br-banner.br-transform{padding:8px 12px;border:1px solid rgba(139,107,255,.45);border-radius:10px;background:linear-gradient(160deg,rgba(139,107,255,.16),rgba(139,107,255,.04))}
+.br-banner.br-transform .br-big{color:var(--violet);font-size:1rem}
+.br-banner.br-transform .br-sub{color:var(--text)}
 /* Largeur bornée + retour à la ligne : un sous-titre à noms longs (miroir) ne
    doit pas s'étaler sur une seule ligne — sinon il gonfle la largeur mesurée du
    plateau (stabilizeStage) et pousse tout vers la droite. */
