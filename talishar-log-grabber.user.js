@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.15.2
+// @version      1.15.3
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.15.2';
+  const VERSION = '1.15.3';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -1133,6 +1133,14 @@
     if (Array.isArray(g.chatLog)) {
       out.push('', 'CHATLOG (' + g.chatLog.length + ' entrées, HTML retiré):');
       g.chatLog.forEach((e, i) => out.push('  [' + i + '] ' + strip(e)));
+      // Dump VERBATIM (HTML NON retiré) des entrées carte (played/blocked/pitched)
+      // → pour voir quel identifiant/couleur d'impression y est encodé.
+      const rawHits = [];
+      g.chatLog.forEach((e, i) => {
+        const t = String(e == null ? '' : e);
+        if (/\b(played|blocked with|pitched|activated)\b/i.test(strip(t)) && rawHits.length < 6) rawHits.push('  [' + i + '] ' + t);
+      });
+      if (rawHits.length) out.push('', 'CHATLOG BRUT (verbatim, entrées carte — HTML CONSERVÉ):', ...rawHits);
     } else out.push('', 'chatLog: ABSENT');
     // events structurés (peut contenir les tours / la structure de combat).
     if (g.events !== undefined) { try { out.push('', 'events: ' + JSON.stringify(g.events).slice(0, 1200)); } catch (e) { out.push('', 'events: (non sérialisable)'); } }
