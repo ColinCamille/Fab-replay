@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test couleur cartes — Chain Replay</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: #0e1016; color: #e7e9f0; padding: 14px; }
+  h1 { font-size: 1.15rem; margin: 0 0 4px; }
+  p.sub { margin: 0 0 16px; opacity: .7; font-size: .85rem; }
+  .card { background: #171a24; border: 1px solid #262b3a; border-radius: 10px; padding: 12px; margin-bottom: 16px; }
+  .card h2 { font-size: 1rem; margin: 0 0 10px; }
+  .row { display: flex; gap: 10px; }
+  .pitch { flex: 1; text-align: center; }
+  .pitch .lbl { font-size: .78rem; opacity: .8; margin-bottom: 4px; }
+  .pitch .lbl b { display: block; font-size: .95rem; opacity: 1; }
+  .thumb { width: 100%; aspect-ratio: 63/88; border-radius: 6px; background: #0b0d13; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #2a3040; }
+  .thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .thumb .none { font-size: .72rem; opacity: .5; }
+  .c1 { color: #e0524b; } .c2 { color: #e6b83f; } .c3 { color: #5aa9ef; }
+  .verdict { margin-top: 10px; font-size: .82rem; padding: 8px 10px; border-radius: 8px; }
+  .ok { background: #16351f; color: #8ee6a0; } .ko { background: #3a1b1b; color: #ff9b9b; }
+  details { margin-top: 22px; }
+  summary { cursor: pointer; opacity: .8; }
+  textarea { width: 100%; height: 40vh; margin-top: 8px; background: #0b0d13; color: #cdd3e0; border: 1px solid #2a3040; border-radius: 8px; font: 12px/1.35 monospace; padding: 8px; box-sizing: border-box; }
+  button { background: #2a3350; color: #dfe6ff; border: 0; border-radius: 8px; padding: 10px 14px; font-size: .9rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>Test couleur des cartes</h1>
+<p class="sub">Pour chaque carte, l'image renvoyée quand on demande explicitement le pitch <b>1 (rouge)</b>, <b>2 (jaune)</b>, <b>3 (bleu)</b>. Si les 3 diffèrent → la sélection par couleur marche.</p>
+<div id="out"></div>
+
+<details>
+  <summary>Diagnostic brut goagain (à copier si ça ne marche pas)</summary>
+  <button id="copy">Copier le diagnostic</button>
+  <textarea id="raw" readonly></textarea>
+</details>
+
+<script src="js/images.js?v=148"></script>
+<script>
+(async function () {
+  const CARDS = ['Sink Below', 'Scar for a Scar', 'Lightning Press', 'Snatch'];
+  const PITCH = [{ n: 1, name: 'rouge', cls: 'c1' }, { n: 2, name: 'jaune', cls: 'c2' }, { n: 3, name: 'bleu', cls: 'c3' }];
+  const out = document.getElementById('out');
+  const diag = { note: 'schéma goagain par carte', cards: {} };
+
+  for (const name of CARDS) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = '<h2>' + name + '</h2>';
+    const row = document.createElement('div');
+    row.className = 'row';
+    const urls = {};
+    for (const p of PITCH) {
+      const col = document.createElement('div');
+      col.className = 'pitch';
+      col.innerHTML = '<div class="lbl ' + p.cls + '">pitch ' + p.n + '<b>' + p.name + '</b></div>'
+        + '<div class="thumb"><span class="none">…</span></div>';
+      row.appendChild(col);
+      const thumb = col.querySelector('.thumb');
+      try {
+        const url = await window.CardImages.resolveCardImage(name, p.n);
+        urls[p.n] = url || null;
+        thumb.innerHTML = url ? '<img src="' + url + '" alt="">' : '<span class="none">— aucune —</span>';
+      } catch (e) { urls[p.n] = 'ERR:' + e.message; thumb.innerHTML = '<span class="none">err</span>'; }
+    }
+    card.appendChild(row);
+    const distinct = new Set([urls[1], urls[2], urls[3]].filter(Boolean));
+    const verdict = document.createElement('div');
+    if (distinct.size >= 2) { verdict.className = 'verdict ok'; verdict.textContent = '✓ les couleurs donnent des images différentes'; }
+    else { verdict.className = 'verdict ko'; verdict.textContent = '✗ même image pour tous les pitchs — goagain n\'expose pas la couleur ici'; }
+    card.appendChild(verdict);
+    out.appendChild(card);
+
+    // Diagnostic brut : le JSON goagain (schéma) pour cette carte.
+    try {
+      const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(name) + '&limit=15');
+      const json = await res.json();
+      const list = json.data || json.cards || json.results || [];
+      diag.cards[name] = { httpOk: res.ok, count: list.length, sample: list.slice(0, 6).map(c => ({ name: c.name, pitch: c.pitch, pitchValue: c.pitchValue, set: c.set || c.set_id, num: c.number || c.card_number, keys: Object.keys(c).slice(0, 20) })), resolved: urls };
+    } catch (e) { diag.cards[name] = { fetchError: String(e) }; }
+  }
+
+  document.getElementById('raw').value = JSON.stringify(diag, null, 1);
+  document.getElementById('copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(document.getElementById('raw').value); document.getElementById('copy').textContent = 'Copié ✓'; } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
