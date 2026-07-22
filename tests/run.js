@@ -515,6 +515,27 @@ const colClash = BR.buildTimeline(colGame).steps.map(s => s.stage).find(st => st
 assert(colClash && colClash.atk && colClash.atk.cp === 3, 'couleur Table : attaquant Lightning Press → bleu (cp 3)');
 assert(colClash && (colClash.blocks || []).some(b => b.nm === 'Sink Below' && b.cp === 2), 'couleur Table : bloc Sink Below → jaune (cp 2)');
 
+// ---------- Undo : action annulée retirée (+ re-log dédupliqué) ----------
+console.log('Undo —');
+(function () {
+  const undoRaw = '=== Talishar game 77 — test ===\n\n' +
+    "Ehecalt's turn 1 has begun.\n" +
+    "Ehecalt activated Hunter's Klaive\n" +
+    'Ehecalt activated Flick Knives\n' +
+    'Ehecalt undid their last action\n' +   // annule Flick Knives (une seule fois)
+    'Ehecalt played Tarantula Toxin\n' +
+    'Ehecalt played Sting\n' +
+    'Ehecalt undid their last action\n' +   // annule Sting…
+    'Ehecalt played Sting\n' +              // …puis re-log de Sting
+    '\n=== META ===\nme: Ehecalt\n';
+  const ur = Parser.parse(undoRaw);
+  const t1 = ur.turns.find(t => t.turnNumber === 1);
+  const cards = (t1.events || []).filter(e => e.type === 'played' || e.type === 'activated').map(e => e.card);
+  assert(!cards.includes('Flick Knives'), 'undo: action annulée une seule fois (Flick Knives) retirée');
+  eq(cards.filter(c => c === 'Sting').length, 1, 'undo: re-log → une seule occurrence de Sting');
+  assert(cards.includes("Hunter's Klaive") && cards.includes('Tarantula Toxin'), 'undo: les actions NON annulées restent');
+})();
+
 // ---------- Formes de héros par tour (Arakni se transforme) ----------
 console.log('Hero forms —');
 (function () {
