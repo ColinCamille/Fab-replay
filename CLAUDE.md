@@ -116,6 +116,11 @@ des parties d'un **ami accepté**).
   et résoudre les conflits de `?v=` en gardant la version la plus haute.
 - **Théâtre d'erreur** : ne jamais afficher une mauvaise donnée « au cas où » —
   mieux vaut pas d'image/pas de valeur qu'une fausse (cf. résolution d'images).
+- **Scratchpad** : fichiers temporaires (scripts de test, screenshots Playwright,
+  clones Talishar…) → dans le **scratchpad de session**, **JAMAIS** committés
+  dans le repo (un dossier `undefined/` de screenshots s'y était glissé une fois).
+- **Au démarrage d'une session** : `git log --oneline -20` pour voir le travail
+  récent (une 2ᵉ session Claude avance parfois en parallèle sur `main`).
 
 ## 7. Savoir Talishar (durement acquis — ne pas re-deviner)
 
@@ -138,6 +143,13 @@ des parties d'un **ami accepté**).
 - **`END GAME STATS`** (JSON) : stats officielles Talishar de fin de partie
   (`byPlayer.{1,2}.cardResults` avec `cardId` coloré + `pitchValue`, résultat,
   tours…). Dispo seulement si la partie est **terminée** (écran « Game Summary »).
+- **API goagain** (`api.goagain.dev/v1/cards?name=…`) — forme de la réponse :
+  `data[]` avec **un objet par impression/couleur** d'un même nom (champs `color`,
+  `pitch` en **chaîne** `"1"/"2"/"3"`, et images dans **`printings[].image_url`**).
+  D'où : pour la couleur d'une carte, on filtre par `pitch` ; pour un héros
+  multi-formes, plusieurs objets (« Arakni », « Arakni, Funnel Web »…, certains de
+  type `Demi-Hero`). C'est notre SEULE source d'images. **Bloquée en sandbox**
+  (cf. §8) → faire coller la réponse par l'utilisateur si besoin de vérifier.
 
 ## 8. Pièges connus
 
@@ -214,3 +226,21 @@ git clone --depth 1 https://github.com/Talishar/Talishar-FE.git   # front (React
 
 > Rappel réseau : cloner Talishar via GitHub **marche** ; interroger **goagain.dev**
 > ou le **CDN d'images** Talishar **ne marche pas** dans le sandbox (cf. §8).
+
+## 12. Garde-fous « Talishar a changé de format » (existant — ne pas réinventer)
+
+Le format des logs Talishar peut changer sans prévenir. Deux filets de sécurité
+sont **déjà en place** — les maintenir/étendre plutôt que refaire :
+
+- **Parser → `record.health`** : invariants vérifiés au parsing (ex. beaucoup
+  d'actions mais **aucun tour** découpé, marqueur de tour non reconnu, joueur de
+  tour inattendu, duplication du journal, joueurs non résolus). `health.ok=false`
+  + `health.issues[]` si quelque chose cloche → l'app peut afficher un bandeau.
+- **Grabber → `runCanary()`** : à la **capture**, vérifie les hypothèses sur
+  `state.game` (ex. `gameInfo.playerID` présent, marqueur `[[TURN_START]]` présent
+  quand il y a ≥2 fins de tour). Si cassé, message d'alerte dans le widget +
+  le **chatLog brut est conservé** dans l'export pour déboguer.
+- Débogage terrain : bouton **🔍 Diag** du grabber = dump de `state.game`
+  (clés, `chatLog` verbatim des actions carte, objets carte complets,
+  `activeChainLink`…) → c'est ce qu'il faut demander à l'utilisateur quand un
+  format semble avoir changé.
