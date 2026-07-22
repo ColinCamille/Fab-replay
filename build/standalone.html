@@ -2360,31 +2360,26 @@ header .brand{margin-bottom:0}
       t.durationSec = (t.startTs != null && t.endTs != null) ? (t.endTs - t.startTs) : null;
     });
 
-    // 6bis) Annulations (undo) : quand un joueur clique « undo » dans Talishar,
-    // le jeu rembobine et RE-LOGUE la séquence, ce qui fait réapparaître une
-    // carte jouée comme si elle l'avait été deux fois. On retire l'occurrence
-    // ANTÉRIEURE d'une même carte jouée/activée par le même joueur UNIQUEMENT
-    // si un événement 'undo' s'intercale entre les deux occurrences — on ne
-    // fusionne donc jamais deux copies réellement jouées (cas légitime, sans
-    // undo entre elles). On garde la dernière occurrence (celle qui a résolu).
+    // 6bis) Annulations (undo) : « undid their last action » ANNULE la DERNIÈRE
+    // action (jouée / activée / pitchée) du même joueur avant lui, non déjà
+    // retirée. Un seul traitement couvre les deux cas Talishar :
+    //   · annulation simple : action X puis undo → on retire X. (Avant, une
+    //     action annulée UNE seule fois restait affichée — ex. « Flick Knives
+    //     activé puis annulé » apparaissait à tort au tour 0.)
+    //   · re-log : X, undo, X (rejouée) → on retire l'occurrence ANTÉRIEURE ;
+    //     celle re-jouée APRÈS l'undo reste (comportement inchangé).
     turns.forEach(t => {
       const ev = t.events;
-      const undoIdx = [];
-      ev.forEach((e, i) => { if (e.type === 'undo') undoIdx.push(i); });
-      if (!undoIdx.length) return;
       const remove = new Set();
-      for (let j = 0; j < ev.length; j++) {
-        const e = ev[j];
-        if (e.type !== 'played' && e.type !== 'activated') continue;
-        for (let i = 0; i < j; i++) {
+      const isAction = p => p.type === 'played' || p.type === 'activated' || p.type === 'pitched';
+      ev.forEach((e, u) => {
+        if (e.type !== 'undo') return;
+        for (let i = u - 1; i >= 0; i--) {
           if (remove.has(i)) continue;
           const p = ev[i];
-          if (p.type === e.type && p.player === e.player && normName(p.card || '') === normName(e.card || '')
-              && undoIdx.some(u => u > i && u < j)) {
-            remove.add(i); break;
-          }
+          if (isAction(p) && (!e.player || p.player === e.player)) { remove.add(i); break; }
         }
-      }
+      });
       if (remove.size) t.events = ev.filter((_, i) => !remove.has(i));
     });
 
@@ -5908,8 +5903,8 @@ header .brand{margin-bottom:0}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=150"></script>
-<script src="js/cloud.js?v=150"></script>
+<script src="js/cloud-config.js?v=151"></script>
+<script src="js/cloud.js?v=151"></script>
 
 <script>
 // ============================================================
