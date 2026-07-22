@@ -105,9 +105,20 @@
     return { isEquipment: false, label: null };
   }
 
-  async function resolveCardMeta(name) {
+  // pitch (optionnel) = 1 (rouge) / 2 (jaune) / 3 (bleu). Beaucoup de cartes
+  // existent en 3 impressions de MÊME nom : sans le pitch on renvoyait toujours
+  // la 1re (rouge). Fourni, on choisit l'impression dont le pitch correspond.
+  function cardPitch(c) {
+    const v = (c && (c.pitch != null ? c.pitch : (c.pitchValue != null ? c.pitchValue : c.pitch_value)));
+    const n = Number(v);
+    return isFinite(n) ? n : null;
+  }
+  async function resolveCardMeta(name, pitch) {
     if (!name) return { image: null, isEquipment: false };
-    if (cardMetaCache[name]) return cardMetaCache[name];
+    pitch = (pitch === 1 || pitch === 2 || pitch === 3) ? pitch : null;
+    // Clé de cache distincte par pitch → les 3 couleurs coexistent sans s'écraser.
+    const cacheKey = pitch ? (name + '#p' + pitch) : name;
+    if (cardMetaCache[cacheKey]) return cardMetaCache[cacheKey];
     const strip = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');   // ignore ponctuation/espaces/casse
     const target = strip(name);
     const query = async q => {
@@ -118,7 +129,15 @@
         return json.data || json.cards || json.results || [];
       } catch (e) { return []; }
     };
-    const exact = list => list.find(c => strip(c.name) === target) || null;   // ponctuation ignorée
+    // Correspondance EXACTE (ponctuation ignorée). Si un pitch est demandé et
+    // qu'une impression de ce pitch existe, on la privilégie ; sinon on retombe
+    // sur la 1re impression du bon nom (comportement historique).
+    const exact = list => {
+      const matches = list.filter(c => strip(c.name) === target);
+      if (!matches.length) return null;
+      if (pitch) { const byPitch = matches.find(c => cardPitch(c) === pitch); if (byPitch) return byPitch; }
+      return matches[0];
+    };
     try {
       // Le grabber perd parfois la ponctuation du nom (« Fyendal's Spring Tunic »
       // stocké « Fyendals Spring Tunic », « Scorpio, Comet Tail » → « Scorpio
@@ -141,18 +160,18 @@
       const image = best ? findImageUrl(best) : null;
       const typeInfo = best ? findCardTypeInfo(best) : { isEquipment: false, label: null };
       const meta = { image: image || null, isEquipment: typeInfo.isEquipment, typeLabel: typeInfo.label };
-      cardMetaCache[name] = meta;
+      cardMetaCache[cacheKey] = meta;
       saveMetaCache();
       return meta;
     } catch (e) {
       console.warn('[images] métadonnées introuvables pour', name, e);
       const meta = { image: null, isEquipment: false, typeLabel: null };
-      cardMetaCache[name] = meta;
+      cardMetaCache[cacheKey] = meta;
       saveMetaCache();
       return meta;
     }
   }
-  async function resolveCardImage(name) { return (await resolveCardMeta(name)).image; }
+  async function resolveCardImage(name, pitch) { return (await resolveCardMeta(name, pitch)).image; }
 
   // Image de héros pour le carrousel/avatars : privilégie la version « Marvel »
   // (full-art) si l'API en renvoie une, sinon l'illustration standard. Cache dédié.

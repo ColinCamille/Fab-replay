@@ -363,6 +363,9 @@
     const rawChatRes = sliceBlock(text, '=== RAW CHATLOG'); text = rawChatRes.rest;
     let rawChatLog = null;
     if (rawChatRes.body) { try { rawChatLog = JSON.parse(rawChatRes.body.trim().split('\n')[0]); } catch (e) { /* garde null */ } }
+    // Files couleur par nom (rouge/jaune/bleu…), extraites du chatLog brut. Vides
+    // pour les vieilles parties (DOM, sans RAW CHATLOG) → repli sans couleur.
+    const colorQueues = buildColorQueues(rawChatLog);
 
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
@@ -443,6 +446,16 @@
       }
       const evt = classifyLine(l);
       if (lineTs && lineTs[idx] != null) evt.ts = lineTs[idx];
+      // Couleur exacte par occurrence : on dépile la file FIFO du nom concerné
+      // (même ordre que le journal brut). played/pitched/activated = 1 carte ;
+      // blocked = plusieurs. Absent → carte mono-couleur ou vieille partie.
+      if (evt.type === 'played' || evt.type === 'pitched' || evt.type === 'activated') {
+        const c = takeColor(colorQueues, evt.card);
+        if (c) { evt.cardId = c.cardId; if (c.pitch) evt.pitch = c.pitch; }
+      } else if (evt.type === 'blocked' && Array.isArray(evt.cards)) {
+        evt.cardIds = evt.cards.map(nm => { const c = takeColor(colorQueues, nm); return c ? c.cardId : null; });
+        evt.pitches = evt.cards.map((nm, i) => { const id = evt.cardIds[i]; return id ? pitchFromCardId(id) : null; });
+      }
       current.events.push(evt);
       current._lineIdx.push(idx);
     });
@@ -840,5 +853,54 @@
       .trim();
   }
 
-  return { SCHEMA_VERSION, PARSER_VERSION, parse, classifyLine, formatDuration, EQ_SLOTS, normName };
+  // ----------------------------------------------------------
+  // Couleur / impression exacte des cartes (rouge/jaune/bleu…)
+  // ----------------------------------------------------------
+  // Talishar identifie chaque impression par un cardId suffixé de la couleur
+  // (« scar_for_a_scar_red », « ..._yellow », « ..._blue »). Le pitch en découle :
+  // rouge=1, jaune=2, bleu=3. Les cartes mono-impression (armes, équipements,
+  // héros, jetons) n'ont pas de suffixe → pitch inconnu (null), couleur unique.
+  function pitchFromCardId(id) {
+    if (!id) return null;
+    if (/_red$/.test(id)) return 1;
+    if (/_yellow$/.test(id)) return 2;
+    if (/_blue$/.test(id)) return 3;
+    return null;
+  }
+
+  // Construit, à partir du chatLog BRUT (verbatim, HTML conservé), une file FIFO
+  // par nom de carte : chaque entrée d'ACTION (played/pitched/activated/blocked
+  // with) porte le(s) <span onmouseover="ShowDetail(event,'…/<cardId>.webp')">Nom
+  // </span> de la (des) carte(s) agie(s). On récupère { cardId, pitch } dans
+  // l'ordre du journal → aligné 1:1 avec les événements (mêmes entrées, même
+  // ordre), ce qui donne la couleur EXACTE par occurrence (gère la même carte
+  // jouée en deux couleurs différentes dans la même partie).
+  const SHOWDETAIL_RE = /ShowDetail\([^)]*?\/([a-z0-9_]+)\.webp[^)]*\)[^>]*>([^<]+)</gi;
+  const ACTION_VERB_RE = /\b(?:played|pitched|activated|blocked with)\b/;
+  function buildColorQueues(rawChatLog) {
+    const queues = new Map();
+    if (!Array.isArray(rawChatLog)) return queues;
+    for (const entry of rawChatLog) {
+      const raw = String(entry == null ? '' : entry);
+      const plain = raw.replace(/<[^>]+>/g, '');
+      if (!ACTION_VERB_RE.test(plain)) continue;   // seulement les vraies actions
+      SHOWDETAIL_RE.lastIndex = 0;
+      let m;
+      while ((m = SHOWDETAIL_RE.exec(raw))) {
+        const cardId = m[1], name = m[2];
+        const key = normName(name);
+        if (!key) continue;
+        if (!queues.has(key)) queues.set(key, []);
+        queues.get(key).push({ cardId, pitch: pitchFromCardId(cardId) });
+      }
+    }
+    return queues;
+  }
+  // Dépile la prochaine impression connue pour ce nom (ou null).
+  function takeColor(queues, name) {
+    const q = queues.get(normName(name));
+    return (q && q.length) ? q.shift() : null;
+  }
+
+  return { SCHEMA_VERSION, PARSER_VERSION, parse, classifyLine, formatDuration, EQ_SLOTS, normName, pitchFromCardId };
 });

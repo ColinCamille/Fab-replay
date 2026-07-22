@@ -118,6 +118,34 @@ assert(rawRec.health.ok === true, 'RAW CHATLOG : le bloc verbatim ne pollue pas 
 assert(Array.isArray(rawRec.rawChatLog) && rawRec.rawChatLog.length === 8, 'RAW CHATLOG : exposé et parsé (source pure conservée)');
 assert(!rawRec.turns.some(t => (t.events || []).some(e => e.card === 'A')), 'RAW CHATLOG : « played A » du bloc brut n\'est pas compté comme événement');
 
+// Couleur/impression exacte des cartes (rouge/jaune/bleu) depuis le chatLog brut.
+// Cas clé : la MÊME carte jouée en deux couleurs différentes dans la même partie
+// → distinguée par occurrence (impossible avec un simple agrégat).
+const sd = (id, nm) => "<span onmouseover=\"ShowDetail(event,'./WebpImages/" + id + ".webp')\">" + nm + "</span>";
+const colorRaw = [
+  'Player 1 played ' + sd('scar_for_a_scar_red', 'Scar for a Scar'),
+  'Player 1 played ' + sd('lightning_press_red', 'Lightning Press'),
+  'Player 1 pitched ' + sd('sink_below_blue', 'Sink Below'),
+  'Player 1 played ' + sd('sink_below_yellow', 'Sink Below'),
+  'Player 1 blocked with ' + sd('unmovable_red', 'Unmovable') + ', ' + sd('sink_below_red', 'Sink Below')
+];
+const withColor = '=== Talishar game 50 — test ===\n\n' +
+  "Ehecalt's turn 1 has begun.\n" +
+  'Ehecalt played Scar for a Scar\nEhecalt played Lightning Press\nEhecalt pitched Sink Below\nEhecalt played Sink Below\nEhecalt blocked with Unmovable, Sink Below\n' +
+  '\n=== RAW CHATLOG (state.game.chatLog, verbatim) ===\n' + JSON.stringify(colorRaw) + '\n';
+const colRec = Parser.parse(withColor);
+const colEvs = [];
+colRec.turns.forEach(t => (t.events || []).forEach(e => colEvs.push(e)));
+const evScar = colEvs.find(e => e.type === 'played' && e.card === 'Scar for a Scar');
+assert(evScar && evScar.cardId === 'scar_for_a_scar_red' && evScar.pitch === 1, 'couleur : Scar for a Scar → rouge (pitch 1)');
+const evPitchSink = colEvs.find(e => e.type === 'pitched' && e.card === 'Sink Below');
+assert(evPitchSink && evPitchSink.pitch === 3, 'couleur : Sink Below PITCHÉ → bleu (pitch 3)');
+const evPlaySink = colEvs.find(e => e.type === 'played' && e.card === 'Sink Below');
+assert(evPlaySink && evPlaySink.pitch === 2, 'couleur : Sink Below JOUÉ ensuite → jaune (pitch 2) — désambiguïsation par occurrence');
+const evBlock = colEvs.find(e => e.type === 'blocked');
+assert(evBlock && Array.isArray(evBlock.pitches) && evBlock.pitches[0] === 1 && evBlock.pitches[1] === 1, 'couleur : blocs (défense) colorés par carte (Unmovable rouge, Sink Below rouge)');
+assert(Parser.pitchFromCardId('x_yellow') === 2 && Parser.pitchFromCardId('wrenchtastic') === null, 'couleur : pitchFromCardId (suffixe → pitch, mono-impression → null)');
+
 // Miroir : la main ne doit PAS avoir été filtrée par les cartes adverses.
 const t1 = rec.turns.find(t => t.player === 'Ehecalt' && t.turnNumber === 1);
 assert(t1 && Array.isArray(t1.hand) && t1.hand.indexOf('Bloodrush Bellow') >= 0, 'main tour 1 conservée (miroir)');
