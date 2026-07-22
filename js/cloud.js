@@ -79,13 +79,17 @@
     notify();
   }
 
-  // Lecture des parties de l'utilisateur connecté. La RLS garantit qu'on ne
-  // reçoit QUE les siennes — pas besoin de filtrer par user_id côté client.
+  // Lecture des parties de l'utilisateur connecté. On filtre EXPLICITEMENT sur
+  // son user_id : depuis la feature amis, la RLS (policy games_select_friends)
+  // autorise aussi la lecture des parties d'un ami — sans ce filtre, elles
+  // seraient fusionnées à tort dans MA bibliothèque (les parties d'un ami se
+  // consultent uniquement via fetchFriendGames, en mémoire).
   async function fetchGames() {
     if (!client || !currentUser) return [];
     const { data, error } = await client
       .from('games')
       .select('game_id, raw, my_hero, opp_hero, format, captured_at, meta')
+      .eq('user_id', currentUser.id)
       .order('captured_at', { ascending: true });
     if (error) throw error;
     return data || [];
