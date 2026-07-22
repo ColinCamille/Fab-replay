@@ -31,6 +31,17 @@ function json(obj: unknown, status = 200): Response {
   });
 }
 
+// Extrait « mon héros » (format « Nom (id) ») du bloc META du log brut.
+// Sert de FALLBACK quand le grabber n'envoie pas encore my_hero (anciennes
+// versions) : ainsi la colonne my_hero reste correcte pour tous les joueurs.
+function extractMyHero(raw: string): string | null {
+  const m = String(raw).match(/^my_hero:\s*(.*)$/m);
+  if (!m) return null;
+  const v = m[1].trim();
+  if (!v || v === "(non capté)" || v === "(vide)" || v === "(non capturé)") return null;
+  return v;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -38,9 +49,14 @@ Deno.serve(async (req: Request) => {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "bad json" }, 400); }
 
-  const { device_token, game_id, raw, me, opp_hero, format, captured_at } = body || {};
+  // NB : le champ `me` (pseudo) envoyé par d'anciens grabbers est simplement
+  // ignoré ici (colonne supprimée) — aucun besoin de le déstructurer.
+  const { device_token, game_id, raw, my_hero, opp_hero, format, captured_at } = body || {};
   if (!device_token || !game_id || !raw) return json({ error: "missing fields" }, 400);
   if (!/^\d+$/.test(String(game_id))) return json({ error: "invalid game_id" }, 400);
+
+  // my_hero : valeur envoyée par le grabber, sinon repli sur le log brut.
+  const myHero = (my_hero ?? null) || extractMyHero(String(raw));
 
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -59,7 +75,7 @@ Deno.serve(async (req: Request) => {
     user_id: dt.user_id,
     game_id: String(game_id),
     raw: String(raw),
-    me: me ?? null,
+    my_hero: myHero,
     opp_hero: opp_hero ?? null,
     format: format ?? null,
     captured_at: captured_at ?? null,

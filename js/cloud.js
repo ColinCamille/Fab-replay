@@ -17,7 +17,7 @@
  *   getUser()              → user courant (ou null)
  *   signIn(email)          → envoie le lien magique
  *   signOut()              → déconnecte
- *   fetchGames()           → [{game_id, raw, me, opp_hero, format, captured_at}]
+ *   fetchGames()           → [{game_id, raw, my_hero, opp_hero, format, captured_at}]
  *   createPairing(label)   → { token } (appairage 1-clic du grabber, phase 2)
  * ============================================================ */
 (function (root) {
@@ -85,7 +85,7 @@
     if (!client || !currentUser) return [];
     const { data, error } = await client
       .from('games')
-      .select('game_id, raw, me, opp_hero, format, captured_at, meta')
+      .select('game_id, raw, my_hero, opp_hero, format, captured_at, meta')
       .order('captured_at', { ascending: true });
     if (error) throw error;
     return data || [];
@@ -116,7 +116,7 @@
   // Migration : envoie une liste de parties locales vers le compte. L'app est
   // authentifiée → insertion directe dans `games` (RLS insert_own : user_id =
   // auth.uid()). Upsert par lots, dédup par (user_id, game_id) → réexécutable
-  // sans créer de doublon. `list` = [{game_id, raw, me, opp_hero, format, captured_at}].
+  // sans créer de doublon. `list` = [{game_id, raw, my_hero, opp_hero, format, captured_at}].
   async function uploadGames(list) {
     if (!client || !currentUser) throw new Error('Non connecté.');
     const rows = (list || [])
@@ -124,7 +124,7 @@
         user_id: currentUser.id,
         game_id: String(g.game_id || ''),
         raw: g.raw,
-        me: g.me || null,
+        my_hero: g.my_hero || null,
         opp_hero: g.opp_hero || null,
         format: g.format || null,
         captured_at: g.captured_at || null,

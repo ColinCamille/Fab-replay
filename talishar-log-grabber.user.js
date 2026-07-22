@@ -1325,7 +1325,7 @@
           device_token: cfg(SB.token),
           game_id: String(id),
           raw: logText(),
-          me: meta.myName || null,
+          my_hero: meta.myHero || null,     // MON héros (symétrique de opp_hero) — source du dashboard
           opp_hero: meta.oppHero || null,
           format: meta.format || null,
           captured_at: meta.capturedAt || new Date().toISOString()

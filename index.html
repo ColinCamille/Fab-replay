@@ -448,7 +448,7 @@
         const list = entries.map(e => ({
           game_id: (e.record && e.record.source && e.record.source.gameId) || e.gameId,
           raw: e.raw,
-          me: (e.record && e.record.myName) || null,
+          my_hero: (e.record && e.record.players && e.record.players.me && e.record.players.me.hero) || null,
           opp_hero: (e.record && e.record.players && e.record.players.opp && e.record.players.opp.hero) || null,
           format: (e.record && e.record.format) || null,
           captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null,
@@ -556,7 +556,7 @@
     const list = entries.map(e => ({
       game_id: (e.record && e.record.source && e.record.source.gameId) || e.gameId,
       raw: e.raw,
-      me: (e.record && e.record.myName) || null,
+      my_hero: (e.record && e.record.players && e.record.players.me && e.record.players.me.hero) || null,
       opp_hero: (e.record && e.record.players && e.record.players.opp && e.record.players.opp.hero) || null,
       format: (e.record && e.record.format) || null,
       captured_at: (e.record && e.record.source && e.record.source.capturedAt) || e.capturedAt || null,
@@ -600,6 +600,15 @@
       if (!row || !row.raw) continue;
       let rec;
       try { rec = window.TalisharParser.parse(row.raw); } catch (e) { continue; }
+      // Filet de sécurité : si le parseur n'a pas résolu un héros (log atypique),
+      // on complète depuis les colonnes dénormalisées du compte (my_hero/opp_hero,
+      // fiables). Ces colonnes stockent « Nom (id) » → on retire l'id pour coller
+      // au format du parseur (nom seul).
+      const stripId = s => s ? String(s).replace(/\s*\([^)]*\)\s*$/, '').trim() : s;
+      if (rec.players) {
+        if (rec.players.me && !rec.players.me.hero && row.my_hero) rec.players.me.hero = stripId(row.my_hero);
+        if (rec.players.opp && !rec.players.opp.hero && row.opp_hero) rec.players.opp.hero = stripId(row.opp_hero);
+      }
       const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
       if (!gid) continue;
       if (!have.has(gid) && !window.FabDB.isDeleted(gid)) {
