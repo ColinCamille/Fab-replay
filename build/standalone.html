@@ -2095,6 +2095,9 @@ header .brand{margin-bottom:0}
     const rawChatRes = sliceBlock(text, '=== RAW CHATLOG'); text = rawChatRes.rest;
     let rawChatLog = null;
     if (rawChatRes.body) { try { rawChatLog = JSON.parse(rawChatRes.body.trim().split('\n')[0]); } catch (e) { /* garde null */ } }
+    // Files couleur par nom (rouge/jaune/bleu…), extraites du chatLog brut. Vides
+    // pour les vieilles parties (DOM, sans RAW CHATLOG) → repli sans couleur.
+    const colorQueues = buildColorQueues(rawChatLog);
 
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
@@ -2175,6 +2178,16 @@ header .brand{margin-bottom:0}
       }
       const evt = classifyLine(l);
       if (lineTs && lineTs[idx] != null) evt.ts = lineTs[idx];
+      // Couleur exacte par occurrence : on dépile la file FIFO du nom concerné
+      // (même ordre que le journal brut). played/pitched/activated = 1 carte ;
+      // blocked = plusieurs. Absent → carte mono-couleur ou vieille partie.
+      if (evt.type === 'played' || evt.type === 'pitched' || evt.type === 'activated') {
+        const c = takeColor(colorQueues, evt.card);
+        if (c) { evt.cardId = c.cardId; if (c.pitch) evt.pitch = c.pitch; }
+      } else if (evt.type === 'blocked' && Array.isArray(evt.cards)) {
+        evt.cardIds = evt.cards.map(nm => { const c = takeColor(colorQueues, nm); return c ? c.cardId : null; });
+        evt.pitches = evt.cards.map((nm, i) => { const id = evt.cardIds[i]; return id ? pitchFromCardId(id) : null; });
+      }
       current.events.push(evt);
       current._lineIdx.push(idx);
     });
@@ -2572,7 +2585,56 @@ header .brand{margin-bottom:0}
       .trim();
   }
 
-  return { SCHEMA_VERSION, PARSER_VERSION, parse, classifyLine, formatDuration, EQ_SLOTS, normName };
+  // ----------------------------------------------------------
+  // Couleur / impression exacte des cartes (rouge/jaune/bleu…)
+  // ----------------------------------------------------------
+  // Talishar identifie chaque impression par un cardId suffixé de la couleur
+  // (« scar_for_a_scar_red », « ..._yellow », « ..._blue »). Le pitch en découle :
+  // rouge=1, jaune=2, bleu=3. Les cartes mono-impression (armes, équipements,
+  // héros, jetons) n'ont pas de suffixe → pitch inconnu (null), couleur unique.
+  function pitchFromCardId(id) {
+    if (!id) return null;
+    if (/_red$/.test(id)) return 1;
+    if (/_yellow$/.test(id)) return 2;
+    if (/_blue$/.test(id)) return 3;
+    return null;
+  }
+
+  // Construit, à partir du chatLog BRUT (verbatim, HTML conservé), une file FIFO
+  // par nom de carte : chaque entrée d'ACTION (played/pitched/activated/blocked
+  // with) porte le(s) <span onmouseover="ShowDetail(event,'…/<cardId>.webp')">Nom
+  // </span> de la (des) carte(s) agie(s). On récupère { cardId, pitch } dans
+  // l'ordre du journal → aligné 1:1 avec les événements (mêmes entrées, même
+  // ordre), ce qui donne la couleur EXACTE par occurrence (gère la même carte
+  // jouée en deux couleurs différentes dans la même partie).
+  const SHOWDETAIL_RE = /ShowDetail\([^)]*?\/([a-z0-9_]+)\.webp[^)]*\)[^>]*>([^<]+)</gi;
+  const ACTION_VERB_RE = /\b(?:played|pitched|activated|blocked with)\b/;
+  function buildColorQueues(rawChatLog) {
+    const queues = new Map();
+    if (!Array.isArray(rawChatLog)) return queues;
+    for (const entry of rawChatLog) {
+      const raw = String(entry == null ? '' : entry);
+      const plain = raw.replace(/<[^>]+>/g, '');
+      if (!ACTION_VERB_RE.test(plain)) continue;   // seulement les vraies actions
+      SHOWDETAIL_RE.lastIndex = 0;
+      let m;
+      while ((m = SHOWDETAIL_RE.exec(raw))) {
+        const cardId = m[1], name = m[2];
+        const key = normName(name);
+        if (!key) continue;
+        if (!queues.has(key)) queues.set(key, []);
+        queues.get(key).push({ cardId, pitch: pitchFromCardId(cardId) });
+      }
+    }
+    return queues;
+  }
+  // Dépile la prochaine impression connue pour ce nom (ou null).
+  function takeColor(queues, name) {
+    const q = queues.get(normName(name));
+    return (q && q.length) ? q.shift() : null;
+  }
+
+  return { SCHEMA_VERSION, PARSER_VERSION, parse, classifyLine, formatDuration, EQ_SLOTS, normName, pitchFromCardId };
 });
 
 </script>
@@ -2684,9 +2746,20 @@ header .brand{margin-bottom:0}
     return { isEquipment: false, label: null };
   }
 
-  async function resolveCardMeta(name) {
+  // pitch (optionnel) = 1 (rouge) / 2 (jaune) / 3 (bleu). Beaucoup de cartes
+  // existent en 3 impressions de MÊME nom : sans le pitch on renvoyait toujours
+  // la 1re (rouge). Fourni, on choisit l'impression dont le pitch correspond.
+  function cardPitch(c) {
+    const v = (c && (c.pitch != null ? c.pitch : (c.pitchValue != null ? c.pitchValue : c.pitch_value)));
+    const n = Number(v);
+    return isFinite(n) ? n : null;
+  }
+  async function resolveCardMeta(name, pitch) {
     if (!name) return { image: null, isEquipment: false };
-    if (cardMetaCache[name]) return cardMetaCache[name];
+    pitch = (pitch === 1 || pitch === 2 || pitch === 3) ? pitch : null;
+    // Clé de cache distincte par pitch → les 3 couleurs coexistent sans s'écraser.
+    const cacheKey = pitch ? (name + '#p' + pitch) : name;
+    if (cardMetaCache[cacheKey]) return cardMetaCache[cacheKey];
     const strip = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');   // ignore ponctuation/espaces/casse
     const target = strip(name);
     const query = async q => {
@@ -2697,7 +2770,15 @@ header .brand{margin-bottom:0}
         return json.data || json.cards || json.results || [];
       } catch (e) { return []; }
     };
-    const exact = list => list.find(c => strip(c.name) === target) || null;   // ponctuation ignorée
+    // Correspondance EXACTE (ponctuation ignorée). Si un pitch est demandé et
+    // qu'une impression de ce pitch existe, on la privilégie ; sinon on retombe
+    // sur la 1re impression du bon nom (comportement historique).
+    const exact = list => {
+      const matches = list.filter(c => strip(c.name) === target);
+      if (!matches.length) return null;
+      if (pitch) { const byPitch = matches.find(c => cardPitch(c) === pitch); if (byPitch) return byPitch; }
+      return matches[0];
+    };
     try {
       // Le grabber perd parfois la ponctuation du nom (« Fyendal's Spring Tunic »
       // stocké « Fyendals Spring Tunic », « Scorpio, Comet Tail » → « Scorpio
@@ -2720,18 +2801,18 @@ header .brand{margin-bottom:0}
       const image = best ? findImageUrl(best) : null;
       const typeInfo = best ? findCardTypeInfo(best) : { isEquipment: false, label: null };
       const meta = { image: image || null, isEquipment: typeInfo.isEquipment, typeLabel: typeInfo.label };
-      cardMetaCache[name] = meta;
+      cardMetaCache[cacheKey] = meta;
       saveMetaCache();
       return meta;
     } catch (e) {
       console.warn('[images] métadonnées introuvables pour', name, e);
       const meta = { image: null, isEquipment: false, typeLabel: null };
-      cardMetaCache[name] = meta;
+      cardMetaCache[cacheKey] = meta;
       saveMetaCache();
       return meta;
     }
   }
-  async function resolveCardImage(name) { return (await resolveCardMeta(name)).image; }
+  async function resolveCardImage(name, pitch) { return (await resolveCardMeta(name, pitch)).image; }
 
   // Image de héros pour le carrousel/avatars : privilégie la version « Marvel »
   // (full-art) si l'API en renvoie une, sinon l'illustration standard. Cache dédié.
@@ -3953,10 +4034,10 @@ header .brand{margin-bottom:0}
   // court (inspiration Talishar : lecture visuelle plutôt que verbeuse).
   function eventLine(e) {
     switch (e.type) {
-      case 'played': return { icon: '⚔️', cards: [e.card], text: `<b>${e.player}</b> joue${e.fromArsenal ? ' <span class="ev-dim">(arsenal)</span>' : ''}` };
-      case 'pitched': return { icon: '🔷', cards: [e.card], text: `<b>${e.player}</b> pitch` };
-      case 'activated': return { icon: '✨', cards: [e.card], text: `<b>${e.player}</b> active` };
-      case 'blocked': return { icon: '🛡️', cards: e.cards, text: `<b>${e.player}</b> bloque` };
+      case 'played': return { icon: '⚔️', cards: [e.card], pitches: [e.pitch], text: `<b>${e.player}</b> joue${e.fromArsenal ? ' <span class="ev-dim">(arsenal)</span>' : ''}` };
+      case 'pitched': return { icon: '🔷', cards: [e.card], pitches: [e.pitch], text: `<b>${e.player}</b> pitch` };
+      case 'activated': return { icon: '✨', cards: [e.card], pitches: [e.pitch], text: `<b>${e.player}</b> active` };
+      case 'blocked': return { icon: '🛡️', cards: e.cards, pitches: e.pitches, text: `<b>${e.player}</b> bloque` };
       case 'discarded': return { icon: '🗑️', cards: [e.card], text: `<b>${e.player || ''}</b> défausse` };
       case 'damageTaken': return e.amount > 0 ? { icon: '💥', text: `<b>${e.player}</b> encaisse <b>${e.amount}</b> dégâts` } : { icon: '🛡️', text: `${e.player} — 0 dégât (bloqué)`, secondary: true };
       case 'lifeGained': return { icon: '❤️', text: `<b>${e.player}</b> +${e.amount} pv` };
@@ -4140,16 +4221,16 @@ header .brand{margin-bottom:0}
       const byActive = e.player === active;
       if ((e.type === 'played' || e.type === 'activated') && byActive) {
         close();
-        cur = { card: e.card, isActivation: e.type === 'activated', fromArsenal: !!e.fromArsenal,
-                blocks: [], defense: [], reveals: [], pitchCost: [], mode: null, result: null };
+        cur = { card: e.card, cp: e.pitch, isActivation: e.type === 'activated', fromArsenal: !!e.fromArsenal,
+                blocks: [], blockCp: [], defense: [], reveals: [], pitchCost: [], mode: null, result: null };
         if (e.type === 'activated') secondary.activate++;
       } else if ((e.type === 'played' || e.type === 'activated') && e.player === defender && cur) {
         // Réaction du défenseur PENDANT l'attaque (hors blocage) : prévention
         // arcanique (ex. Voltic Veil), activation défensive… → « comment l'adversaire a répondu ».
-        if (e.card) cur.defense.push({ card: e.card, isActivation: e.type === 'activated' });
+        if (e.card) cur.defense.push({ card: e.card, cp: e.pitch, isActivation: e.type === 'activated' });
       } else if (e.type === 'pitched' && byActive) {
         secondary.pitch++;
-        if (cur) cur.pitchCost.push(e.card);
+        if (cur) cur.pitchCost.push({ card: e.card, cp: e.pitch });
       } else if (e.type === 'modeSelected') {
         if (cur && (!e.card || e.card === cur.card)) cur.mode = e.mode;
         if (e.mode) secondary.modes.push(e.mode);
@@ -4158,7 +4239,7 @@ header .brand{margin-bottom:0}
         if (e.card) secondary.reveals.push(e.card);
       } else if (e.type === 'blocked') {
         // blocage de l'attaque courante par le défenseur
-        if (cur && e.player === defender && e.cards) e.cards.forEach(c => cur.blocks.push(c));
+        if (cur && e.player === defender && e.cards) e.cards.forEach((c, ci) => { cur.blocks.push(c); cur.blockCp.push((e.pitches && e.pitches[ci]) || null); });
       } else if (e.type === 'combatResult') {
         if (cur) cur.result = { hit: !!e.hit, amount: e.amount || 0 };
       } else if (e.type === 'chainLinkResolved') {
@@ -4175,12 +4256,12 @@ header .brand{margin-bottom:0}
   }
 
   // Vignette de carte pour le fil (image résolue en async, repli sur le nom).
-  function makeMini(card, sideCls) {
+  function makeMini(card, sideCls, pitch) {
     const d = document.createElement('div');
     d.className = 'rex-mini ' + sideCls;
     d.innerHTML = '<div class="art shimmer"><span class="fb">' + escapeHtml(card) + '</span></div>';
     const art = d.querySelector('.art');
-    resolveCardImage(card).then(url => { art.classList.remove('shimmer'); if (url) art.innerHTML = '<img src="' + url + '" alt="' + escapeHtml(card) + '" loading="lazy">'; });
+    resolveCardImage(card, pitch).then(url => { art.classList.remove('shimmer'); if (url) art.innerHTML = '<img src="' + url + '" alt="' + escapeHtml(card) + '" loading="lazy">'; });
     return d;
   }
 
@@ -4247,13 +4328,13 @@ header .brand{margin-bottom:0}
     // Carte de l'attaquant + méta (arsenal / mode / pitch / révélations)
     const cardrow = document.createElement('div');
     cardrow.className = 'ecard';
-    cardrow.appendChild(makeMini(ex.card, mine ? 'me' : 'opp'));
+    cardrow.appendChild(makeMini(ex.card, mine ? 'me' : 'opp', ex.cp));
     const meta = document.createElement('div');
     meta.className = 'emeta';
     const subs = [];
     if (ex.fromArsenal) subs.push('depuis l\'<b>arsenal</b>');
     if (ex.mode) subs.push('🔀 mode : <b>' + escapeHtml(ex.mode) + '</b>');
-    if (ex.pitchCost.length) subs.push('🔥 pitch <b>' + ex.pitchCost.map(escapeHtml).join(', ') + '</b>');
+    if (ex.pitchCost.length) subs.push('🔥 pitch <b>' + ex.pitchCost.map(p => escapeHtml(p.card)).join(', ') + '</b>');
     ex.reveals.forEach(c => subs.push('👁 révèle <b>' + escapeHtml(c) + '</b>'));
     if (ex.chainKw && ex.chainKw.length) subs.push(ex.chainKw.map(k => '<span class="ekw">' + escapeHtml(KW_LABEL[k] || k) + '</span>').join(' '));
     meta.innerHTML = '<div class="ecn">' + escapeHtml(ex.card) + '</div>'
@@ -4271,7 +4352,7 @@ header .brand{margin-bottom:0}
       div.appendChild(d2);
       const resp = document.createElement('div');
       resp.className = 'eresp';
-      ex.blocks.forEach(c => resp.appendChild(makeMini(c, defSide)));
+      ex.blocks.forEach((c, ci) => resp.appendChild(makeMini(c, defSide, ex.blockCp[ci])));
       const note = document.createElement('div');
       note.className = 'ecn';
       note.textContent = ex.blocks.length + (ex.blocks.length > 1 ? ' cartes en blocage' : ' carte en blocage');
@@ -4287,7 +4368,7 @@ header .brand{margin-bottom:0}
       div.appendChild(d2);
       const resp = document.createElement('div');
       resp.className = 'eresp';
-      defs.forEach(d => resp.appendChild(makeMini(d.card, defSide)));
+      defs.forEach(d => resp.appendChild(makeMini(d.card, defSide, d.cp)));
       div.appendChild(resp);
     }
     if (!ex.blocks.length && !defs.length && v.kind === 'hit') {
@@ -4503,9 +4584,10 @@ header .brand{margin-bottom:0}
     // Miniatures de TOUTES les cartes de l'événement (ex. blocage multi-cartes).
     const cards = (info.cards || []).filter(Boolean);
     if (cards.length) {
+      const pitches = info.pitches || [];
       const thumbs = document.createElement('div');
       thumbs.className = 'ev-thumbs';
-      cards.forEach(name => {
+      cards.forEach((name, ci) => {
         const th = document.createElement('div');
         th.className = 'ev-thumb';
         th.title = name;
@@ -4514,7 +4596,7 @@ header .brand{margin-bottom:0}
         fb.textContent = name;
         th.appendChild(fb);
         thumbs.appendChild(th);
-        resolveCardImage(name).then(url => { if (url) th.innerHTML = `<img src="${url}" alt="${name}" loading="lazy">`; });
+        resolveCardImage(name, pitches[ci]).then(url => { if (url) th.innerHTML = `<img src="${url}" alt="${name}" loading="lazy">`; });
       });
       row.appendChild(thumbs);
     }
@@ -5795,8 +5877,8 @@ header .brand{margin-bottom:0}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=147"></script>
-<script src="js/cloud.js?v=147"></script>
+<script src="js/cloud-config.js?v=148"></script>
+<script src="js/cloud.js?v=148"></script>
 
 <script>
 // ============================================================

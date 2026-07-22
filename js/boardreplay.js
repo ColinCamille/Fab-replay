@@ -22,12 +22,14 @@
 
   // ---------- Images (cache local ; CardImages cache déjà côté réseau) ----------
   const _img = {};
-  function resolveImg(name, hero) {
-    const k = (hero ? 'H:' : '') + norm(name);
+  function resolveImg(name, hero, pitch) {
+    pitch = (pitch === 1 || pitch === 2 || pitch === 3) ? pitch : null;
+    const k = (hero ? 'H:' : '') + norm(name) + (pitch ? '#p' + pitch : '');
     if (_img[k] !== undefined) return Promise.resolve(_img[k]);
     const fn = hero ? (CI.resolveHeroCardImage || CI.resolveCardImage) : CI.resolveCardImage;
     if (!fn) return Promise.resolve(null);
-    return fn(name).then(u => (_img[k] = u || null)).catch(() => (_img[k] = null));
+    // Le héros n'a qu'une impression → on ne lui passe jamais de pitch.
+    return fn(name, hero ? undefined : pitch).then(u => (_img[k] = u || null)).catch(() => (_img[k] = null));
   }
   function paintArt(scope) {
     scope.querySelectorAll('.br-art[data-card]').forEach(art => {
@@ -35,7 +37,8 @@
       const name = art.getAttribute('data-card');
       if (!name) return;
       art.dataset.painted = '1';
-      resolveImg(name, art.hasAttribute('data-hero')).then(u => {
+      const pv = parseInt(art.getAttribute('data-pitch'), 10);
+      resolveImg(name, art.hasAttribute('data-hero'), pv).then(u => {
         if (!u) return;
         art.style.backgroundImage = 'url("' + u + '")';
         art.classList.add('has-img');
@@ -211,7 +214,7 @@
       const hasChain = chainQ.length > 0;
       let atkBuf = [];
       const looseNorm = s => norm(s).replace(/[^a-z0-9]/g, '');   // tolère apostrophe/ponctuation (« Hunter's Klaive » vs « Hunters Klaive »)
-      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm }, act: !!x.act, pitch: x.pitch, text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
+      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm, cp: x.cp }, act: !!x.act, pitch: x.pitch, text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
       // Matérialise une carte en « carte seule » MAINTENANT (photo de la main
       // prise à cet instant → les cartes jouées ENSUITE y sont encore visibles).
       const materialize = x => { push(label, atkSide, bufEntryStep(x)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); };
@@ -224,9 +227,9 @@
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
       const flushAtk = () => {
         if (!openAtk) return;
-        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm }, pitch: openAtk.pitch, text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt });
+        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm, cp: openAtk.cp }, pitch: openAtk.pitch, text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt });
         // Renforts éventuels (attaque hors-combat) : affichés à part pour ne pas les perdre.
-        (openAtk.pumps || []).forEach(p => push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: p.nm }, reaction: true, text: HERO[openAtk.side] + ' joue ' + p.nm + (p.pTxt || '') }));
+        (openAtk.pumps || []).forEach(p => push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: p.nm, cp: p.cp }, reaction: true, text: HERO[openAtk.side] + ' joue ' + p.nm + (p.pTxt || '') }));
         openAtk = null;
       };
       evs.forEach((e, i) => {
@@ -240,7 +243,7 @@
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
           if (side === atkSide && hasChain) {
-            const entry = { nm: e.card, pitch: pitches.join(', '), pTxt: pTxt, act: false };
+            const entry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: false };
             if (atkBuf.length === 0 && isAtkCard(e.card)) atkBuf.push(entry);       // c'est l'attaquant
             else if (atkBuf.length > 0) atkBuf.push(entry);                          // renfort (joué APRÈS l'attaquant)
             else materialize(entry);                                                 // action PRÉ-attaque → carte seule, photo prise MAINTENANT
@@ -257,20 +260,20 @@
               }
             }
             if (isReinforce) {
-              (openAtk.pumps = openAtk.pumps || []).push({ nm: e.card, pTxt: pTxt });
+              (openAtk.pumps = openAtk.pumps || []).push({ nm: e.card, cp: e.pitch, pTxt: pTxt });
             } else {
               flushAtk();   // attaque précédente restée sans combat → carte seule
-              openAtk = { nm: e.card, side, pitch: pitches.join(', '), pTxt: pTxt, pumps: [] };
+              openAtk = { nm: e.card, side, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, pumps: [] };
             }
           } else {
-            curReactions.push({ card: e.card, owner: side });
+            curReactions.push({ card: e.card, owner: side, cp: e.pitch });
             // Réaction de défense PENDANT un combat (une attaque est en cours) :
             // on ne l'affiche PAS en étape séparée — sinon elle apparaît AVANT
             // l'attaque qu'elle pare (l'attaque, elle, n'est montrée qu'à l'échange).
             // Elle figure déjà côté DÉFENSE de l'échange. Hors combat seulement,
             // on la montre en carte seule.
             if (!atkBuf.length && !openAtk) {
-              push(label, side, { type: 'play', side, card: { nm: e.card }, reaction: true, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt });
+              push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, reaction: true, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt });
             }
           }
         } else if (e.type === 'activated') {
@@ -291,11 +294,11 @@
           // Une ARME activée par l'attaquant EST une attaque (ex. Hunter's Klaive) :
           // en mode chaîne on la met en attente pour qu'elle devienne l'attaquant
           // du combat (au lieu d'une carte seule que la 1re réaction remplacerait).
-          const wpnEntry = { nm: e.card, pitch: pitches.join(', '), pTxt: pTxt, act: true };
+          const wpnEntry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: true };
           if (hasChain && side === atkSide && WPN[side][norm(e.card)] && (atkBuf.length === 0 ? (isAtkCard(e.card) || !nextAtkCard()) : true)) {
             atkBuf.push(wpnEntry);              // arme = attaquant (ou renfort si un attaquant est déjà en cours)
           } else {
-            push(label, side, { type: 'play', side, card: { nm: e.card }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
+            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
           }
         } else if (e.type === 'destroyed') {
           // Un ÉQUIPEMENT détruit (armure/Nullrune cassée…) est retiré du plateau
@@ -312,7 +315,7 @@
           const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
         } else if (e.type === 'blocked') {
           const s = sideOf(e.player);
-          (e.cards || []).forEach(c => { const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq }); });
+          (e.cards || []).forEach((c, ci) => { const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq, cp: (e.pitches && e.pitches[ci]) || null }); });
         } else if (e.type === 'damageTaken') {
           const s = sideOf(e.player); st.life[s] = Math.max(0, st.life[s] - (e.amount || 0));
         } else if (e.type === 'combatResult' && hasChain) {
@@ -330,12 +333,12 @@
           curReactions.forEach(r => toGrave(r.owner, r.card));
           if (attacker) {
             const defSide = atkSide === 'me' ? 'opp' : 'me';
-            const defCards = curBlocks.map(b => ({ nm: b.card })).concat(curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card })));
+            const defCards = curBlocks.map(b => ({ nm: b.card, cp: b.cp })).concat(curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card, cp: r.cp })));
             const blockWho = curBlocks.length ? curBlocks[0].owner : defSide;
             const vt = dmg > 0 ? 'through' : 'blocked';
             const rtxt = dmg > 0 ? (dmg + ' dégât' + (dmg > 1 ? 's' : '') + ' pass' + (dmg > 1 ? 'ent' : 'e')) : '0 dégât — bloqué';
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
-            push(label, atkSide, { type: 'clash', atk: { nm: attacker.nm, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm })), blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+            push(label, atkSide, { type: 'clash', atk: { nm: attacker.nm, cp: attacker.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           atkBuf = []; curBlocks = []; curReactions = [];
         } else if (e.type === 'combatResult') {
@@ -345,14 +348,14 @@
           curReactions.forEach(r => toGrave(r.owner, r.card));
           if (openAtk) {
             const defSide = openAtk.side === 'me' ? 'opp' : 'me';
-            const defCards = curBlocks.map(b => ({ nm: b.card })).concat(curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card })));
+            const defCards = curBlocks.map(b => ({ nm: b.card, cp: b.cp })).concat(curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card, cp: r.cp })));
             const blockWho = curBlocks.length ? curBlocks[0].owner : defSide;
             const vt = dmg > 0 ? 'through' : 'blocked';
             const rtxt = dmg > 0 ? (dmg + ' dégât' + (dmg > 1 ? 's' : '') + ' pass' + (dmg > 1 ? 'ent' : 'e')) : '0 dégât — bloqué';
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
             const lk = takeChain(openAtk.nm);   // attaque/défense effectives (buffs) de CETTE attaque
-            const pumps = (openAtk.pumps || []).map(p => ({ nm: p.nm }));
-            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, pumps: pumps, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+            const pumps = (openAtk.pumps || []).map(p => ({ nm: p.nm, cp: p.cp }));
+            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, cp: openAtk.cp, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, pumps: pumps, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           openAtk = null; curBlocks = []; curReactions = [];
         } else if (e.type === 'gameWon' || e.type === 'conceded') {
@@ -483,7 +486,8 @@
     const KW_LABEL = { goAgain: 'Go again', dominate: 'Dominate', overpower: 'Overpower', piercing: 'Piercing', combo: 'Combo', wager: 'Wager', phantasm: 'Phantasm', fusion: 'Fusion', tower: 'Tower', highTide: 'High Tide', confidence: 'Confidence' };
     // Badge de puissance EFFECTIVE (buffs compris) affiché sur la carte d'attaque.
     const pwBadge = c => (c && c.power != null) ? '<span class="br-pw" title="Attaque effective (buffs compris)">' + c.power + '</span>' : '';
-    const pcard = (c, side, lg) => '<div class="br-pcard br-' + side + (lg ? ' br-lg' : '') + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"></div><div class="br-nm">' + esc(c.nm) + '</div>' + pwBadge(c) + '</div>';
+    const pitchAttr = c => (c && (c.cp === 1 || c.cp === 2 || c.cp === 3)) ? ' data-pitch="' + c.cp + '"' : '';
+    const pcard = (c, side, lg) => '<div class="br-pcard br-' + side + (lg ? ' br-lg' : '') + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"' + pitchAttr(c) + '></div><div class="br-nm">' + esc(c.nm) + '</div>' + pwBadge(c) + '</div>';
     const kwLine = c => (c && c.kw && c.kw.length) ? '<div class="br-kwline">' + c.kw.map(k => '<span class="br-kw">' + esc(KW_LABEL[k] || k) + '</span>').join('') + '</div>' : '';
     function buildStage(s) {
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';

@@ -501,6 +501,20 @@ assert(!defTl.steps.some(s => s.stage.type === 'play' && s.stage.card && s.stage
 const defClash = defTl.steps.map(s => s.stage).find(st => st.type === 'clash');
 assert(defClash && (defClash.blocks || []).some(b => b.nm === 'Sink Below'), 'défense : la réaction figure côté défense de l\'échange');
 
+// Couleur (cp) propagée jusqu'à l'échange Table : attaquant + bloc portent leur pitch.
+const sdBR = (id, nm) => "<span onmouseover=\"ShowDetail(event,'./WebpImages/" + id + ".webp')\">" + nm + "</span>";
+const colGame = Parser.parse([
+  '=== Talishar game 78 — test ===', '',
+  "Ehecalt's turn 1 has begun.",
+  'Ehecalt played Lightning Press', 'nissy blocked with Sink Below', 'Combat resolved with a hit for 2 damage',
+  '', '=== META ===', 'me: Ehecalt', 'opp: nissy',
+  '', '=== RAW CHATLOG (state.game.chatLog, verbatim) ===',
+  JSON.stringify(['Player 1 played ' + sdBR('lightning_press_blue', 'Lightning Press'), 'Player 2 blocked with ' + sdBR('sink_below_yellow', 'Sink Below')])
+].join('\n'));
+const colClash = BR.buildTimeline(colGame).steps.map(s => s.stage).find(st => st.type === 'clash');
+assert(colClash && colClash.atk && colClash.atk.cp === 3, 'couleur Table : attaquant Lightning Press → bleu (cp 3)');
+assert(colClash && (colClash.blocks || []).some(b => b.nm === 'Sink Below' && b.cp === 2), 'couleur Table : bloc Sink Below → jaune (cp 2)');
+
 // ---------- Grabber : fusion des instantanés de log (anti-duplication) ----------
 console.log('Grabber merge —');
 (function () {

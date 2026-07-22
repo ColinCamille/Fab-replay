@@ -408,10 +408,10 @@
   // court (inspiration Talishar : lecture visuelle plutôt que verbeuse).
   function eventLine(e) {
     switch (e.type) {
-      case 'played': return { icon: '⚔️', cards: [e.card], text: `<b>${e.player}</b> joue${e.fromArsenal ? ' <span class="ev-dim">(arsenal)</span>' : ''}` };
-      case 'pitched': return { icon: '🔷', cards: [e.card], text: `<b>${e.player}</b> pitch` };
-      case 'activated': return { icon: '✨', cards: [e.card], text: `<b>${e.player}</b> active` };
-      case 'blocked': return { icon: '🛡️', cards: e.cards, text: `<b>${e.player}</b> bloque` };
+      case 'played': return { icon: '⚔️', cards: [e.card], pitches: [e.pitch], text: `<b>${e.player}</b> joue${e.fromArsenal ? ' <span class="ev-dim">(arsenal)</span>' : ''}` };
+      case 'pitched': return { icon: '🔷', cards: [e.card], pitches: [e.pitch], text: `<b>${e.player}</b> pitch` };
+      case 'activated': return { icon: '✨', cards: [e.card], pitches: [e.pitch], text: `<b>${e.player}</b> active` };
+      case 'blocked': return { icon: '🛡️', cards: e.cards, pitches: e.pitches, text: `<b>${e.player}</b> bloque` };
       case 'discarded': return { icon: '🗑️', cards: [e.card], text: `<b>${e.player || ''}</b> défausse` };
       case 'damageTaken': return e.amount > 0 ? { icon: '💥', text: `<b>${e.player}</b> encaisse <b>${e.amount}</b> dégâts` } : { icon: '🛡️', text: `${e.player} — 0 dégât (bloqué)`, secondary: true };
       case 'lifeGained': return { icon: '❤️', text: `<b>${e.player}</b> +${e.amount} pv` };
@@ -595,16 +595,16 @@
       const byActive = e.player === active;
       if ((e.type === 'played' || e.type === 'activated') && byActive) {
         close();
-        cur = { card: e.card, isActivation: e.type === 'activated', fromArsenal: !!e.fromArsenal,
-                blocks: [], defense: [], reveals: [], pitchCost: [], mode: null, result: null };
+        cur = { card: e.card, cp: e.pitch, isActivation: e.type === 'activated', fromArsenal: !!e.fromArsenal,
+                blocks: [], blockCp: [], defense: [], reveals: [], pitchCost: [], mode: null, result: null };
         if (e.type === 'activated') secondary.activate++;
       } else if ((e.type === 'played' || e.type === 'activated') && e.player === defender && cur) {
         // Réaction du défenseur PENDANT l'attaque (hors blocage) : prévention
         // arcanique (ex. Voltic Veil), activation défensive… → « comment l'adversaire a répondu ».
-        if (e.card) cur.defense.push({ card: e.card, isActivation: e.type === 'activated' });
+        if (e.card) cur.defense.push({ card: e.card, cp: e.pitch, isActivation: e.type === 'activated' });
       } else if (e.type === 'pitched' && byActive) {
         secondary.pitch++;
-        if (cur) cur.pitchCost.push(e.card);
+        if (cur) cur.pitchCost.push({ card: e.card, cp: e.pitch });
       } else if (e.type === 'modeSelected') {
         if (cur && (!e.card || e.card === cur.card)) cur.mode = e.mode;
         if (e.mode) secondary.modes.push(e.mode);
@@ -613,7 +613,7 @@
         if (e.card) secondary.reveals.push(e.card);
       } else if (e.type === 'blocked') {
         // blocage de l'attaque courante par le défenseur
-        if (cur && e.player === defender && e.cards) e.cards.forEach(c => cur.blocks.push(c));
+        if (cur && e.player === defender && e.cards) e.cards.forEach((c, ci) => { cur.blocks.push(c); cur.blockCp.push((e.pitches && e.pitches[ci]) || null); });
       } else if (e.type === 'combatResult') {
         if (cur) cur.result = { hit: !!e.hit, amount: e.amount || 0 };
       } else if (e.type === 'chainLinkResolved') {
@@ -630,12 +630,12 @@
   }
 
   // Vignette de carte pour le fil (image résolue en async, repli sur le nom).
-  function makeMini(card, sideCls) {
+  function makeMini(card, sideCls, pitch) {
     const d = document.createElement('div');
     d.className = 'rex-mini ' + sideCls;
     d.innerHTML = '<div class="art shimmer"><span class="fb">' + escapeHtml(card) + '</span></div>';
     const art = d.querySelector('.art');
-    resolveCardImage(card).then(url => { art.classList.remove('shimmer'); if (url) art.innerHTML = '<img src="' + url + '" alt="' + escapeHtml(card) + '" loading="lazy">'; });
+    resolveCardImage(card, pitch).then(url => { art.classList.remove('shimmer'); if (url) art.innerHTML = '<img src="' + url + '" alt="' + escapeHtml(card) + '" loading="lazy">'; });
     return d;
   }
 
@@ -702,13 +702,13 @@
     // Carte de l'attaquant + méta (arsenal / mode / pitch / révélations)
     const cardrow = document.createElement('div');
     cardrow.className = 'ecard';
-    cardrow.appendChild(makeMini(ex.card, mine ? 'me' : 'opp'));
+    cardrow.appendChild(makeMini(ex.card, mine ? 'me' : 'opp', ex.cp));
     const meta = document.createElement('div');
     meta.className = 'emeta';
     const subs = [];
     if (ex.fromArsenal) subs.push('depuis l\'<b>arsenal</b>');
     if (ex.mode) subs.push('🔀 mode : <b>' + escapeHtml(ex.mode) + '</b>');
-    if (ex.pitchCost.length) subs.push('🔥 pitch <b>' + ex.pitchCost.map(escapeHtml).join(', ') + '</b>');
+    if (ex.pitchCost.length) subs.push('🔥 pitch <b>' + ex.pitchCost.map(p => escapeHtml(p.card)).join(', ') + '</b>');
     ex.reveals.forEach(c => subs.push('👁 révèle <b>' + escapeHtml(c) + '</b>'));
     if (ex.chainKw && ex.chainKw.length) subs.push(ex.chainKw.map(k => '<span class="ekw">' + escapeHtml(KW_LABEL[k] || k) + '</span>').join(' '));
     meta.innerHTML = '<div class="ecn">' + escapeHtml(ex.card) + '</div>'
@@ -726,7 +726,7 @@
       div.appendChild(d2);
       const resp = document.createElement('div');
       resp.className = 'eresp';
-      ex.blocks.forEach(c => resp.appendChild(makeMini(c, defSide)));
+      ex.blocks.forEach((c, ci) => resp.appendChild(makeMini(c, defSide, ex.blockCp[ci])));
       const note = document.createElement('div');
       note.className = 'ecn';
       note.textContent = ex.blocks.length + (ex.blocks.length > 1 ? ' cartes en blocage' : ' carte en blocage');
@@ -742,7 +742,7 @@
       div.appendChild(d2);
       const resp = document.createElement('div');
       resp.className = 'eresp';
-      defs.forEach(d => resp.appendChild(makeMini(d.card, defSide)));
+      defs.forEach(d => resp.appendChild(makeMini(d.card, defSide, d.cp)));
       div.appendChild(resp);
     }
     if (!ex.blocks.length && !defs.length && v.kind === 'hit') {
@@ -958,9 +958,10 @@
     // Miniatures de TOUTES les cartes de l'événement (ex. blocage multi-cartes).
     const cards = (info.cards || []).filter(Boolean);
     if (cards.length) {
+      const pitches = info.pitches || [];
       const thumbs = document.createElement('div');
       thumbs.className = 'ev-thumbs';
-      cards.forEach(name => {
+      cards.forEach((name, ci) => {
         const th = document.createElement('div');
         th.className = 'ev-thumb';
         th.title = name;
@@ -969,7 +970,7 @@
         fb.textContent = name;
         th.appendChild(fb);
         thumbs.appendChild(th);
-        resolveCardImage(name).then(url => { if (url) th.innerHTML = `<img src="${url}" alt="${name}" loading="lazy">`; });
+        resolveCardImage(name, pitches[ci]).then(url => { if (url) th.innerHTML = `<img src="${url}" alt="${name}" loading="lazy">`; });
       });
       row.appendChild(thumbs);
     }
