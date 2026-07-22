@@ -624,17 +624,22 @@
     });
 
     // 6bis) Annulations (undo) : « undid their last action » ANNULE la DERNIÈRE
-    // action (jouée / activée / pitchée) du même joueur avant lui, non déjà
-    // retirée. Un seul traitement couvre les deux cas Talishar :
+    // action (jouée / activée / pitchée / bloquée) du même joueur avant lui, non
+    // déjà retirée. Un seul traitement couvre les cas Talishar observés :
     //   · annulation simple : action X puis undo → on retire X. (Avant, une
     //     action annulée UNE seule fois restait affichée — ex. « Flick Knives
     //     activé puis annulé » apparaissait à tort au tour 0.)
     //   · re-log : X, undo, X (rejouée) → on retire l'occurrence ANTÉRIEURE ;
     //     celle re-jouée APRÈS l'undo reste (comportement inchangé).
+    //   · blocage annulé : « blocked with X » puis undo → X reste sinon une
+    //     carte de défense fantôme (validé sur un corpus réel : 5 cas concrets).
+    // NB : un undo qui n'a plus rien à annuler (clics répétés, ou annulation
+    // d'un simple « passed ») ne trouve aucune candidate — c'est attendu (rien
+    // à l'écran ne dépendait de ce « passed »), pas une erreur.
     turns.forEach(t => {
       const ev = t.events;
       const remove = new Set();
-      const isAction = p => p.type === 'played' || p.type === 'activated' || p.type === 'pitched';
+      const isAction = p => p.type === 'played' || p.type === 'activated' || p.type === 'pitched' || p.type === 'blocked';
       ev.forEach((e, u) => {
         if (e.type !== 'undo') return;
         for (let i = u - 1; i >= 0; i--) {

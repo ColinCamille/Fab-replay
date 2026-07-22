@@ -565,6 +565,20 @@ console.log('Undo —');
   assert(!cards.includes('Flick Knives'), 'undo: action annulée une seule fois (Flick Knives) retirée');
   eq(cards.filter(c => c === 'Sting').length, 1, 'undo: re-log → une seule occurrence de Sting');
   assert(cards.includes("Hunter's Klaive") && cards.includes('Tarantula Toxin'), 'undo: les actions NON annulées restent');
+
+  // Blocage annulé : « blocked with X » puis undo → X ne doit PAS rester comme
+  // carte de défense fantôme (trouvé sur un corpus réel : 5 cas concrets où
+  // seul played/activated/pitched était couvert, jamais blocked).
+  const blockUndoRaw = '=== Talishar game 78 — test ===\n\n' +
+    "Ehecalt's turn 1 has begun.\n" +
+    'nissy played Bare Fangs\n' +
+    'Ehecalt blocked with Sink Below\n' +
+    'Ehecalt undid their last action\n' +   // annule le blocage
+    'Ehecalt passed\n' +
+    '\n=== META ===\nme: Ehecalt\nopp: nissy\n';
+  const bur = Parser.parse(blockUndoRaw);
+  const bt1 = bur.turns.find(t => t.turnNumber === 1);
+  assert(!(bt1.events || []).some(e => e.type === 'blocked'), 'undo: blocage annulé retiré (plus de carte de défense fantôme)');
 })();
 
 // ---------- Formes de héros par tour (Arakni se transforme) ----------
