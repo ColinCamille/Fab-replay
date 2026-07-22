@@ -723,17 +723,35 @@
       // comportement est identique dans les deux modes (le plateau ne « bouge »
       // pas en basculant) et ne dépend JAMAIS de la hauteur → largeur stable dès
       // l'ouverture (barre d'adresse mobile sans effet) et d'une étape à l'autre.
-      const scale = Math.min(availW / natW, 1);
+      // Sur PC (large) et en PLEIN ÉCRAN, on borne AUSSI par la hauteur pour que
+      // tout le plateau tienne à l'écran sans scroll vertical. Sur mobile hors
+      // plein écran, on garde le fit largeur-seule : la hauteur dispo y dépend de
+      // la barre d'adresse (repli/dépli) → un fit hauteur rendrait le plateau
+      // instable/étroit à l'ouverture (cf. commentaire ci-dessus).
+      const deskLayout = container.clientWidth >= 900;
+      const fitHeight = fs || deskLayout;
+      const scale = fitHeight ? Math.min(availW / natW, availH / natH, 1) : Math.min(availW / natW, 1);
       const sw = natW * scale, sh = natH * scale;
       const dx = Math.max(0, (availW - sw) / 2);
+      // Plein écran : on centre aussi VERTICALEMENT (on exploite l'espace en bas).
+      // Hors plein écran : calé en haut (dy=0) — le plateau tient déjà dans la zone.
+      const dy = fs ? Math.max(0, (availH - sh) / 2) : 0;
       wrap.style.transformOrigin = 'top left';
-      wrap.style.transform = 'translate(' + dx + 'px,0) scale(' + scale + ')';
+      wrap.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + scale + ')';
       // transform NE change PAS la taille de LAYOUT : le conteneur verrait sinon
       // une largeur/hauteur « fantôme » (= taille NON réduite) → barre de scroll
       // horizontale en plein écran + flux vertical faux. On retire cet espace
       // fantôme par des marges négatives : l'empreinte de layout = taille VISIBLE.
       wrap.style.marginRight = Math.round(sw - natW) + 'px';
       wrap.style.marginBottom = Math.round(sh - natH) + 'px';
+      // PC hors plein écran : on fixe la hauteur du conteneur à la taille VISIBLE
+      // du plateau (padding compris) pour supprimer le « fantôme » de transform
+      // qui laissait une mini-barre de scroll verticale. (En plein écran le
+      // conteneur occupe déjà toute la fenêtre ; sur mobile on ne touche à rien.)
+      if (fitHeight && !fs) {
+        const padV = (parseFloat(_cs.paddingTop) || 0) + (parseFloat(_cs.paddingBottom) || 0);
+        container.style.height = Math.ceil(sh + padV) + 'px';
+      }
     }
     // Ordre : figer la piste (hauteur stable), PUIS mettre à l'échelle l'ensemble.
     function relayout() { const w = container.querySelector('.br-wrap'); if (w) w.style.transform = ''; stabilizeStage(); fitBoard(); }
