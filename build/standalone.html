@@ -1536,13 +1536,84 @@ footer a{color:var(--text-dim)}
   #boardReplay.br-fs .br-cardrow{max-width:230px}
 }
 
+/* ============================================================
+   Compte + Amis (en-tête) — avatar, menu déroulant, bandeau ami
+   ============================================================ */
+header{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px}
+header .brand{margin-bottom:0}
+.acct{position:relative}
+.avatar-btn{position:relative; display:inline-flex; align-items:center; gap:8px;
+  background:var(--panel); border:1px solid var(--line-2); color:var(--text);
+  border-radius:999px; padding:5px 12px 5px 6px; cursor:pointer; font:inherit}
+.avatar-btn:hover{border-color:var(--gold-dim)}
+.avatar-btn .av{width:26px; height:26px; border-radius:50%; background:rgba(139,107,255,.20);
+  color:#c8bcff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:.8rem}
+.avatar-btn .nm{font-size:.82rem; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.avatar-btn .cv{color:var(--text-faint); font-size:.7rem}
+.fdot{position:absolute; top:-2px; right:-2px; width:11px; height:11px; border-radius:50%;
+  background:var(--red); border:2px solid var(--bg)}
+
+.fmenu{position:absolute; top:calc(100% + 8px); right:0; width:330px; max-width:calc(100vw - 24px);
+  z-index:60; background:var(--panel-2); border:1px solid var(--line-2); border-radius:12px;
+  padding:14px; box-shadow:0 12px 34px rgba(0,0,0,.55)}
+.fm-head{display:flex; align-items:center; gap:10px}
+.fm-name{font-size:.9rem}
+.fm-muted{color:var(--text-faint)}
+.fm-link{background:none; border:none; color:var(--text-faint); font-size:.72rem; padding:0; cursor:pointer; text-decoration:underline}
+.fm-div{border-top:1px solid var(--line); margin:11px 0}
+.fm-lbl{font-size:.68rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.1em; margin-bottom:6px}
+.fm-red{color:var(--red)}
+.fm-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.fmenu .code{font-family:'JetBrains Mono',monospace; font-size:1.05rem; color:var(--gold); letter-spacing:.12em}
+.fmenu .btn{background:var(--panel); border:1px solid var(--line); color:var(--text);
+  border-radius:8px; padding:6px 11px; font-size:.8rem; cursor:pointer; font:inherit}
+.fmenu .btn:hover{border-color:var(--gold-dim)}
+.fmenu .btn.hot{border-color:var(--gold-dim); color:var(--gold); background:var(--panel-3)}
+.fmenu .btn.ok{border-color:rgba(79,184,122,.5); color:var(--green)}
+.fm-input{background:var(--panel); border:1px solid var(--line-2); color:var(--text); border-radius:8px;
+  padding:6px 10px; font-family:'JetBrains Mono',monospace; font-size:.8rem; flex:1; min-width:110px}
+.av-sm{width:26px; height:26px; border-radius:50%; background:rgba(139,107,255,.18); color:#c8bcff;
+  display:flex; align-items:center; justify-content:center; font-weight:600; font-size:.72rem; flex:none}
+.fmenu .pill{display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:999px;
+  font-size:.64rem; color:var(--gold); border:1px solid var(--gold-dim); background:rgba(201,162,39,.08)}
+.fm-req{display:flex; align-items:center; gap:9px; background:var(--panel); border-radius:8px; padding:8px 10px; margin-bottom:6px}
+.fm-reqname{flex:1; min-width:0}
+.fm-reqname .small{font-size:.82rem}
+.fm-reqbtns{display:flex; gap:6px}
+.fm-friend{display:block; width:100%; text-align:left; background:none; border:none; color:var(--text);
+  font:inherit; font-size:.85rem; padding:7px 6px; border-radius:8px; cursor:pointer}
+.fm-friend:hover{background:var(--panel)}
+.fm-friend.on{color:var(--gold)}
+.fm-friend-row{display:flex; align-items:center; gap:9px; padding:6px}
+.fm-friend-row.on{background:var(--panel); border-radius:8px}
+.fm-friend-row .small{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.82rem}
+.fmenu .see{background:none; border:none; color:var(--gold); font-size:.76rem; cursor:pointer; white-space:nowrap}
+.fm-x{background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:.8rem}
+.fm-empty{font-size:.76rem; color:var(--text-faint); padding:4px 6px}
+
+.fbanner{max-width:45rem; margin:12px auto 0; display:flex; align-items:center; justify-content:space-between;
+  gap:12px; flex-wrap:wrap; background:rgba(139,107,255,.12); border:1px solid rgba(139,107,255,.35);
+  border-radius:10px; padding:9px 16px; color:#cdbfff; font-size:.84rem}
+.fbanner button{background:none; border:none; color:var(--text); cursor:pointer; font:inherit; font-size:.82rem; text-decoration:underline}
+
 </style>
 </head>
 <body>
 
 <header>
   <div class="brand"><h1>⛓ Chain Replay</h1><span>analyseur de parties Talishar · Flesh and Blood</span></div>
+  <!-- Compte + amis (visible une fois connecté). Tout le social vit dans ce menu. -->
+  <div class="acct" id="acctArea" hidden>
+    <button class="avatar-btn" id="avatarBtn" aria-haspopup="true" aria-expanded="false" title="Mon compte et mes amis">
+      <span class="av" id="avatarInitial">·</span><span class="nm" id="avatarName"></span><span class="cv">▾</span>
+      <span class="fdot" id="friendDot" hidden aria-label="Demande d'ami en attente"></span>
+    </button>
+    <div class="fmenu" id="friendMenu" role="menu" hidden></div>
+  </div>
 </header>
+
+<!-- Bandeau « lecture seule » affiché quand on consulte les parties d'un ami. -->
+<div class="fbanner" id="friendBanner" hidden></div>
 
 <div id="app">
 
@@ -5029,6 +5100,8 @@ footer a{color:var(--text-dim)}
   // reste de l'app (replay, header…).
   // ============================================================
   let _entries = [], _onOpen = null, _onDelete = null, _onMeta = null, _built = false, _A = null, _L = null, _trendGeom = null;
+  // Lecture seule (vue « parties d'un ami ») : masque favori / tags / suppression.
+  let _readOnly = false;
   const DEFAULT_ACCENT = '#c9a227';
   const state = {
     hero: null, format: '', opp: '', period: 'all', includeAI: false, tag: '',
@@ -5377,6 +5450,9 @@ footer a{color:var(--text-dim)}
   function verdictLbl(o) { return o == null ? 'En cours' : (o ? 'Victoire' : 'Défaite'); }
   const favBtnHTML = e => '<button class="gfav' + (e.favorite ? ' on' : '') + '" data-fav="' + esc2(e.gameId) + '" title="' + (e.favorite ? 'Retirer des favoris' : 'Mettre en favori') + '" aria-pressed="' + (!!e.favorite) + '" aria-label="Favori">' + (e.favorite ? '★' : '☆') + '</button>';
   const tagBtnHTML = e => '<button class="gtagbtn' + (entryTags(e).length ? ' has' : '') + '" data-tag="' + esc2(e.gameId) + '" title="Modifier les tags" aria-label="Modifier les tags">🏷</button>';
+  // Bloc d'actions par partie (favori / tags / suppression) — vide en lecture seule.
+  const gactsHTML = e => _readOnly ? '' : '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
+    '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
   function tagsRowHTML(e) {
     const tags = entryTags(e);
     if (!tags.length) return '';
@@ -5389,8 +5465,7 @@ footer a{color:var(--text-dim)}
       '<div class="body"><div class="mu"><span class="me">' + esc2(me) + '</span><span class="vs">vs</span><span>' + esc2(op) + '</span></div>' +
       '<div class="gsub">' + esc2(sub) + '</div>' + tagsRowHTML(e) + '</div>' +
       '<div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
-      '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
-      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div></div>';
+      gactsHTML(e) + '</div>';
   }
   function crowHTML(e) {
     const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
@@ -5400,8 +5475,7 @@ footer a{color:var(--text-dim)}
       '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + tagMini + '</span>' +
       '<span class="cmeta">' + fmtDate(dateOf(rec)) + ' · ' + turnsOf(rec) + 't</span>' +
       '<span class="cv">' + (o == null ? '·' : (o ? 'V' : 'D')) + '</span>' +
-      '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
-      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div></div>';
+      gactsHTML(e) + '</div>';
   }
   function histList() {
     const qn = norm(state.q);
@@ -5699,6 +5773,11 @@ footer a{color:var(--text-dim)}
     _onOpen = (opts && opts.onOpen) || null;
     _onDelete = (opts && opts.onDelete) || null;
     _onMeta = (opts && opts.onMeta) || null;
+    _readOnly = !!(opts && opts.readOnly);
+    // Changement de contexte (bascule ma biblio ↔ celle d'un ami) : on peut
+    // (ré)initialiser le héros sélectionné pour ne pas rester sur un héros
+    // absent de la nouvelle liste.
+    if (opts && 'hero' in opts) state.hero = opts.hero;
     const host = D.getElementById('dashboardBody');
     if (!host) return;
     if (!_built) { buildSkeleton(host); wire(host); ensureToast(); _built = true; }
@@ -5707,7 +5786,7 @@ footer a{color:var(--text-dim)}
   function refresh() { if (_built) renderAll(); }
 
   // Exports : cœur d'agrégation (Node + navigateur) + API de rendu (navigateur).
-  root.Dashboard = { aggregate, outcome, oppHeroOf, dateOf, mount, refresh, applyHeroTheme: themeFor, restoreTheme: function () { themeFor(state.hero); } };
+  root.Dashboard = { aggregate, outcome, oppHeroOf, dateOf, mount, refresh, getHero: function () { return state.hero; }, applyHeroTheme: themeFor, restoreTheme: function () { themeFor(state.hero); } };
   if (typeof module === 'object' && module.exports) module.exports = root.Dashboard;
 })(typeof self !== 'undefined' ? self : this);
 
@@ -5715,8 +5794,8 @@ footer a{color:var(--text-dim)}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=143"></script>
-<script src="js/cloud.js?v=143"></script>
+<script src="js/cloud-config.js?v=144"></script>
+<script src="js/cloud.js?v=144"></script>
 
 <script>
 // ============================================================
@@ -5764,6 +5843,7 @@ footer a{color:var(--text-dim)}
   // ---------- Chargement / rendu du dashboard ----------
   async function reloadDashboard() {
     if (_pairMode) return [];
+    if (_friendCtx) return [];   // on regarde les parties d'un ami : ne pas remonter les miennes
     const entries = await window.FabDB.getAllEntries();
     const dashEmpty = $('#dashEmpty'), dashBody = $('#dashboardBody');
     if (_pairMode || !dashEmpty || !dashBody) return entries;   // body a pu être remplacé pendant l'await (pop-up)
@@ -6252,6 +6332,8 @@ footer a{color:var(--text-dim)}
     window.Cloud.init();
     window.Cloud.onChange(async (user) => {
       refreshCloudBtn();
+      refreshAcct();                          // avatar + amis (en-tête)
+      if (!user) { closeFriendMenu(); if (_friendCtx) backToMine(); }
       if (user) {
         if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
         const { added, removed, metaChanged } = await mergeCloudGames();
@@ -6265,6 +6347,204 @@ footer a{color:var(--text-dim)}
         }
       }
     });
+  }
+
+  // ============================================================
+  // AMIS — avatar + menu (en-tête) et consultation en lecture seule
+  // des parties d'un ami (réutilise le dashboard + le replay existants).
+  // ============================================================
+  const acctArea = $('#acctArea'), avatarBtn = $('#avatarBtn'), avatarInitial = $('#avatarInitial'),
+        avatarName = $('#avatarName'), friendMenu = $('#friendMenu'), friendDot = $('#friendDot');
+  let _friendCtx = null;   // { id, name } quand on regarde un ami ; null = mes parties
+  let _savedHero = null;   // héros sélectionné avant d'entrer chez un ami (restauré au retour)
+  let _profile = null, _friends = [], _pending = [];
+
+  function fesc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function acctInitial() {
+    const u = window.Cloud && window.Cloud.getUser();
+    const n = (_profile && _profile.display_name) || (u && u.email) || '?';
+    return (n.trim()[0] || '?').toUpperCase();
+  }
+
+  // Rafraîchit l'avatar (initiale, pseudo, pastille de demande en attente).
+  async function refreshAcct() {
+    const u = window.Cloud && window.Cloud.available() && window.Cloud.getUser();
+    if (!u) { if (acctArea) acctArea.hidden = true; return; }
+    if (acctArea) acctArea.hidden = false;
+    try { _profile = await window.Cloud.myProfile(); } catch (e) { _profile = null; }
+    avatarInitial.textContent = acctInitial();
+    avatarName.textContent = (_profile && _profile.display_name) || '';
+    try { _pending = await window.Cloud.pendingRequests(); } catch (e) { _pending = []; }
+    friendDot.hidden = !(_pending && _pending.length);
+  }
+
+  function menuHTML() {
+    const code = (_profile && _profile.friend_code) || '—';
+    const name = (_profile && _profile.display_name) || '';
+    let h = '<div class="fm-head"><span class="av-sm">' + fesc(acctInitial()) + '</span>' +
+      '<div><div class="fm-name">' + (name ? fesc(name) : '<span class="fm-muted">Choisis un pseudo</span>') + '</div>' +
+      '<button class="fm-link" data-act="editname">modifier le pseudo</button></div></div>' +
+      '<div class="fm-div"></div>' +
+      '<div class="fm-lbl">Ton code d\'ami</div>' +
+      '<div class="fm-row"><span class="code">' + fesc(code) + '</span><button class="btn" data-act="copycode">⧉ Copier</button></div>' +
+      '<div class="fm-lbl" style="margin-top:10px">Ajouter un ami</div>' +
+      '<div class="fm-row"><input class="fm-input" id="fmAddCode" placeholder="code d\'ami…" maxlength="16" autocomplete="off"><button class="btn hot" data-act="addfriend">Ajouter</button></div>';
+    if (_pending && _pending.length) {
+      h += '<div class="fm-div"></div><div class="fm-lbl">Demandes reçues · <span class="fm-red">' + _pending.length + '</span></div>';
+      _pending.forEach(r => {
+        h += '<div class="fm-req"><span class="av-sm">' + fesc((r.display_name || '?').charAt(0).toUpperCase()) + '</span>' +
+          '<div class="fm-reqname"><div class="small">' + fesc(r.display_name || 'Joueur') + '</div>' +
+          '<span class="pill">⚠ verra toutes tes parties</span></div>' +
+          '<span class="fm-reqbtns"><button class="btn ok" data-act="accept" data-id="' + fesc(r.request_id) + '" title="Accepter">✓</button>' +
+          '<button class="btn" data-act="decline" data-id="' + fesc(r.request_id) + '" title="Refuser">✕</button></span></div>';
+      });
+    }
+    h += '<div class="fm-div"></div><div class="fm-lbl">Tes amis</div>' +
+      '<button class="fm-friend' + (!_friendCtx ? ' on' : '') + '" data-act="mine">' + (!_friendCtx ? '✓ ' : '') + 'Mes parties</button>';
+    if (_friends && _friends.length) {
+      _friends.forEach(f => {
+        const active = _friendCtx && _friendCtx.id === f.friend_id;
+        const nm = f.display_name || 'Ami';
+        h += '<div class="fm-friend-row' + (active ? ' on' : '') + '"><span class="av-sm">' + fesc(nm.charAt(0).toUpperCase()) + '</span>' +
+          '<span class="small">' + fesc(nm) + '</span>' +
+          '<button class="see" data-act="view" data-id="' + fesc(f.friend_id) + '" data-name="' + fesc(nm) + '">👁 Voir</button>' +
+          '<button class="fm-x" data-act="remove" data-id="' + fesc(f.friend_id) + '" data-name="' + fesc(nm) + '" title="Retirer">✕</button></div>';
+      });
+    } else {
+      h += '<div class="fm-empty">Aucun ami pour l\'instant. Partage ton code d\'ami !</div>';
+    }
+    return h;
+  }
+
+  const addMsg = st => ({
+    pending: 'Demande envoyée 👍', accepted: 'Vous êtes maintenant amis 🎉',
+    already_friends: 'Vous êtes déjà amis.', already_pending: 'Demande déjà envoyée.',
+    not_found: 'Code d\'ami introuvable.', self: 'C\'est ton propre code 🙂'
+  }[st] || ('Statut : ' + st));
+
+  async function openFriendMenu() {
+    try { _friends = await window.Cloud.listFriends(); } catch (e) { _friends = []; }
+    try { _pending = await window.Cloud.pendingRequests(); } catch (e) { _pending = []; }
+    friendDot.hidden = !(_pending && _pending.length);
+    friendMenu.innerHTML = menuHTML();
+    friendMenu.hidden = false;
+    avatarBtn.setAttribute('aria-expanded', 'true');
+  }
+  function closeFriendMenu() {
+    if (!friendMenu) return;
+    friendMenu.hidden = true;
+    avatarBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  // Un seul écouteur délégué sur le menu (reconstruit à chaque ouverture).
+  if (friendMenu) friendMenu.addEventListener('click', async e => {
+    const el = e.target.closest('[data-act]'); if (!el) return;
+    const act = el.dataset.act;
+    if (act === 'copycode') {
+      try { await navigator.clipboard.writeText((_profile && _profile.friend_code) || ''); el.textContent = 'Copié ✓'; setTimeout(() => { el.textContent = '⧉ Copier'; }, 1200); } catch (err) {}
+      return;
+    }
+    if (act === 'editname') {
+      const v = prompt('Ton pseudo (visible par tes amis) :', (_profile && _profile.display_name) || '');
+      if (v == null) return;
+      try { await window.Cloud.setDisplayName(v); await refreshAcct(); await openFriendMenu(); } catch (err) { alert('Erreur : ' + (err.message || err)); }
+      return;
+    }
+    if (act === 'addfriend') {
+      const inp = friendMenu.querySelector('#fmAddCode'); const code = inp ? inp.value.trim() : '';
+      if (!code) return;
+      el.disabled = true;
+      try { const st = await window.Cloud.sendFriendRequest(code); alert(addMsg(st)); await refreshAcct(); await openFriendMenu(); }
+      catch (err) { alert('Erreur : ' + (err.message || err)); }
+      el.disabled = false;
+      return;
+    }
+    if (act === 'accept' || act === 'decline') {
+      try { await window.Cloud.respondRequest(el.dataset.id, act === 'accept'); await refreshAcct(); await openFriendMenu(); }
+      catch (err) { alert('Erreur : ' + (err.message || err)); }
+      return;
+    }
+    if (act === 'view') { closeFriendMenu(); viewFriend(el.dataset.id, el.dataset.name); return; }
+    if (act === 'mine') { closeFriendMenu(); if (_friendCtx) backToMine(); return; }
+    if (act === 'remove') {
+      if (!confirm('Retirer ' + el.dataset.name + ' ? Vous ne verrez plus vos parties respectives.')) return;
+      try { await window.Cloud.removeFriend(el.dataset.id); if (_friendCtx && _friendCtx.id === el.dataset.id) await backToMine(); await refreshAcct(); await openFriendMenu(); }
+      catch (err) { alert('Erreur : ' + (err.message || err)); }
+      return;
+    }
+  });
+
+  if (avatarBtn) avatarBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (friendMenu.hidden) openFriendMenu(); else closeFriendMenu();
+  });
+  document.addEventListener('click', e => {
+    if (friendMenu && !friendMenu.hidden && !friendMenu.contains(e.target) && !avatarBtn.contains(e.target)) closeFriendMenu();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (friendMenu && !friendMenu.hidden) closeFriendMenu();
+    else if (_friendCtx) backToMine();
+  });
+
+  // Transforme les lignes cloud (raw) en entrées prêtes pour le dashboard.
+  // En mémoire uniquement : les parties d'un ami ne touchent JAMAIS IndexedDB.
+  function entriesFromRows(rows) {
+    const stripId = s => s ? String(s).replace(/\s*\([^)]*\)\s*$/, '').trim() : s;
+    const out = [];
+    for (const row of rows || []) {
+      if (!row || !row.raw) continue;
+      let rec;
+      try { rec = window.TalisharParser.parse(row.raw); } catch (e) { continue; }
+      if (rec.players) {
+        if (rec.players.me && !rec.players.me.hero && row.my_hero) rec.players.me.hero = stripId(row.my_hero);
+        if (rec.players.opp && !rec.players.opp.hero && row.opp_hero) rec.players.opp.hero = stripId(row.opp_hero);
+      }
+      const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
+      if (!gid) continue;
+      out.push({ gameId: gid, record: rec, raw: row.raw, tags: (row.meta && row.meta.tags) || [], favorite: !!(row.meta && row.meta.favorite) });
+    }
+    return out;
+  }
+
+  function showFriendBanner(name) {
+    const b = $('#friendBanner'); if (!b) return;
+    b.innerHTML = '<span>👁 Parties de <b>' + fesc(name) + '</b> · lecture seule</span>' +
+      '<button id="friendBack">← revenir aux miennes</button>';
+    b.hidden = false;
+    const bk = b.querySelector('#friendBack'); if (bk) bk.addEventListener('click', backToMine);
+  }
+  function hideFriendBanner() { const b = $('#friendBanner'); if (b) { b.hidden = true; b.innerHTML = ''; } }
+
+  async function viewFriend(friendId, name) {
+    if (!window.Cloud || !window.Cloud.getUser()) return;
+    libHint.textContent = 'Chargement des parties de ' + name + '…';
+    let rows;
+    try { rows = await window.Cloud.fetchFriendGames(friendId); }
+    catch (e) { console.error(e); alert('Impossible de charger les parties : ' + (e.message || e)); return; }
+    const entries = entriesFromRows(rows);
+    if (!entries.length) { alert(name + ' n\'a aucune partie partagée pour l\'instant.'); libHint.textContent = ''; return; }
+    _savedHero = (window.Dashboard.getHero && window.Dashboard.getHero()) || null;
+    _friendCtx = { id: friendId, name: name };
+    showFriendBanner(name);
+    $('#dashEmpty').style.display = 'none';
+    $('#dashboardBody').style.display = 'block';
+    window.Dashboard.mount({ entries, onOpen: openGame, onDelete: null, onMeta: null, readOnly: true, hero: null });
+    showView('dashboard');
+    libHint.textContent = entries.length + ' partie(s) de ' + name + ' (lecture seule).';
+    window.scrollTo(0, 0);
+  }
+
+  async function backToMine() {
+    if (!_friendCtx) return;
+    _friendCtx = null;
+    hideFriendBanner();
+    const entries = await window.FabDB.getAllEntries();
+    const hasGames = entries.length > 0;
+    $('#dashEmpty').style.display = hasGames ? 'none' : 'block';
+    $('#dashboardBody').style.display = hasGames ? 'block' : 'none';
+    if (hasGames) window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onMeta: updateMeta, readOnly: false, hero: (_savedHero || null) });
+    showView('dashboard');
   }
 
   // ---------- Démarrage ----------

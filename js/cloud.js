@@ -164,11 +164,87 @@
     return true;
   }
 
+  // ---------- Amis (feature « voir les parties de mes amis ») ----------
+  // Toute la logique vit dans des RPC Postgres SECURITY DEFINER (voir
+  // supabase/migrations/*friends*). Ici on ne fait que les appeler.
+
+  // Mon profil : { id, display_name, friend_code }. null si non connecté.
+  async function myProfile() {
+    if (!client || !currentUser) return null;
+    const { data, error } = await client.rpc('get_my_profile');
+    if (error) throw error;
+    return (data && data[0]) || null;
+  }
+
+  async function setDisplayName(name) {
+    if (!client || !currentUser) throw new Error('Non connecté.');
+    const { error } = await client.rpc('set_display_name', { p_name: String(name || '') });
+    if (error) throw error;
+    return true;
+  }
+
+  // Envoie une demande via un code d'ami. Renvoie un statut lisible :
+  // 'pending' | 'accepted' | 'already_friends' | 'already_pending' | 'not_found' | 'self'.
+  async function sendFriendRequest(code) {
+    if (!client || !currentUser) throw new Error('Non connecté.');
+    const { data, error } = await client.rpc('send_friend_request', { p_code: String(code || '').trim() });
+    if (error) throw error;
+    return data;
+  }
+
+  // Répond à une demande reçue. accept=true → 'accepted', sinon 'declined'.
+  async function respondRequest(requestId, accept) {
+    if (!client || !currentUser) throw new Error('Non connecté.');
+    const { data, error } = await client.rpc('respond_friend_request', { p_id: requestId, p_accept: !!accept });
+    if (error) throw error;
+    return data;
+  }
+
+  async function removeFriend(friendId) {
+    if (!client || !currentUser) throw new Error('Non connecté.');
+    const { error } = await client.rpc('remove_friend', { p_friend: friendId });
+    if (error) throw error;
+    return true;
+  }
+
+  // Liste des amis : [{ friend_id, display_name, since }].
+  async function listFriends() {
+    if (!client || !currentUser) return [];
+    const { data, error } = await client.rpc('list_friends');
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Demandes reçues en attente : [{ request_id, requester_id, display_name, created_at }].
+  async function pendingRequests() {
+    if (!client || !currentUser) return [];
+    const { data, error } = await client.rpc('list_pending_requests');
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Parties partagées d'un ami (lecture seule — la RLS garantit qu'on n'y a
+  // accès que si l'amitié est acceptée). Même forme que fetchGames.
+  async function fetchFriendGames(friendId) {
+    if (!client || !currentUser) return [];
+    const { data, error } = await client
+      .from('games')
+      .select('game_id, raw, my_hero, opp_hero, format, captured_at, meta')
+      .eq('user_id', friendId)
+      .order('captured_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
   function randomToken() {
     const a = new Uint8Array(24);
     (root.crypto || {}).getRandomValues ? root.crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = (i * 40503) & 255);
     return 'dt_' + Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  root.Cloud = { available, init, onChange, getUser, signIn, signOut, fetchGames, updateMeta, createPairing, uploadGames, deleteGame, deleteAccount };
+  root.Cloud = {
+    available, init, onChange, getUser, signIn, signOut, fetchGames, updateMeta, createPairing, uploadGames, deleteGame, deleteAccount,
+    // Amis
+    myProfile, setDisplayName, sendFriendRequest, respondRequest, removeFriend, listFriends, pendingRequests, fetchFriendGames
+  };
 })(typeof self !== 'undefined' ? self : this);

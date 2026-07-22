@@ -1528,3 +1528,63 @@ footer a{color:var(--text-dim)}
   #boardReplay.br-fs .br-lane .br-pcard.br-lg{width:132px}
   #boardReplay.br-fs .br-cardrow{max-width:230px}
 }
+
+/* ============================================================
+   Compte + Amis (en-tête) — avatar, menu déroulant, bandeau ami
+   ============================================================ */
+header{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px}
+header .brand{margin-bottom:0}
+.acct{position:relative}
+.avatar-btn{position:relative; display:inline-flex; align-items:center; gap:8px;
+  background:var(--panel); border:1px solid var(--line-2); color:var(--text);
+  border-radius:999px; padding:5px 12px 5px 6px; cursor:pointer; font:inherit}
+.avatar-btn:hover{border-color:var(--gold-dim)}
+.avatar-btn .av{width:26px; height:26px; border-radius:50%; background:rgba(139,107,255,.20);
+  color:#c8bcff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:.8rem}
+.avatar-btn .nm{font-size:.82rem; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.avatar-btn .cv{color:var(--text-faint); font-size:.7rem}
+.fdot{position:absolute; top:-2px; right:-2px; width:11px; height:11px; border-radius:50%;
+  background:var(--red); border:2px solid var(--bg)}
+
+.fmenu{position:absolute; top:calc(100% + 8px); right:0; width:330px; max-width:calc(100vw - 24px);
+  z-index:60; background:var(--panel-2); border:1px solid var(--line-2); border-radius:12px;
+  padding:14px; box-shadow:0 12px 34px rgba(0,0,0,.55)}
+.fm-head{display:flex; align-items:center; gap:10px}
+.fm-name{font-size:.9rem}
+.fm-muted{color:var(--text-faint)}
+.fm-link{background:none; border:none; color:var(--text-faint); font-size:.72rem; padding:0; cursor:pointer; text-decoration:underline}
+.fm-div{border-top:1px solid var(--line); margin:11px 0}
+.fm-lbl{font-size:.68rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.1em; margin-bottom:6px}
+.fm-red{color:var(--red)}
+.fm-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.fmenu .code{font-family:'JetBrains Mono',monospace; font-size:1.05rem; color:var(--gold); letter-spacing:.12em}
+.fmenu .btn{background:var(--panel); border:1px solid var(--line); color:var(--text);
+  border-radius:8px; padding:6px 11px; font-size:.8rem; cursor:pointer; font:inherit}
+.fmenu .btn:hover{border-color:var(--gold-dim)}
+.fmenu .btn.hot{border-color:var(--gold-dim); color:var(--gold); background:var(--panel-3)}
+.fmenu .btn.ok{border-color:rgba(79,184,122,.5); color:var(--green)}
+.fm-input{background:var(--panel); border:1px solid var(--line-2); color:var(--text); border-radius:8px;
+  padding:6px 10px; font-family:'JetBrains Mono',monospace; font-size:.8rem; flex:1; min-width:110px}
+.av-sm{width:26px; height:26px; border-radius:50%; background:rgba(139,107,255,.18); color:#c8bcff;
+  display:flex; align-items:center; justify-content:center; font-weight:600; font-size:.72rem; flex:none}
+.fmenu .pill{display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:999px;
+  font-size:.64rem; color:var(--gold); border:1px solid var(--gold-dim); background:rgba(201,162,39,.08)}
+.fm-req{display:flex; align-items:center; gap:9px; background:var(--panel); border-radius:8px; padding:8px 10px; margin-bottom:6px}
+.fm-reqname{flex:1; min-width:0}
+.fm-reqname .small{font-size:.82rem}
+.fm-reqbtns{display:flex; gap:6px}
+.fm-friend{display:block; width:100%; text-align:left; background:none; border:none; color:var(--text);
+  font:inherit; font-size:.85rem; padding:7px 6px; border-radius:8px; cursor:pointer}
+.fm-friend:hover{background:var(--panel)}
+.fm-friend.on{color:var(--gold)}
+.fm-friend-row{display:flex; align-items:center; gap:9px; padding:6px}
+.fm-friend-row.on{background:var(--panel); border-radius:8px}
+.fm-friend-row .small{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.82rem}
+.fmenu .see{background:none; border:none; color:var(--gold); font-size:.76rem; cursor:pointer; white-space:nowrap}
+.fm-x{background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:.8rem}
+.fm-empty{font-size:.76rem; color:var(--text-faint); padding:4px 6px}
+
+.fbanner{max-width:45rem; margin:12px auto 0; display:flex; align-items:center; justify-content:space-between;
+  gap:12px; flex-wrap:wrap; background:rgba(139,107,255,.12); border:1px solid rgba(139,107,255,.35);
+  border-radius:10px; padding:9px 16px; color:#cdbfff; font-size:.84rem}
+.fbanner button{background:none; border:none; color:var(--text); cursor:pointer; font:inherit; font-size:.82rem; text-decoration:underline}

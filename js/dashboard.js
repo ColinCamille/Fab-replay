@@ -236,6 +236,8 @@
   // reste de l'app (replay, header…).
   // ============================================================
   let _entries = [], _onOpen = null, _onDelete = null, _onMeta = null, _built = false, _A = null, _L = null, _trendGeom = null;
+  // Lecture seule (vue « parties d'un ami ») : masque favori / tags / suppression.
+  let _readOnly = false;
   const DEFAULT_ACCENT = '#c9a227';
   const state = {
     hero: null, format: '', opp: '', period: 'all', includeAI: false, tag: '',
@@ -584,6 +586,9 @@
   function verdictLbl(o) { return o == null ? 'En cours' : (o ? 'Victoire' : 'Défaite'); }
   const favBtnHTML = e => '<button class="gfav' + (e.favorite ? ' on' : '') + '" data-fav="' + esc2(e.gameId) + '" title="' + (e.favorite ? 'Retirer des favoris' : 'Mettre en favori') + '" aria-pressed="' + (!!e.favorite) + '" aria-label="Favori">' + (e.favorite ? '★' : '☆') + '</button>';
   const tagBtnHTML = e => '<button class="gtagbtn' + (entryTags(e).length ? ' has' : '') + '" data-tag="' + esc2(e.gameId) + '" title="Modifier les tags" aria-label="Modifier les tags">🏷</button>';
+  // Bloc d'actions par partie (favori / tags / suppression) — vide en lecture seule.
+  const gactsHTML = e => _readOnly ? '' : '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
+    '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
   function tagsRowHTML(e) {
     const tags = entryTags(e);
     if (!tags.length) return '';
@@ -596,8 +601,7 @@
       '<div class="body"><div class="mu"><span class="me">' + esc2(me) + '</span><span class="vs">vs</span><span>' + esc2(op) + '</span></div>' +
       '<div class="gsub">' + esc2(sub) + '</div>' + tagsRowHTML(e) + '</div>' +
       '<div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
-      '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
-      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div></div>';
+      gactsHTML(e) + '</div>';
   }
   function crowHTML(e) {
     const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
@@ -607,8 +611,7 @@
       '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + tagMini + '</span>' +
       '<span class="cmeta">' + fmtDate(dateOf(rec)) + ' · ' + turnsOf(rec) + 't</span>' +
       '<span class="cv">' + (o == null ? '·' : (o ? 'V' : 'D')) + '</span>' +
-      '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
-      '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div></div>';
+      gactsHTML(e) + '</div>';
   }
   function histList() {
     const qn = norm(state.q);
@@ -906,6 +909,11 @@
     _onOpen = (opts && opts.onOpen) || null;
     _onDelete = (opts && opts.onDelete) || null;
     _onMeta = (opts && opts.onMeta) || null;
+    _readOnly = !!(opts && opts.readOnly);
+    // Changement de contexte (bascule ma biblio ↔ celle d'un ami) : on peut
+    // (ré)initialiser le héros sélectionné pour ne pas rester sur un héros
+    // absent de la nouvelle liste.
+    if (opts && 'hero' in opts) state.hero = opts.hero;
     const host = D.getElementById('dashboardBody');
     if (!host) return;
     if (!_built) { buildSkeleton(host); wire(host); ensureToast(); _built = true; }
@@ -914,6 +922,6 @@
   function refresh() { if (_built) renderAll(); }
 
   // Exports : cœur d'agrégation (Node + navigateur) + API de rendu (navigateur).
-  root.Dashboard = { aggregate, outcome, oppHeroOf, dateOf, mount, refresh, applyHeroTheme: themeFor, restoreTheme: function () { themeFor(state.hero); } };
+  root.Dashboard = { aggregate, outcome, oppHeroOf, dateOf, mount, refresh, getHero: function () { return state.hero; }, applyHeroTheme: themeFor, restoreTheme: function () { themeFor(state.hero); } };
   if (typeof module === 'object' && module.exports) module.exports = root.Dashboard;
 })(typeof self !== 'undefined' ? self : this);
