@@ -1505,6 +1505,11 @@ footer a{color:var(--text-dim)}
     flex-direction:column;gap:8px;margin:0;padding:8px;border-radius:14px;
     background:rgba(12,15,23,.85);border:1px solid var(--line-2);box-shadow:0 8px 28px rgba(0,0,0,.55)}
   #boardReplay .br-toolbar .br-tool{width:46px;height:46px;font-size:1.15rem}
+  /* Bouton plein écran placé SOUS le rail des contrôles (le rail va jusqu'à ~230px)
+     pour ne plus recouvrir le 1er bouton (⏮). Centré sous le rail. En plein écran
+     la règle #boardReplay.br-fs .br-fsbtn (plus spécifique) le repasse fixe en
+     haut à droite de l'écran. */
+  #boardReplay:not(.br-fs) .br-fsbtn{top:242px;right:16px}
 }
 
 /* Mobile : contrôles de lecture (⏮ ‹ ▶ ›) déplacés SOUS le plateau + la timeline
