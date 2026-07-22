@@ -1549,6 +1549,10 @@ header .brand{margin-bottom:0}
 .fmenu{position:absolute; top:calc(100% + 8px); right:0; width:330px; max-width:calc(100vw - 24px);
   z-index:60; background:var(--panel-2); border:1px solid var(--line-2); border-radius:12px;
   padding:14px; box-shadow:0 12px 34px rgba(0,0,0,.55)}
+/* Mobile : le header passe en colonne (flex-wrap) et l'avatar se cale à GAUCHE.
+   Ancré à right:0, le menu (330px) partait alors hors de l'écran par la gauche.
+   On l'ancre donc à gauche pour qu'il s'ouvre vers l'intérieur de l'écran. */
+@media (max-width:899px){ .fmenu{ left:0; right:auto; } }
 .fm-head{display:flex; align-items:center; gap:10px}
 .fm-name{font-size:.9rem}
 .fm-muted{color:var(--text-faint)}
