@@ -1591,6 +1591,7 @@ header .brand{margin-bottom:0}
 .fm-x{background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:.8rem}
 .fm-empty{font-size:.76rem; color:var(--text-faint); padding:4px 6px}
 
+.fbanner[hidden]{display:none}   /* sinon display:flex écrase l'attribut hidden */
 .fbanner{max-width:45rem; margin:12px auto 0; display:flex; align-items:center; justify-content:space-between;
   gap:12px; flex-wrap:wrap; background:rgba(139,107,255,.12); border:1px solid rgba(139,107,255,.35);
   border-radius:10px; padding:9px 16px; color:#cdbfff; font-size:.84rem}
@@ -5794,8 +5795,8 @@ header .brand{margin-bottom:0}
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=144"></script>
-<script src="js/cloud.js?v=144"></script>
+<script src="js/cloud-config.js?v=145"></script>
+<script src="js/cloud.js?v=145"></script>
 
 <script>
 // ============================================================
