@@ -544,6 +544,26 @@ console.log('Transform —');
   assert(clash && (clash.pumps || []).some(p => p.nm === 'Flick Knives'), 'transform: Flick Knives = renfort de l\'échange');
   // Une étape de transformation apparaît (à l'instant du « becomes »).
   assert(stages.some(st => st.type === 'transform' && /Funnel Web/.test(st.sub || '')), 'transform: étape de transformation présente');
+
+  // Transformation SANS ligne « becomes » (ex. Levia) : détectée via le bloc
+  // HERO FORMS (forme du héros par tour) — indépendant du phrasé du log.
+  const levRaw = [
+    '=== Talishar game 89 — test ===', '',
+    "Levia's turn 1 has begun.", 'Levia played Bloodrush Bellow',
+    "Levia's turn 2 has begun.", 'Levia played Barraging Beatdown',
+    '', '=== META ===', 'me: Levia', 'opp: Dummy',
+    '', '=== HERO FORMS (forme du héros par tour : toi | adversaire) ===',
+    '[Levia #1] me: Levia | opp: Dummy',
+    '[Levia #2] me: Blasmophet, the Soul Harvester | opp: Dummy'
+  ].join('\n');
+  const lev = Parser.parse(levRaw);
+  const levSteps = BR.buildTimeline(lev).steps;
+  const levStages = levSteps.map(s => s.stage);
+  const levTrans = levStages.filter(st => st.type === 'transform');
+  assert(levTrans.length === 1 && /Blasmophet/.test(levTrans[0].sub) && levTrans[0].side === 'me',
+    'transform (Levia, sans « becomes ») : détecté via HERO FORMS, une seule bannière côté moi');
+  assert(!levTrans.some(st => /null/.test(st.sub || '')), 'transform : pas de bannière parasite « null → … »');
+  assert(/Blasmophet/.test(levSteps[levSteps.length - 1].form.me), 'transform (Levia) : forme finale = Blasmophet');
 })();
 
 // ---------- Undo : action annulée retirée (+ re-log dédupliqué) ----------

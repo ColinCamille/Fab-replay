@@ -155,7 +155,10 @@
           if (nf && !sameHero(nf, curForm[sd])) {
             const prev = curForm[sd];
             curForm[sd] = nf;
-            push(t.label || label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + nf });
+            // Bannière SEULEMENT si une forme antérieure était déjà connue (vraie
+            // transformation). Sinon (forme initiale pas encore résolue au 1er
+            // instantané) on l'établit en silence — pas de « null → X » parasite.
+            if (prev) push(t.label || label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + nf });
           }
         });
       }
