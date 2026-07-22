@@ -564,6 +564,21 @@ console.log('Transform —');
     'transform (Levia, sans « becomes ») : détecté via HERO FORMS, une seule bannière côté moi');
   assert(!levTrans.some(st => /null/.test(st.sub || '')), 'transform : pas de bannière parasite « null → … »');
   assert(/Blasmophet/.test(levSteps[levSteps.length - 1].form.me), 'transform (Levia) : forme finale = Blasmophet');
+
+  // Transformation de l'ADVERSAIRE (je subis une Marionette qui se transforme) :
+  // bannière côté opp + forme adverse mise à jour (symétrie me/opp).
+  const oppRaw = [
+    '=== Talishar game 90 — test ===', '',
+    "Bravo's turn 1 has begun.", 'Bravo played Crush Confidence',
+    "Arakni, Marionette's turn 1 has begun.", 'Arakni, Marionette played Sharpen Steel',
+    'Arakni, Marionette becomes Arakni, Funnel Web',
+    '', '=== META ===', 'me: Bravo', 'opp: Arakni, Marionette'
+  ].join('\n');
+  const oppSteps = BR.buildTimeline(Parser.parse(oppRaw)).steps;
+  const oppTrans = oppSteps.map(s => s.stage).filter(st => st.type === 'transform');
+  assert(oppTrans.length === 1 && oppTrans[0].side === 'opp' && /Funnel Web/.test(oppTrans[0].sub),
+    'transform (adversaire) : bannière côté opp (Marionette → Funnel Web)');
+  assert(/Funnel Web/.test(oppSteps[oppSteps.length - 1].form.opp), 'transform (adversaire) : forme adverse finale mise à jour');
 })();
 
 // ---------- Undo : action annulée retirée (+ re-log dédupliqué) ----------
