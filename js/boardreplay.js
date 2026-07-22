@@ -700,13 +700,19 @@
       const wrap = container.querySelector('.br-wrap');
       if (!wrap || !wrap.offsetParent) return;
       const fs = container.classList.contains('br-fs');   // plein écran → toute la fenêtre
-      wrap.style.transform = ''; wrap.style.marginRight = ''; wrap.style.marginBottom = ''; container.style.height = '';   // remise à zéro pour mesurer
+      wrap.style.transform = ''; wrap.style.marginRight = ''; wrap.style.marginBottom = ''; wrap.style.width = ''; container.style.height = '';   // remise à zéro pour mesurer
       // On prend l'EMPREINTE RÉELLE du contenu (scrollWidth/Height) et pas juste
       // offsetWidth : sur mobile la table peut être plus large que son cadre
       // (sinon, en plein écran, l'arsenal de droite était rogné).
       const natW = Math.max(wrap.offsetWidth, wrap.scrollWidth);
       const natH = Math.max(wrap.offsetHeight, wrap.scrollHeight);
       if (!natW || !natH) return;
+      // On VERROUILLE la largeur mesurée : sinon la marge droite négative (ci-
+      // dessous, qui retire le fantôme de transform) ré-élargit un wrap en largeur
+      // auto (auto = conteneur − marges → +416px), le contenu se re-dispose plus
+      // large et DÉBORDE une fois mis à l'échelle (bug PC/plein écran). Largeur
+      // figée → la marge négative ne fait que retirer le fantôme, sans élargir.
+      wrap.style.width = natW + 'px';
       const top = fs ? 0 : container.getBoundingClientRect().top;
       const availH = (fs ? window.innerHeight : window.innerHeight - top) - 12;
       // Largeur dispo = largeur de CONTENU (on retire le padding du conteneur,
