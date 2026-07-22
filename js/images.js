@@ -177,7 +177,10 @@
   // (full-art) si l'API en renvoie une, sinon l'illustration standard. Cache dédié.
   // Version de cache : à bumper quand la logique de choix d'image héros change,
   // pour invalider les entrées mémorisées dans le navigateur.
-  const HERO_IMG_CACHE_V = 'fa5';
+  const HERO_IMG_CACHE_V = 'fa6';
+  // Mots « vides » ignorés pour comparer des noms de héros multi-formes.
+  const HERO_STOP = new Set(['the', 'of', 'and', 'a', 'de', 'le', 'la', 'du', 'des']);
+  const heroTokens = s => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(t => t && !HERO_STOP.has(t));
   const stripName = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');   // ignore ponctuation/espaces/casse
   async function resolveHeroCardImage(name) {
     if (!name) return null;
@@ -187,15 +190,31 @@
       // On requête sur le NOM DE BASE (1er mot) : plus fiable que le nom complet
       // qui peut différer (« Kayo Underhanded Cheat » vs « Kayo, Underhanded Cheat »).
       const base = name.split(/[\s,]+/)[0] || name;
-      const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(base) + '&limit=20');
+      // limit élevé : certains héros ont BEAUCOUP de formes (ex. Arakni) → la bonne
+      // forme peut être au-delà des 20 premières.
+      const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(base) + '&limit=50');
       if (!res.ok) throw new Error('http ' + res.status);
       const json = await res.json();
-      const list = (json.data || json.cards || json.results || []).filter(c => (c.types || []).indexOf('Hero') >= 0 || !c.types);
+      // /hero/i (et pas === 'Hero') → on garde AUSSI les « Demi-Hero » (formes
+      // transformées d'Arakni : Black Widow, Funnel Web…), sinon elles étaient
+      // exclues et on retombait sur la forme de base (jeune Arakni).
+      const list = (json.data || json.cards || json.results || []).filter(c => !c.types || (c.types || []).some(t => /hero/i.test(t)));
       const target = stripName(name);
-      // Correspondance en ignorant la ponctuation ; sinon préfixe ; sinon 1re carte.
-      const best = list.find(c => stripName(c.name) === target)
-        || list.find(c => stripName(c.name).indexOf(target) === 0 || target.indexOf(stripName(c.name)) === 0)
-        || list[0] || null;
+      // 1) correspondance EXACTE (ponctuation ignorée). 2) sinon, la forme qui
+      // partage le PLUS de mots DISTINCTIFS avec le nom cible (« tarantula »,
+      // « marionette »…) — évite de retomber sur la forme de base « Arakni » via
+      // un simple préfixe. 3) sinon 1re carte.
+      let best = list.find(c => stripName(c.name) === target);
+      if (!best && list.length) {
+        const tgt = heroTokens(name);
+        let bestScore = 0;
+        for (const c of list) {
+          const ct = new Set(heroTokens(c.name));
+          const score = tgt.filter(t => ct.has(t)).length;
+          if (score > bestScore) { bestScore = score; best = c; }
+        }
+        if (!best) best = list[0];
+      }
       // Priorité : full art (face _BACK des Marvel) → face Marvel → illustration normale.
       const image = (best && (findFullArtImageUrl(best) || findMarvelImageUrl(best))) || (best ? findImageUrl(best) : null);
       cardMetaCache[key] = { image: image || null };
