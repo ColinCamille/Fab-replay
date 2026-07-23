@@ -3,7 +3,9 @@ node_modules/
 Thumbs.db
 
 # Configuration de prévisualisation locale (chemins machine-spécifiques)
-.claude/
+# — sauf settings.json (mode plan + opusplan par défaut), qu'on versionne
+.claude/*
+!.claude/settings.json
 
 # Ancien viewer standalone mono-partie — remplacé par index.html + build/standalone.html
 fab-replay-viewer-standalone-4.html
