@@ -57,6 +57,17 @@
   // Noms normalisés des ARMES uniquement (slots weaponL/weaponR) — pour les
   // exclure du grisé « utilisé » (une arme qui attaque n'est pas « épuisée »).
   function weaponSet(pl) { const s = {}; const e = (pl && pl.equipment) || {}; ['weaponL', 'weaponR'].forEach(k => { if (e[k] && e[k].name) s[norm(e[k].name)] = 1; }); return s; }
+  // Clé d'IDENTITÉ d'une pièce d'équipement : le nom BRUT (avant retrait du
+  // suffixe « R » dual-wield par le parseur) si connu, sinon le nom affiché.
+  // Sert à distinguer deux copies d'une même arme (ex. deux « Hunter's Klaive »
+  // en weaponL/weaponR) — le cimetière nomme la copie détruite avec son « R »,
+  // ce que le nom affiché (stripé) ne porte plus. Pièce à nom unique : identique
+  // à norm(name) → comportement inchangé.
+  function rawKey(it) { return it ? norm(it.rawName || it.name) : null; }
+  // Set des clés d'identité (rawKey) de tout l'équipement d'un joueur — miroir
+  // de equipSet() mais indexé pour matcher le cimetière/banni (qui peut nommer
+  // une pièce avec son suffixe dual-wield).
+  function equipRawSet(pl) { const s = {}; const e = (pl && pl.equipment) || {}; Object.keys(e).forEach(k => { const k2 = rawKey(e[k]); if (k2) s[k2] = 1; }); return s; }
 
   function buildTimeline(GAME) {
     const MY = GAME.myName, OPP = GAME.oppName;
@@ -71,7 +82,51 @@
     const sameHero = (a, b) => norm(a).replace(/[^a-z0-9]/g, '') === norm(b).replace(/[^a-z0-9]/g, '');
     const EQ = { me: equipSet(GAME.players.me), opp: equipSet(GAME.players.opp) };
     const WPN = { me: weaponSet(GAME.players.me), opp: weaponSet(GAME.players.opp) };
+    // Clés d'identité (nom brut, avec suffixe dual-wield) : pour distinguer au
+    // cimetière laquelle des deux copies d'une même arme a été détruite.
+    const EQRAW = { me: equipRawSet(GAME.players.me), opp: equipRawSet(GAME.players.opp) };
     const sideOf = p => (p === MY ? 'me' : 'opp');
+    // ------------------------------------------------------------------
+    // ARMES CRÉÉES EN JEU (ex. Graphene Chelicera, pouvoir Arakni, Orb-Weaver) :
+    // absentes de l'équipement de départ (META), elles n'apparaissent nulle part
+    // sur un plateau construit une fois pour toutes depuis ce seul instantané.
+    // Détection heuristique, la COMBAT CHAIN faisant autorité sur l'attaquant
+    // (cf. CLAUDE.md §7) : une carte ACTIVÉE par un camp, absente de son
+    // équipement connu ET de toutes ses formes de héros (Arakni…), qui apparaît
+    // comme ATTAQUANT dans la chaîne de combat de CE tour ET n'est JAMAIS vue au
+    // cimetière (sinon ce serait une carte-action jouée puis défaussée, pas une
+    // arme qui reste en jeu) → traitée comme une arme créée. Une fois détectée,
+    // fusionnée dans EQ/WPN/EQRAW : la destruction (cimetière/banni, ligne
+    // « was destroyed ») et le non-grisage « arme active » la couvrent ensuite
+    // automatiquement, comme n'importe quelle arme d'équipement.
+    // ------------------------------------------------------------------
+    const FORMS = { me: {}, opp: {} };
+    const formKey = s => norm(s).replace(/[^a-z0-9]/g, '');
+    const addForm = (sd, nm) => { if (nm) FORMS[sd][formKey(nm)] = 1; };
+    addForm('me', HERO.me); addForm('opp', HERO.opp);
+    (GAME.turns || []).forEach(t => { if (t.heroForm) { addForm('me', t.heroForm.me); addForm('opp', t.heroForm.opp); } });
+    const everGrave = { me: {}, opp: {} };
+    (GAME.turns || []).forEach(t => {
+      if (!t.grave) return;
+      (t.grave.me || []).forEach(c => { everGrave.me[norm(c)] = 1; });
+      (t.grave.opp || []).forEach(c => { everGrave.opp[norm(c)] = 1; });
+    });
+    const createdWeapons = { me: [], opp: [] };
+    const createdKeys = { me: {}, opp: {} };
+    (GAME.turns || []).forEach(t => {
+      const chainCards = {};
+      (t.chain || []).forEach(c => { if (c && c.card) chainCards[norm(c.card)] = 1; });
+      (t.events || []).forEach(e => {
+        if (e.type !== 'activated' || !e.player) return;
+        const sd = sideOf(e.player), k = norm(e.card);
+        if (createdKeys[sd][k] || EQ[sd][k] || FORMS[sd][formKey(e.card)] || everGrave[sd][k] || !chainCards[k]) return;
+        createdKeys[sd][k] = 1;
+        createdWeapons[sd].push({ name: e.card, key: k });
+      });
+    });
+    ['me', 'opp'].forEach(sd => {
+      createdWeapons[sd].forEach(cw => { EQ[sd][cw.key] = 1; WPN[sd][cw.key] = 1; EQRAW[sd][cw.key] = 1; });
+    });
     const isEquip = (side, card) => !!EQ[side][norm(card)];
     const ls = GAME.lifeSeries || { me: [], opp: [] };
 
@@ -79,7 +134,7 @@
       meHandCards: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
       mePitch: [], oppPitch: [], meArsenal: [], oppArsenalCount: 0,
       meGrave: [], oppGrave: [], meBanish: [], oppBanish: [], meTokens: [], oppTokens: [],
-      meEquipGone: [], oppEquipGone: [], meEquipUsed: [], oppEquipUsed: [], life: { me: 0, opp: 0 }
+      meEquipGone: [], oppEquipGone: [], meEquipUsed: [], oppEquipUsed: [], meBorn: [], oppBorn: [], life: { me: 0, opp: 0 }
     };
     const steps = [];
     const snap = () => ({
@@ -88,7 +143,8 @@
       meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(), meBanish: st.meBanish.slice(), oppBanish: st.oppBanish.slice(),
       meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(),
       meEquipGone: st.meEquipGone.slice(), oppEquipGone: st.oppEquipGone.slice(),
-      meEquipUsed: st.meEquipUsed.slice(), oppEquipUsed: st.oppEquipUsed.slice(), life: { me: st.life.me, opp: st.life.opp }
+      meEquipUsed: st.meEquipUsed.slice(), oppEquipUsed: st.oppEquipUsed.slice(),
+      meBorn: st.meBorn.slice(), oppBorn: st.oppBorn.slice(), life: { me: st.life.me, opp: st.life.opp }
     });
     const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, form: { me: curForm.me, opp: curForm.opp }, state: snap() });
     const rm = (a, n) => { const k = a.findIndex(x => norm(x) === norm(n)); if (k >= 0) { a.splice(k, 1); return true; } return false; };
@@ -129,8 +185,12 @@
       // armures…). Complète l'événement « was destroyed » (utile aux vieux logs
       // sans cimetière capté). NB : détecté en DÉBUT de tour → une pièce cassée
       // ce tour-ci reste visible pendant le tour, puis disparaît au suivant.
+      // On matche par rawKey (nom brut, avec suffixe dual-wield le cas échéant) :
+      // le cimetière nomme la copie détruite d'une arme dual-wield avec son « R »
+      // (ex. « Hunter's Klaive R »), ce qui identifie SPÉCIFIQUEMENT cette copie —
+      // sans quoi les deux copies (même nom affiché) seraient masquées ensemble.
       [['me', st.meGrave, st.meBanish, st.meEquipGone], ['opp', st.oppGrave, st.oppBanish, st.oppEquipGone]].forEach(([sd, grave, banish, gone]) => {
-        (grave || []).concat(banish || []).forEach(c => { const k = norm(c); if (EQ[sd][k] && gone.indexOf(k) < 0) gone.push(k); });
+        (grave || []).concat(banish || []).forEach(c => { const k = norm(c); if (EQRAW[sd][k] && gone.indexOf(k) < 0) gone.push(k); });
       });
 
       // Joueur actif. Le tour d'ouverture (1er joueur) n'a souvent pas d'en-tête
@@ -322,6 +382,10 @@
           // sans passer par le différé de combat (openAtk).
           lastAction = e.card;
           const side = sideOf(e.player);
+          // Naissance d'une arme CRÉÉE en jeu (cf. prescan createdKeys, ex.
+          // Graphene Chelicera) : apparaît sur le plateau à partir de CETTE
+          // étape précise (cumulatif, jamais annulé).
+          if (createdKeys[side][norm(e.card)]) { const b = side === 'me' ? st.meBorn : st.oppBorn; const bk = norm(e.card); if (b.indexOf(bk) < 0) b.push(bk); }
           // Si la carte activée est une pièce d'équipement NON-ARME (armure/item),
           // on la marque « utilisée » pour ce tour → grisée sur le plateau
           // (réarmée au tour suivant). Les armes et les activations de héros ne
@@ -354,7 +418,20 @@
           // correspondent à aucune pièce → naturellement ignorées ici.
           const k = norm(e.card), inMe = !!EQ.me[k], inOpp = !!EQ.opp[k];
           const gside = (inMe && !inOpp) ? 'me' : (inOpp && !inMe) ? 'opp' : (inMe && inOpp) ? (atkSide === 'me' ? 'opp' : 'me') : null;
-          if (gside) { const arr = gside === 'me' ? st.meEquipGone : st.oppEquipGone; if (arr.indexOf(k) < 0) arr.push(k); }
+          if (gside) {
+            const arr = gside === 'me' ? st.meEquipGone : st.oppEquipGone;
+            const eq = (GAME.players[gside] && GAME.players[gside].equipment) || {};
+            // Résout la COPIE exacte détruite (dual-wield, ex. deux dagues
+            // identiques) : nom brut si la ligne le porte déjà (rawKey exact,
+            // ex. « ...R »), sinon la 1re copie de ce nom affiché pas encore
+            // marquée détruite. Pièce à copie unique : inchangé (rawKey===k).
+            let key = k;
+            if (!EQRAW[gside][k]) {
+              const slot = Object.keys(eq).find(sk => norm(eq[sk] && eq[sk].name) === k && arr.indexOf(rawKey(eq[sk])) < 0);
+              if (slot) key = rawKey(eq[slot]);
+            }
+            if (arr.indexOf(key) < 0) arr.push(key);
+          }
         } else if (e.type === 'pitched') {
           const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
         } else if (e.type === 'transform') {
@@ -444,7 +521,14 @@
       });
       flushAtk(); flushBuf(); flushTransforms();   // fin de tour : dernière action hors-combat / transfo orpheline affichée
     });
-    return { players: GAME.players, myName: MY, oppName: OPP, hero: HERO, steps };
+    // Clone superficiel des joueurs (on ne mute JAMAIS GAME.players, potentiellement
+    // partagé/réutilisé ailleurs — ex. dashboard) pour y accrocher les armes créées
+    // en jeu, lues par buildZone().
+    const players = {
+      me: Object.assign({}, GAME.players.me || {}, { createdWeapons: createdWeapons.me }),
+      opp: Object.assign({}, GAME.players.opp || {}, { createdWeapons: createdWeapons.opp })
+    };
+    return { players, myName: MY, oppName: OPP, hero: HERO, steps };
   }
 
   // ============================================================
@@ -477,17 +561,27 @@
       gcard(side, 'arms', nm('arms')) + gcard(side, 'legs', nm('legs')) + '</div>';
     // Arme(s) : on affiche weaponL ET weaponR (main + main gauche/off-hand, ex.
     // « Arcane Lantern »), en sautant les slots vides — sinon la 2e arme adverse
-    // n'apparaissait pas sur le plateau.
-    const wpnTile = wnm => (wnm && wnm !== '—')
-      ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(norm(wnm)) + '"><div class="br-art" data-card="' + esc(wnm) + '"></div><div class="br-lab">' + esc(wnm) + '</div></div>'
+    // n'apparaissait pas sur le plateau. data-equip = rawKey (nom BRUT, suffixe
+    // dual-wield compris) : identifie la copie exacte, pas juste le nom affiché
+    // — sinon deux dagues identiques (ex. deux « Hunter's Klaive ») partagent la
+    // même clé et une seule destruction en masquerait deux (ou aucune).
+    const wpnTile = it => (it && it.name)
+      ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(rawKey(it)) + '"><div class="br-art" data-card="' + esc(it.name) + '"></div><div class="br-lab">' + esc(it.name) + '</div></div>'
       : '';
+    // Armes CRÉÉES en jeu (ex. Graphene Chelicera par le pouvoir d'Arakni,
+    // Orb-Weaver) : absentes de l'équipement de départ, ajoutées par
+    // buildTimeline() dans createdWeapons. Masquées tant que non « nées »
+    // (br-unborn, cf. applyBornState) — data-equip pour qu'une destruction
+    // ultérieure les masque aussi.
+    const bornTile = cw => '<div class="br-gcard br-' + side + ' br-wpn br-unborn" data-equip="' + esc(cw.key) + '" data-born="' + esc(cw.key) + '"><div class="br-art" data-card="' + esc(cw.name) + '"></div><div class="br-lab">' + esc(cw.name) + '</div></div>';
+    const createdWpns = ((pl.createdWeapons || [])).map(bornTile).join('');
     // Armes regroupées dans .br-wpns : avec l'équipement (à gauche du héros) et
     // les armes (à droite), le héros est l'ancre CENTRALE du cluster. Sans ce
     // regroupement, un joueur à 1 arme et un à 2 armes décalaient leur héros
     // (cluster centré de largeur variable) → les deux camps ne s'alignaient pas.
     const cluster = '<div class="br-cluster">' + equip +
       gcard(side, 'hero', pl.hero || '?', true) +
-      '<div class="br-wpns">' + wpnTile(nm('weaponL')) + wpnTile(nm('weaponR')) + '</div>' +
+      '<div class="br-wpns">' + wpnTile(e.weaponL) + wpnTile(e.weaponR) + createdWpns + '</div>' +
       '</div>';
     const rightRail = '<div class="br-rail br-right">' +
       '<div class="br-zpair"><span class="br-zlbl">Arsenal</span>' +
@@ -606,6 +700,16 @@
         el.classList.toggle('br-used', !broken && used.indexOf(k) >= 0); // activé ce tour → grisé
       });
     }
+    // Armes CRÉÉES en jeu (ex. Graphene Chelicera) : masquées (br-unborn) tant
+    // qu'elles ne sont pas encore apparues à l'étape courante ; réversible en
+    // scrubbant la timeline en arrière, comme applyEquipState().
+    function applyBornState(zoneSel, bornArr) {
+      const zone = $(zoneSel); if (!zone) return;
+      const born = bornArr || [];
+      zone.querySelectorAll('[data-born]').forEach(el => {
+        el.classList.toggle('br-unborn', born.indexOf(el.getAttribute('data-born')) < 0);
+      });
+    }
     // Applique la forme courante du héros (Arakni se transforme) : nom dans le
     // panneau de vie + libellé/image de la carte-héros. paintArt() (fin de render)
     // repeint l'image de la nouvelle forme.
@@ -652,6 +756,8 @@
       // scrubbant la timeline — on repositionne la classe selon l'état de l'étape).
       applyEquipState('#br-fMe', stt.meEquipGone, stt.meEquipUsed);
       applyEquipState('#br-fOpp', stt.oppEquipGone, stt.oppEquipUsed);
+      applyBornState('#br-fMe', stt.meBorn);
+      applyBornState('#br-fOpp', stt.oppBorn);
       $('#br-fMe').classList.toggle('br-active', s.actor === 'me');
       $('#br-fOpp').classList.toggle('br-active', s.actor === 'opp');
       slider.value = i; slider.style.setProperty('--pct', (steps.length > 1 ? i / (steps.length - 1) * 100 : 0) + '%');

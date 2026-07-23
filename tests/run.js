@@ -399,6 +399,94 @@ const banishTl = BR.buildTimeline({
 });
 assert(banishTl.steps.slice(-1)[0].state.meEquipGone.indexOf('nullrune boots') >= 0, 'équipement banni détecté comme retiré');
 
+// ---------- Dual-wield : 2 dagues identiques, une seule détruite (partie ZUP) ----------
+// Bug réel : dual-wield (weaponL+weaponR, même nom affiché « Hunters Klaive »)
+// détruit → le cimetière nomme la copie exacte avec son suffixe « R »
+// (« Hunters Klaive R »). Avant le fix, tout était indexé par nom AFFICHÉ
+// (stripé) → les 2 dagues partageaient la même clé, donc soit les 2 soit
+// aucune disparaissaient jamais. Avec rawName (nom brut, avant strip), chaque
+// copie a sa propre clé d'identité.
+const dwRaw = [
+  '=== Talishar game 1750692 — test ===', '',
+  "Arakni Marionette activated Flick Knives",
+  "Arakni Marionette's Hunter's Klaive was targeted",
+  "Valda Seismic Impact's turn 1 has begun.",
+  '', '=== META ===', 'me: Arakni Marionette', 'opp: Valda Seismic Impact',
+  'my_equipment: weaponL=Hunters Klaive (hunters_klaive) | weaponR=Hunters Klaive R (hunters_klaive_r)',
+  '', '=== GRAVEYARD SNAPSHOTS (cimetière : toi | adversaire) ===',
+  '[OUVERTURE] me: (vide) | opp: (vide)',
+  '[Valda Seismic Impact #1] me: Hunters Klaive R | opp: (vide)'
+].join('\n');
+const dwRec = Parser.parse(dwRaw);
+eq(dwRec.players.me.equipment.weaponL.name, 'Hunters Klaive', 'dual-wield: weaponL nom affiché');
+eq(dwRec.players.me.equipment.weaponR.name, 'Hunters Klaive', 'dual-wield: weaponR nom affiché (identique à weaponL)');
+eq(dwRec.players.me.equipment.weaponR.rawName, 'Hunters Klaive R', 'dual-wield: weaponR garde son nom BRUT (avec « R »)');
+eq(dwRec.players.me.equipment.weaponL.rawName, 'Hunters Klaive', 'dual-wield: weaponL sans suffixe → rawName = name');
+const dwTl = BR.buildTimeline(dwRec);
+const dwLast = dwTl.steps.slice(-1)[0].state;
+assert(dwLast.meEquipGone.indexOf('hunters klaive r') >= 0, 'dual-wield: SEULE la copie détruite (weaponR) est marquée partie');
+assert(dwLast.meEquipGone.indexOf('hunters klaive') < 0, 'dual-wield: la copie intacte (weaponL) n\'est PAS marquée partie (clé distincte)');
+
+// ---------- Arme CRÉÉE en jeu (ex. Graphene Chelicera, pouvoir Arakni Orb-Weaver) ----------
+// Absente de l'équipement de départ (META) et des formes de héros connues, mais
+// activée puis attaquante dans la COMBAT CHAIN (autoritaire, cf. CLAUDE.md §7)
+// et jamais vue au cimetière → détectée comme arme créée, visible sur le
+// plateau à partir de son activation.
+const cwTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Arakni, Marionette', equipment: {} }, opp: { hero: 'Opp', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], grave: { me: [], opp: [] },
+      heroForm: { me: 'Arakni, Orb-Weaver', opp: 'Opp' },
+      chain: [{ turn: 'Me#1', card: 'Graphene Chelicera', power: 14, defense: 0, kw: ['goAgain'] }],
+      events: [
+        { type: 'activated', player: 'Me', card: 'Graphene Chelicera' },
+        { type: 'damageTaken', player: 'Opp', amount: 14 },
+        { type: 'combatResult', hit: true, amount: 14 }
+      ] }
+  ]
+});
+eq((cwTl.players.me.createdWeapons || []).map(w => w.name).join(','), 'Graphene Chelicera', 'arme créée : détectée (activée + attaquante de la chaîne + jamais au cimetière)');
+const cwSteps = cwTl.steps;
+assert(cwSteps[0].state.meBorn.indexOf('graphene chelicera') < 0, 'arme créée : absente du plateau AVANT son activation');
+assert(cwSteps.slice(-1)[0].state.meBorn.indexOf('graphene chelicera') >= 0, 'arme créée : présente sur le plateau à partir de son activation');
+// Une carte activée qui finit tout de même au cimetière (pas une arme
+// permanente) n'est PAS détectée comme arme créée, même en attaquant via la
+// chaîne — le passage au cimetière signale une carte à usage unique.
+const gravedTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'X', equipment: {} }, opp: { hero: 'Y', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], grave: { me: ['One-Shot Trinket'], opp: [] },
+      chain: [{ turn: 'Me#1', card: 'One-Shot Trinket', power: 9, defense: 0, kw: [] }],
+      events: [
+        { type: 'activated', player: 'Me', card: 'One-Shot Trinket' },
+        { type: 'damageTaken', player: 'Opp', amount: 9 },
+        { type: 'combatResult', hit: true, amount: 9 }
+      ] }
+  ]
+});
+eq((gravedTl.players.me.createdWeapons || []).length, 0, 'arme créée : une carte activée finissant au cimetière n\'est PAS une arme');
+// Une carte simplement PLAYED (jamais activated) n'est jamais candidate, même
+// si elle attaque via la chaîne (ex. Spinal Crush).
+const actionTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'X', equipment: {} }, opp: { hero: 'Y', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], grave: { me: [], opp: [] },
+      chain: [{ turn: 'Me#1', card: 'Spinal Crush', power: 9, defense: 0, kw: [] }],
+      events: [
+        { type: 'played', player: 'Me', card: 'Spinal Crush' },
+        { type: 'damageTaken', player: 'Opp', amount: 9 },
+        { type: 'combatResult', hit: true, amount: 9 }
+      ] }
+  ]
+});
+eq((actionTl.players.me.createdWeapons || []).length, 0, 'arme créée : une carte simplement JOUÉE (Spinal Crush) n\'est PAS une arme');
+
 // Arsenal adverse — chemin CAPTÉ : le compte du tour fait autorité.
 const arsCap = BR.buildTimeline({
   myName: 'Me', oppName: 'Opp',

@@ -317,7 +317,10 @@
         const mm = part.trim().match(/^(\w+)=(.+)$/);
         if (mm && EQ_SLOTS.indexOf(mm[1]) >= 0) {
           const parsed = splitId(mm[2]);
-          if (parsed.name) parsed.name = stripDualWieldSuffix(parsed.name);
+          // rawName garde le nom AVANT le retrait du suffixe « R » (dual-wield) :
+          // sert d'identité distincte pour la 2e copie d'une même arme (ex. deux
+          // « Hunter's Klaive »), le cimetière la nommant aussi avec le « R ».
+          if (parsed.name) { parsed.rawName = parsed.name; parsed.name = stripDualWieldSuffix(parsed.name); }
           out[mm[1]] = parsed;
         }
       });

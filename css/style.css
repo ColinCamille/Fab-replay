@@ -1283,6 +1283,9 @@ footer a{color:var(--text-dim)}
 /* Équipement détruit (armure/arme cassée) : retiré du plateau pour refléter
    l'état réel du jeu (cf. boardreplay applyEquipState). */
 .br-gcard.br-broken{display:none}
+/* Arme CRÉÉE en jeu (ex. Graphene Chelicera, pouvoir Arakni Orb-Weaver) : cachée
+   tant qu'elle n'est pas encore apparue à l'étape courante (cf. applyBornState). */
+.br-gcard.br-unborn{display:none}
 /* Équipement dont la capacité a été activée ce tour-ci : grisé (« épuisé »),
    réarmé au tour suivant. */
 .br-gcard.br-used{opacity:.42;filter:grayscale(.75)}
