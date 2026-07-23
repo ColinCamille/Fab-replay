@@ -584,6 +584,30 @@ console.log('Transform —');
   assert(oppTrans.length === 1 && oppTrans[0].side === 'opp' && /Funnel Web/.test(oppTrans[0].sub),
     'transform (adversaire) : bannière côté opp (Marionette → Funnel Web)');
   assert(/Funnel Web/.test(oppSteps[oppSteps.length - 1].form.opp), 'transform (adversaire) : forme adverse finale mise à jour');
+
+  // Transformation DÉCLENCHÉE PAR UN BLOCAGE (ex. Mask of Deceit, trigger de
+  // défense) : le log l'écrit ENTRE le blocage et la résolution du combat,
+  // AVANT « Combat resolved » — mais dans la table elle doit apparaître APRÈS
+  // le clash (le bloc au casque), pas avant (cas réel : partie 1750820, tour 1).
+  const maskRaw = [
+    '=== Talishar game 91 — test ===', '',
+    "Bravo's turn 1 has begun.",
+    'Bravo played Spinal Crush',
+    "Arakni, Redback blocked with Mask of Deceit",
+    'Arakni, Redback becomes Arakni, Orb-Weaver',
+    'Arakni, Redback is about to take 3 damage from Spinal Crush',
+    'Arakni, Redback took 3 damage',
+    'Combat resolved with a hit for 3 damage',
+    "Arakni, Redback's turn 2 has begun.",   // établit le nom de l'adversaire (résolution des joueurs)
+    'Arakni, Redback played Sink Below',
+    '', '=== META ===', 'me: Bravo', 'opp: Arakni, Redback'
+  ].join('\n');
+  const maskSteps = BR.buildTimeline(Parser.parse(maskRaw)).steps;
+  const maskStages = maskSteps.map(s => s.stage);
+  const clashIdx = maskStages.findIndex(st => st.type === 'clash');
+  const transIdx = maskStages.findIndex(st => st.type === 'transform');
+  assert(clashIdx >= 0 && transIdx >= 0 && clashIdx < transIdx,
+    'transform (déclenchée par un blocage, ex. Mask of Deceit) : le clash apparaît AVANT la transformation');
 })();
 
 // ---------- Undo : action annulée retirée (+ re-log dédupliqué) ----------

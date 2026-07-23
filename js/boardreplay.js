@@ -229,6 +229,20 @@
       const takeChain = nm => { const k = norm(nm); let i = chainQ.findIndex(c => norm(c.card) === k); if (i < 0 && chainQ.length) i = 0; return i >= 0 ? chainQ.splice(i, 1)[0] : null; };
       let openAtk = null, curBlocks = [], curReactions = [];
       let lastAction = null, ended = false;   // dernière carte jouée/activée (cause du coup fatal) ; fin de partie atteinte
+      // Transformations survenues PENDANT un combat (ex. Mask of Deceit, trigger
+      // de blocage) : le log les écrit avant « Combat resolved » mais elles ne
+      // doivent apparaître qu'APRÈS l'échange qu'elles affectent. Mises en
+      // attente ici, matérialisées par flushTransforms() une fois le clash poussé.
+      let pendingTransforms = [];
+      const flushTransforms = () => {
+        pendingTransforms.forEach(({ sd, to }) => {
+          if (!sameHero(to, curForm[sd])) {
+            const prev = curForm[sd]; curForm[sd] = to;
+            push(label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + to });
+          }
+        });
+        pendingTransforms = [];
+      };
       // MODE CHAÎNE (v1.15.0+) : quand la chaîne de combat est captée, elle est
       // AUTORITAIRE sur l'attaquant. On met les cartes de l'attaquant du combat
       // courant en attente (atkBuf), et au combat on prend l'attaquant = carte de
@@ -347,11 +361,21 @@
           // Transformation de héros (ex. Arakni) AU MOMENT EXACT où elle survient
           // dans le log (« <forme> becomes <nouvelle forme> »), pas seulement au
           // tour suivant. On identifie le camp par la forme de départ.
-          flushAtk(); flushBuf();
+          // Si elle survient PENDANT un combat (trigger de blocage, ex. Mask of
+          // Deceit) → mise en attente : elle ne doit s'afficher qu'APRÈS le clash
+          // qu'elle affecte, alors que le log l'écrit avant « Combat resolved ».
           const sd = sameHero(e.from, curForm.me) ? 'me' : (sameHero(e.from, curForm.opp) ? 'opp' : null);
-          if (sd && e.to && !sameHero(e.to, curForm[sd])) {
-            const prev = curForm[sd]; curForm[sd] = e.to;
-            push(label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + e.to });
+          if (sd) {
+            const inCombat = !!(openAtk || atkBuf.length || curBlocks.length);
+            if (inCombat) {
+              pendingTransforms.push({ sd, to: e.to });
+            } else {
+              flushAtk(); flushBuf();
+              if (e.to && !sameHero(e.to, curForm[sd])) {
+                const prev = curForm[sd]; curForm[sd] = e.to;
+                push(label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + e.to });
+              }
+            }
           }
         } else if (e.type === 'blocked') {
           const s = sideOf(e.player);
@@ -380,6 +404,7 @@
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
             push(label, atkSide, { type: 'clash', atk: { nm: attacker.nm, cp: attacker.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
+          flushTransforms();   // transfo déclenchée par ce combat (ex. Mask of Deceit) → juste après le clash
           atkBuf = []; curBlocks = []; curReactions = [];
         } else if (e.type === 'combatResult') {
           const dmg = e.hit ? (e.amount || 0) : 0;
@@ -397,6 +422,7 @@
             const pumps = (openAtk.pumps || []).map(p => ({ nm: p.nm, cp: p.cp }));
             push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, cp: openAtk.cp, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, pumps: pumps, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
+          flushTransforms();   // transfo déclenchée par ce combat (ex. Mask of Deceit) → juste après le clash
           openAtk = null; curBlocks = []; curReactions = [];
         } else if (e.type === 'gameWon' || e.type === 'conceded') {
           // Fin de partie : on pousse une étape TERMINALE explicite. Beaucoup de
@@ -404,7 +430,7 @@
           // le coup fatal n'apparaissait alors nulle part. On affiche le vainqueur,
           // les PV finaux (perdant à 0 sur une mort, PV réels sur un abandon) et
           // la dernière carte jouée/activée comme « coup fatal ».
-          flushAtk(); flushBuf();
+          flushAtk(); flushBuf(); flushTransforms();
           const conceded = e.type === 'conceded';
           const winnerSide = conceded ? (sideOf(e.player) === 'me' ? 'opp' : 'me') : (e.player ? sideOf(e.player) : null);
           const meLife = (!conceded && winnerSide === 'opp') ? 0 : st.life.me;
@@ -416,7 +442,7 @@
           ended = true;
         }
       });
-      flushAtk(); flushBuf();   // fin de tour : dernière action hors-combat affichée seule
+      flushAtk(); flushBuf(); flushTransforms();   // fin de tour : dernière action hors-combat / transfo orpheline affichée
     });
     return { players: GAME.players, myName: MY, oppName: OPP, hero: HERO, steps };
   }
