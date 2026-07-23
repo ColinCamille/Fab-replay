@@ -48,6 +48,11 @@ eq(dEq.card, 'Helm of Might and Magic', 'classifyLine: nom de l\'équipement dé
 eq(Parser.classifyLine('Lightning Surge was destroyed from the arsenal').type, 'destroyed', 'classifyLine: destroyed (arsenal) aussi capté');
 eq(Parser.classifyLine('Nimblism was banished.').type !== 'destroyed', true, 'classifyLine: « banished » ≠ destroyed');
 
+// normName : tiret ≡ espace (« Under the Trap-Door » log vs « Under The Trap
+// Door » repli DOM du grabber, qui perd le tiret) — sans ça, main dupliquée.
+eq(Parser.normName('Under the Trap-Door'), Parser.normName('Under The Trap Door'), 'normName: tiret ≡ espace');
+eq(Parser.normName('Orb-Weaver Spinneret'), 'orb weaver spinneret', 'normName: tiret replié en espace');
+
 // Arsenal adverse : 0 forcé à l'ouverture ; null quand non capté (fixture sans bloc).
 eq(rec.turns[0].oppArsenalCount, 0, 'arsenal adverse : 0 forcé à l\'ouverture');
 const tPlay = rec.turns.find(t => t.turnNumber > 0);

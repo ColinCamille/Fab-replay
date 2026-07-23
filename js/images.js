@@ -143,14 +143,17 @@
       // stocké « Fyendals Spring Tunic », « Scorpio, Comet Tail » → « Scorpio
       // Comet Tail »). On cherche donc une correspondance EXACTE (ponctuation
       // ignorée) via plusieurs requêtes : nom brut, variante possessive (apostrophe
-      // restituée), puis 1er mot seul. On n'accepte JAMAIS une carte proche mais
-      // différente : mieux vaut pas d'image qu'une mauvaise.
+      // restituée), variante tiret→espace (« Under the Trap-Door » → « Under the
+      // Trap Door » — la recherche goagain elle-même est sensible au tiret), puis
+      // 1er mot seul. On n'accepte JAMAIS une carte proche mais différente : mieux vaut
+      // pas d'image qu'une mauvaise.
       const firstList = await query(name);
       let best = exact(firstList);
       if (!best) {
         const variants = [];
         const poss = name.replace(/^(\S+?)s(\b)/, "$1's$2");     // Fyendals → Fyendal's
         if (poss !== name) variants.push(poss);
+        if (/-/.test(name)) variants.push(name.replace(/-/g, ' '));       // Trap-Door → Trap Door
         const base = name.split(/[\s,]+/)[0];                     // Scorpio, Volzar, Fyendal…
         if (base && strip(base) !== target) variants.push(base);
         for (const v of variants) { best = exact(await query(v)); if (best) break; }

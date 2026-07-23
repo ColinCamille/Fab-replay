@@ -861,12 +861,15 @@
     return m + ' min' + (s ? ' ' + s + ' s' : '');
   }
 
-  // Comparaison de noms de cartes insensible à la casse, aux espaces, ET au
-  // séparateur "//" des cartes à deux modes — Talishar écrit parfois le même
-  // nom différemment selon la source interne :
+  // Comparaison de noms de cartes insensible à la casse, aux espaces, au
+  // séparateur "//" des cartes à deux modes, ET au tiret — Talishar écrit
+  // parfois le même nom différemment selon la source interne :
   //  - casse : "Path of Same Ends" (log) vs "Path Of Same Ends" (main)
   //  - séparateur : "Arcane Seeds // Life" (log) vs "Arcane Seeds  Life"
   //    (main, le "//" a disparu et ne laisse que le double espace)
+  //  - tiret : "Under the Trap-Door" (log) vs "Under The Trap Door" (repli
+  //    DOM du grabber, qui reconstruit le nom depuis le fichier image et
+  //    remplace le tiret par un espace — cf. slugToName côté grabber)
   // Sans cette normalisation, une même carte écrite différemment selon la
   // source est vue comme deux cartes distinctes.
   function normName(s) {
@@ -875,6 +878,7 @@
       .toLowerCase()
       .replace(/['’]/g, '')
       .replace(/\s*\/\/?\s*/g, ' ')
+      .replace(/-/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
   }
