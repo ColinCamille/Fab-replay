@@ -324,7 +324,38 @@
       return out;
     };
 
-    const myHero = splitId(kv.my_hero), oppHero = splitId(kv.opp_hero);
+    let myHero = splitId(kv.my_hero), oppHero = splitId(kv.opp_hero);
+    // Garde-fou : le NOM d'un héros peut être incohérent avec son ID (observé
+    // sur une capture dégradée où le grabber a recopié le héros du mauvais
+    // camp — l'ID, lui, reste correct). On compare des jetons ≥3 caractères
+    // (name normalisé vs id avec « _ » → espace) ; un diacritique isolé (« ð »
+    // de Vetreiði) peut casser UN jeton sans casser les autres (« jarl » reste
+    // commun) → pas de faux positif. Aucun jeton commun ⇒ le nom ment, on
+    // affiche un libellé dérivé de l'ID (qui, lui, fait autorité) à la place.
+    // Volontairement PAS un test `health` (health.ok=false exclurait la partie
+    // du dashboard) : ici la partie elle-même peut être parfaitement saine
+    // (cf. partie réelle #1683807, adversaire juste mal étiqueté) — signalé en
+    // `warnings` seulement, la partie reste comptée avec le libellé corrigé.
+    const heroLabelIssues = [];
+    const heroKeyTokens = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(w => w.length >= 3);
+    const idToTitle = id => id.split('_').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    // Les IDs ne sont pas tous des « slugs » lisibles (« arakni_marionette ») :
+    // certaines captures utilisent le numéro de carte Talishar (« ELE001 »),
+    // sans rapport textuel avec le nom → on ne compare que les IDs-slugs
+    // (minuscules/chiffres/underscores), seul format où l'id « raconte » le nom.
+    const isSlugId = id => /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/.test(id || '');
+    const fixHeroLabel = (hero, side) => {
+      if (!hero.id || !hero.name || !isSlugId(hero.id)) return hero;
+      const nameToks = heroKeyTokens(hero.name), idToks = heroKeyTokens(hero.id);
+      if (!nameToks.length || !idToks.length) return hero;
+      if (nameToks.some(t => idToks.indexOf(t) >= 0)) return hero;
+      const fixed = idToTitle(hero.id);
+      heroLabelIssues.push('Nom de héros incohérent avec son identifiant (' + side + ') : « ' + hero.name + ' » ne correspond pas à « ' + hero.id + ' » — affiché « ' + fixed + ' » à la place.');
+      return { name: fixed, id: hero.id };
+    };
+    myHero = fixHeroLabel(myHero, 'moi');
+    oppHero = fixHeroLabel(oppHero, 'adversaire');
+    if (heroLabelIssues.length) meta.heroLabelIssues = heroLabelIssues;
     meta.capturedWith = clean(kv.captured_with);
     meta.capturedAt = clean(kv.captured_at);
     meta.gameUrl = clean(kv.game_url);
@@ -370,6 +401,7 @@
 
     const tsRes = parseTimestampBlock(text); text = tsRes.rest;
     const metaRes = parseMetaBlock(text); text = metaRes.rest;
+    if (metaRes.meta.heroLabelIssues) metaRes.meta.heroLabelIssues.forEach(w => warnings.push(w));
     const lifeRes = parseLifeSnapshotBlock(text, '=== LIFE SNAPSHOTS'); text = lifeRes.rest;
     const handRes = parseCardSnapshotBlock(text, '=== HAND SNAPSHOTS'); text = handRes.rest;
     const arsRes = parseCardSnapshotBlock(text, '=== ARSENAL SNAPSHOTS'); text = arsRes.rest;

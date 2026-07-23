@@ -788,6 +788,37 @@ const Sync = require('../js/sync.js').FabSync;
 ['detectRepo', 'pull', 'push', 'getToken', 'setToken', 'clearToken', 'hasToken', 'canWrite', 'verifyToken']
   .forEach(fn => assert(typeof Sync[fn] === 'function', 'FabSync.' + fn + ' exposé'));
 
+// ---------- Garde-fou : nom de héros incohérent avec son ID ----------
+// Observé sur 2 parties réelles distinctes de ZUP (#1683807, #1678913) : une
+// capture dégradée avait recopié le héros du MAUVAIS camp dans le nom affiché,
+// alors que l'ID (fiable) restait correct. Contrairement au diagnostic de
+// santé général, CE cas-là peut survenir sur une partie par ailleurs SAINE
+// (#1683807 : 29 tours, rien à redire côté log) → on corrige juste le
+// libellé (dérivé de l'ID) sans exclure la partie du dashboard (warning, pas
+// health.ok=false).
+console.log('Garde-fou nom/id héros —');
+(function () {
+  const mkMetaRaw = (my, opp) => '=== Talishar game 1 — test ===\n\n'
+    + "Me's turn 1 has begun.\nMe played X\nOpp took 1 damage\nOpp's turn 1 has begun.\nOpp played Y\n"
+    + '\n=== META ===\nme: Me\nopponent: Opp\nmy_hero: ' + my + '\nopp_hero: ' + opp + '\n';
+  const bad = Parser.parse(mkMetaRaw(
+    'Oscilio, Constella Intelligence (oscilio_constella_intelligence)',
+    'Oscilio, Constella Intelligence (arakni_huntsman)'
+  ));
+  eq(bad.matchup, 'Oscilio, Constella Intelligence vs Arakni Huntsman', 'nom/id : libellé corrigé depuis l\'ID (adversaire)');
+  assert(bad.warnings.some(w => /incohérent/.test(w)), 'nom/id : avertissement émis (pas health.ok=false)');
+  assert(bad.health.ok === true, 'nom/id : partie par ailleurs saine → PAS exclue du dashboard');
+  // Faux positifs à éviter : diacritique isolé (Jarl Vetreiði), apostrophes
+  // (Maxx 'The Hype' Nitro), et ID « numéro de carte » (ELE001, sans rapport
+  // textuel avec le nom — format legacy, ne doit jamais être comparé).
+  const okDiacritic = Parser.parse(mkMetaRaw('Jarl Vetreiði (jarl_vetreidi)', 'Fai Rising Rebellion (fai_rising_rebellion)'));
+  assert(!okDiacritic.warnings.some(w => /incohérent/.test(w)), 'nom/id : accent isolé (Vetreiði) → pas de faux positif');
+  const okApostrophe = Parser.parse(mkMetaRaw("Maxx 'The Hype' Nitro (maxx_the_hype_nitro)", 'Briar (briar)'));
+  assert(!okApostrophe.warnings.some(w => /incohérent/.test(w)), 'nom/id : apostrophes → pas de faux positif');
+  const okCardNumber = Parser.parse(mkMetaRaw('Briar (ELE001)', 'Briar (ELE001)'));
+  assert(!okCardNumber.warnings.some(w => /incohérent/.test(w)), 'nom/id : ID numéro de carte (legacy) jamais comparé');
+})();
+
 // ---------- Régression : capture fantôme réelle (ZUP, game #1750820) ----------
 // Une même partie (Arakni, Marionette vs Valda) capturée 2 FOIS côté grabber :
 // #1750692 saine, puis #1750820 22 min plus tard depuis un état Talishar
