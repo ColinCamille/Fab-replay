@@ -75,6 +75,12 @@
   function aggregate(entries, filters) {
     const f = Object.assign({ includeAI: false, format: null, myHero: null, oppHero: null, period: 'all', tag: null }, filters || {});
 
+    // Parties mal analysées (health.ok=false côté parseur — ex. capture
+    // dégradée où l'adversaire/les tours ne se résolvent pas) : on les exclut
+    // de TOUTE agrégation (facettes comprises), sinon un log corrompu fausse
+    // le winrate/matchups avec un faux héros adverse et un « tour » géant.
+    entries = entries.filter(e => !(e.record && e.record.health && e.record.health.ok === false));
+
     // Facettes (listes de valeurs) calculées sur TOUT, pour peupler les filtres.
     const formats = new Set(), oppHeroes = new Set(), myHeroes = new Set();
     const tagMap = new Map();   // clé insensible à la casse → 1ʳᵉ graphie vue

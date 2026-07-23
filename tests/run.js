@@ -788,6 +788,53 @@ const Sync = require('../js/sync.js').FabSync;
 ['detectRepo', 'pull', 'push', 'getToken', 'setToken', 'clearToken', 'hasToken', 'canWrite', 'verifyToken']
   .forEach(fn => assert(typeof Sync[fn] === 'function', 'FabSync.' + fn + ' exposé'));
 
+// ---------- Régression : capture fantôme réelle (ZUP, game #1750820) ----------
+// Une même partie (Arakni, Marionette vs Valda) capturée 2 FOIS côté grabber :
+// #1750692 saine, puis #1750820 22 min plus tard depuis un état Talishar
+// dégradé (probablement l'écran replay/résumé) — noms non résolus (« you »/
+// « your opponent »), séparateurs « TURN N <joueur> » en MAJUSCULES (jamais
+// traduits : ne matchent ni « has begun » ni « Turn N<joueur> »), méta polluée
+// par du texte d'UI (« Unknown's Turn », « PRIORITY »). Extrait AUTHENTIQUE du
+// vrai log (padding avec des lignes du même gabarit pour dépasser le seuil de
+// 25 actions du test de santé A — le vrai log en comptait ~70). Doit rester
+// détecté par health (test A, déjà existant) ET exclu du dashboard.
+console.log('Capture fantôme (ZUP #1750820) —');
+(function () {
+  const ghostBody = [
+    "your opponent activated Hunter's Klaive",
+    "🎯Valda, Seismic Impact was chosen as the target.",
+    'your opponent pitched Under the Trap-Door',
+    "Resolving activated ability of Hunter's Klaive.",
+    'you passed',
+    'your opponent activated Flick Knives',
+    "you is about to take 1 damage from Hunter's Klaive",
+    'you took 1 damage',
+    'you played Sink Below',
+    'Resolving play ability of Sink Below.',
+    'your opponent passed (x2)',
+    'TURN 1 you',
+    'you activated Tectonic Plating',
+    'you pitched Roiling Fissure',
+    'your opponent passed (x2)',
+    'TURN 1 your opponent',
+    'your opponent played Cut'
+  ];
+  for (let k = 0; k < 15; k++) ghostBody.push('your opponent played Filler Card ' + k, 'you took 1 damage');
+  const ghostRaw = '=== Talishar game 1750820 — test ===\n\n' + ghostBody.join('\n')
+    + '\n\n=== META ===\nme: Unknown\'s Turn\nopponent: PRIORITY\n'
+    + 'my_hero: Arakni, Marionette (arakni_marionette)\nopp_hero: Arakni, Marionette (valda_seismic_impact)\n';
+  const ghost = Parser.parse(ghostRaw);
+  assert(ghost.health.ok === false, 'fantôme ZUP : health.ok=false (0 tour reconnu malgré 30+ actions)');
+  assert(ghost.health.issues.some(i => /tour/i.test(i)), 'fantôme ZUP : le message mentionne les tours');
+
+  const ghostEntries = [
+    { gameId: '1750692', record: mkRec({ iWon: true, myHero: 'Arakni, Marionette', oppHero: 'Valda, Seismic Impact', date: '2026-07-22T22:28:31Z' }) },
+    { gameId: '1750820', record: ghost }
+  ];
+  const ghostAgg = Dashboard.aggregate(ghostEntries, {});
+  eq(ghostAgg.global.games, 1, 'dashboard : la capture fantôme est exclue de l\'agrégation (1 partie sur 2)');
+})();
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);

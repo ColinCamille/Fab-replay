@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.15.4
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). Export texte / téléchargement + localStorage.
+// @version      1.16.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.15.4';
+  const VERSION = '1.16.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -45,6 +45,7 @@
   let frozenPlayers = null;     // { name1, name2 } figés pour la partie (anti-transformation Arakni)
   let lastRawChatLog = null;    // dernier chatLog BRUT (verbatim) vu → conservé dans l'export
   let canaryIssues = [];        // hypothèses Talishar cassées détectées à la capture
+  let captureIssues = [];       // capture dégradée (ex. écran replay/résumé) → upload bloqué
 
   let handSnapshots = {};
   let arsenalSnapshots = {};
@@ -360,6 +361,34 @@
       runCanary._warned = true;
       console.warn('[TLG] ⚠ hypothèses Talishar cassées :', issues.join(' · '));
     }
+  }
+
+  // Qualité de la capture ACCUMULÉE (`captured`) : détecte les cas où l'état de
+  // partie n'a pas pu être lu proprement (typiquement l'écran replay/résumé
+  // Talishar, où gameInfo.playerID/les héros ne se résolvent pas → repli DOM sur
+  // du texte générique « you »/« your opponent » et des marqueurs de tour non
+  // traduits). Repris du même principe que `record.health` côté parseur (test
+  // A/B, tests/run.js) : mêmes signaux, calibrés pour un taux de faux positifs
+  // quasi nul → seuil PRUDENT, on ne bloque que les cas francs (dans le doute,
+  // on laisse passer ; le parseur reste le 2e filet). Un envoi bloqué n'empêche
+  // PAS le téléchargement manuel du .txt (⬇ Log brut) : la partie reste
+  // récupérable pour déboguer, seul l'upload au compte est coupé.
+  function captureQuality() {
+    const issues = [];
+    const actionLines = captured.filter(l => /\b(?:played|activated|pitched|blocked with)\b|took \d+ damage/.test(l)).length;
+    const turnHeaders = captured.filter(l => /'s turn \d+ has begun\.$/.test(l)).length;
+    const turnish = captured.filter(l => /'s turn \d+ has begun\.$|^Turn \d+\S|\[\[TURN_START/.test(l)).length;
+    if (actionLines >= 25 && turnHeaders === 0)
+      issues.push('Aucun tour détecté malgré ' + actionLines + ' actions.');
+    else if (turnish >= 2 && turnHeaders <= 1)
+      issues.push('Marqueurs de tour non reconnus (' + turnish + ' repérés, ' + turnHeaders + ' traduit(s)).');
+    // Texte d'UI Talishar scrapé par erreur comme pseudo (vu sur un écran
+    // replay/résumé dégradé : « Unknown's Turn », « PRIORITY »…).
+    const badName = /^(unknown'?s turn|priority|you|your opponent)$/i;
+    const myN = String(meta.myName || '').trim(), oppN = String(meta.oppName || '').trim();
+    if (badName.test(myN)) issues.push('Pseudo « ' + myN + ' » suspect (texte d’UI, pas un joueur).');
+    if (badName.test(oppN)) issues.push('Pseudo « ' + oppN + ' » suspect (texte d’UI, pas un joueur).');
+    return issues;
   }
 
   function recordTsBatch(fromIdx, toIdx) {
@@ -755,7 +784,7 @@
       const gn = currentGameName();
       if (gn !== gameName) {
         gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false; chatLogAdopted = false; frozenPlayers = null;
-        meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null; autoPushedCount = 0;
+        meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null; autoPushedCount = 0; captureIssues = [];
         loadExisting(); updateUI();
       }
       // Priorité au journal structuré (state.game.chatLog) : chaque entrée y
@@ -792,6 +821,7 @@
       maybeFillMeta();
       maybeSnapshotState();
       captureEndGameStats();
+      captureIssues = captureQuality();
     } catch (e) { console.error('[TLG] erreur tick (boucle continue):', e); }
   }
 
@@ -924,9 +954,14 @@
       const canaryBit = canaryIssues.length
         ? '<br><span style="color:#ff6b6b;font-weight:700" title="' + canaryIssues.join(' · ').replace(/"/g, '') + '">⚠ format Talishar inattendu — préviens le mainteneur</span>'
         : '';
+      // Capture dégradée : envoi bloqué. On demande le .txt (⬇ Log brut) pour
+      // que le mainteneur puisse déboguer le cas — cf. captureQuality().
+      const blockedBit = captureIssues.length
+        ? '<br><span style="color:#ff3b3b;font-weight:800" title="' + captureIssues.join(' · ').replace(/"/g, '') + '">🚫 Capture incomplète — envoi bloqué. Clique ⬇ Log brut et envoie le .txt au mainteneur.</span>'
+        : '';
       counter.innerHTML = captured.length + ' lignes · ' + nbHands + ' mains · ' + src + fmtBit
         + '<br><span style="opacity:.7">' + heroBit + '</span>'
-        + (sbConfigured() ? '<br><span style="opacity:.7;color:#7fd18a">✓ compte connecté · envoi automatique</span>' : '') + canaryBit;
+        + (sbConfigured() ? '<br><span style="opacity:.7;color:#7fd18a">✓ compte connecté · envoi automatique</span>' : '') + canaryBit + blockedBit;
     }
     // Bouton « Connecter » : montré UNIQUEMENT tant que le compte n'est pas
     // appairé. Une fois appairé, l'envoi est automatique → plus rien à cliquer
@@ -1357,6 +1392,17 @@
   async function pushGameToSupabase(silent) {
     if (!sbConfigured()) { if (silent) return; configurePairing(); if (!sbConfigured()) return; }
     if (!captured.length) { if (!silent) alert('Aucune ligne de log capturée pour cette partie.'); return; }
+    const badCapture = captureQuality();
+    if (badCapture.length) {
+      captureIssues = badCapture;
+      flash('Capture incomplète — envoi bloqué');
+      if (!silent) {
+        alert('Capture incomplète : la partie n’a pas pu être lue proprement (souvent l’écran replay/résumé Talishar). '
+          + 'Envoi au compte bloqué pour ne pas polluer tes stats.\n\n' + badCapture.join('\n')
+          + '\n\n👉 Clique sur ⬇ Log brut pour télécharger le .txt et envoie-le au mainteneur — ça l’aide à corriger le grabber.');
+      }
+      return;
+    }
     const id = gameName;
     if (!id || !/^\d+$/.test(String(id))) {
       if (silent) return;
