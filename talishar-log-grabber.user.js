@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.16.0
+// @version      1.17.0
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,13 +15,14 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.16.0';
+  const VERSION = '1.17.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
   const POLL_MS = 500;
   const LS_PREFIX = 'taliLog_';
   const LS_HAND_PREFIX = 'taliHand_';
+  const LS_HANDTL_PREFIX = 'taliHandTl_';
   const LS_ARSENAL_PREFIX = 'taliArsenal_';
   const LS_OPPARS_PREFIX = 'taliOppArs_';
   const LS_FIELD_PREFIX = 'taliField_';
@@ -48,6 +49,11 @@
   let captureIssues = [];       // capture dégradée (ex. écran replay/résumé) → upload bloqué
 
   let handSnapshots = {};
+  // TIMELINE de MA main : un instantané { pos, cards } À CHAQUE CHANGEMENT (dédup —
+  // rien si la main n'a pas bougé). pos = nombre de lignes de log déjà capturées
+  // (position). Permet à la vue Table d'afficher la main fidèle à chaque étape
+  // (pioches, filtre du pouvoir de héros, cartes jouées hors main…).
+  let handTimeline = [];
   let arsenalSnapshots = {};
   let oppArsenalSnapshots = {};  // clé tour -> nombre de cartes en arsenal ADVERSE (face cachée : compte seul, jamais le nom)
   let fieldSnapshots = {};  // clé tour -> { me: [noms], opp: [noms] } (permanents/tokens en jeu)
@@ -450,6 +456,7 @@
     try {
       localStorage.setItem(LS_PREFIX + gameName, JSON.stringify(captured));
       localStorage.setItem(LS_HAND_PREFIX + gameName, JSON.stringify(handSnapshots));
+      localStorage.setItem(LS_HANDTL_PREFIX + gameName, JSON.stringify(handTimeline));
       localStorage.setItem(LS_ARSENAL_PREFIX + gameName, JSON.stringify(arsenalSnapshots));
       localStorage.setItem(LS_OPPARS_PREFIX + gameName, JSON.stringify(oppArsenalSnapshots));
       localStorage.setItem(LS_FIELD_PREFIX + gameName, JSON.stringify(fieldSnapshots));
@@ -470,6 +477,7 @@
     };
     captured = read(LS_PREFIX + gameName, []);
     handSnapshots = read(LS_HAND_PREFIX + gameName, {});
+    handTimeline = read(LS_HANDTL_PREFIX + gameName, []);
     arsenalSnapshots = read(LS_ARSENAL_PREFIX + gameName, {});
     oppArsenalSnapshots = read(LS_OPPARS_PREFIX + gameName, {});
     fieldSnapshots = read(LS_FIELD_PREFIX + gameName, {});
@@ -700,6 +708,22 @@
   // ============================================================
   const TURN_HEADER_RE = /^(.+?)'s turn (\d+) has begun\.$/;
   function maybeSnapshotState() {
+    // TIMELINE de MA main : à CHAQUE tick, si ma main a CHANGÉ depuis le dernier
+    // enregistrement, on ajoute { pos, cards } (pos = nb de lignes de log capturées).
+    // Dédup : rien si inchangée → bloc compact. La vue Table affiche ainsi la main
+    // exacte à chaque étape (pioches Sigil/Third Eye, filtre du pouvoir d'Oscilio…).
+    if (captured.length > 0) {
+      const g = getGameState();
+      const reduxHand = !!(g && g.playerOne && Array.isArray(g.playerOne.Hand));   // main fiable (Redux) ?
+      const hand = extractMyHandCards();
+      // On n'enregistre PAS une main vide NON confirmée (DOM pas encore rendu →
+      // faux vide transitoire) : seulement si Redux confirme le vide, ou main pleine.
+      if (hand.length > 0 || reduxHand) {
+        const last = handTimeline.length ? handTimeline[handTimeline.length - 1].cards : null;
+        const changed = !last || last.length !== hand.length || hand.some((c, k) => c !== last[k]);
+        if (changed) handTimeline.push({ pos: captured.length, cards: hand });
+      }
+    }
     // Snapshot d'OUVERTURE : on garde la PLUS GRANDE main observée AVANT toute
     // action, puis on FIGE dès la 1re baisse de main (1er play/pitch/bloc) ou la
     // 1re fin de tour. Sinon, quand TU commences (pas d'en-tête « ton tour 1 »
@@ -986,6 +1010,15 @@
     return '\n=== ' + title + ' ===\n' + lines.join('\n') + '\n';
   }
 
+  // TIMELINE de MA main : un instantané par CHANGEMENT (dédupliqué), clé = position
+  // de log. Format : [pos] a, b, c. Le lecteur affiche la main correspondant à la
+  // position de chaque étape (vue Table). Vide → bloc omis (rétrocompat).
+  function handTimelineBlockText() {
+    if (!handTimeline.length) return '';
+    const lines = handTimeline.map(e => '[' + e.pos + '] ' + (e.cards.length ? e.cards.join(', ') : '(vide)'));
+    return '\n=== HAND TIMELINE (main, à chaque changement | pos = ligne de log) ===\n' + lines.join('\n') + '\n';
+  }
+
   // Bloc « 2 camps » (terrain / cimetière / banni) : [tour] me: … | opp: …
   function twoCampBlock(title, snaps) {
     const keys = Object.keys(snaps);
@@ -1126,6 +1159,7 @@
       + captured.join('\n') + '\n'
       + snapshotBlockText('HAND SNAPSHOTS (ta main, captée depuis le DOM — jamais celle de l\'adversaire)', handSnapshots,
           v => v.length ? v.join(', ') : '(vide)')
+      + handTimelineBlockText()
       + snapshotBlockText('ARSENAL SNAPSHOTS (ton arsenal, capté depuis le DOM — jamais celui de l\'adversaire)', arsenalSnapshots,
           v => v.length ? v.join(', ') : '(vide)')
       + snapshotBlockText('OPP ARSENAL COUNT (arsenal adverse : NOMBRE de cartes face cachée — le nom reste inconnu)', oppArsenalSnapshots,
@@ -1260,7 +1294,7 @@
   }
   function clearLog() {
     if (!confirm('Effacer le log, les snapshots et les métadonnées capturés de cette partie ?')) return;
-    captured = []; lastVisibleSig = ''; handSnapshots = {}; arsenalSnapshots = {}; oppArsenalSnapshots = {};
+    captured = []; lastVisibleSig = ''; handSnapshots = {}; handTimeline = []; arsenalSnapshots = {}; oppArsenalSnapshots = {};
     fieldSnapshots = {}; graveSnapshots = {}; banishSnapshots = {}; lifeSnapshots = {}; tsBatches = []; meta = {};
     chainLinks = []; pendingChain = null;
     lastTurnKey = null; openingSnapped = false;

@@ -137,6 +137,9 @@
       meEquipGone: [], oppEquipGone: [], meEquipUsed: [], oppEquipUsed: [], meBorn: [], oppBorn: [], life: { me: 0, opp: 0 }
     };
     const steps = [];
+    // Position de log de l'étape courante (index de ligne de l'événement en cours) :
+    // sert à corréler chaque étape à la HAND TIMELINE (main fidèle par position).
+    let curIdx = 0;
     const snap = () => ({
       meHandCards: st.meHandCards.slice(), meHandCount: st.meHandCount, meFaceUp: st.meFaceUp, oppHandCount: st.oppHandCount,
       mePitch: st.mePitch.slice(), oppPitch: st.oppPitch.slice(), meArsenal: st.meArsenal.slice(), oppArsenalCount: st.oppArsenalCount,
@@ -146,7 +149,7 @@
       meEquipUsed: st.meEquipUsed.slice(), oppEquipUsed: st.oppEquipUsed.slice(),
       meBorn: st.meBorn.slice(), oppBorn: st.oppBorn.slice(), life: { me: st.life.me, opp: st.life.opp }
     });
-    const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, form: { me: curForm.me, opp: curForm.opp }, state: snap() });
+    const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, _idx: curIdx, form: { me: curForm.me, opp: curForm.opp }, state: snap() });
     const rm = (a, n) => { const k = a.findIndex(x => norm(x) === norm(n)); if (k >= 0) { a.splice(k, 1); return true; } return false; };
     const removeCard = (side, card) => {
       if (side === 'me') { if (st.meFaceUp) { if (!rm(st.meHandCards, card)) rm(st.meArsenal, card); } else st.meHandCount = Math.max(0, st.meHandCount - 1); }
@@ -157,6 +160,9 @@
 
     (GAME.turns || []).forEach((t, idx) => {
       const attacker = t.player;
+      // Position de log du début de tour (1er événement) : les bannières/transfos de
+      // début de tour montrent la main d'avant les actions du tour.
+      curIdx = (t.events && t.events[0] && t.events[0]._idx != null) ? t.events[0]._idx : curIdx;
       if (ls.me[idx] != null) st.life.me = ls.me[idx];
       if (ls.opp[idx] != null) st.life.opp = ls.opp[idx];
       st.mePitch = []; st.oppPitch = [];   // le pitch part au deck en fin de tour
@@ -311,12 +317,42 @@
       // sur la dague — même sans qu'elles ciblent l'attaque). Sinon (vieux logs
       // sans chaîne) on garde l'ancien modèle openAtk.
       const hasChain = chainQ.length > 0;
+      // Y a-t-il un VRAI combat ce tour (au moins un « Combat resolved ») ? Un tour
+      // 100 % sorts (arcane, ouverture, tours d'Oscilio…) n'en a pas : on n'y
+      // « diffère » alors PAS les jeux comme des attaques (openAtk) — sinon un sort
+      // qui ne résout jamais de combat AVALE les réactions adverses (main qui saute).
+      const hasCombat = evs.some(e => e.type === 'combatResult');
+      // Dégâts d'ARCANE réels du tour (« … is dealing N arcane damage from <src> »),
+      // indexés pour appariement PAR SOURCE dans l'ordre du log. Chaque carte-sort les
+      // « prend » à sa résolution (takeArcane) ; ce qui reste (jetons type Runechant)
+      // est montré en étape autonome au fil du log (tours sans combat).
+      const arcList = [];
+      evs.forEach((e, idx) => { if (e.type === 'arcaneDamage' && e.actual && (e.amount || 0) > 0) arcList.push({ i: idx, src: norm(e.source), amount: e.amount, used: false }); });
+      const dtUsed = {};   // damageTaken déjà appliqués par une étape d'arcane → le handler damageTaken les saute (pas de double comptage)
+      // Somme les dégâts d'arcane réels imputables à la carte jouée/activée à l'index
+      // evIdx (lignes « from <carte> » jusqu'au prochain jeu de la MÊME carte),
+      // applique la vie via le damageTaken apparié (montant égal), renvoie
+      // { amount, victim } ou null. La vie est ainsi À JOUR sur l'étape du sort
+      // (comme un clash), sans double compte.
+      const takeArcane = (cardNm, evIdx, dealerSide) => {
+        const k = norm(cardNm), victim = dealerSide === 'me' ? 'opp' : 'me';
+        let total = 0, nextSame = evs.length;
+        for (let j = evIdx + 1; j < evs.length; j++) { const f = evs[j]; if ((f.type === 'played' || f.type === 'activated') && norm(f.card) === k) { nextSame = j; break; } }
+        arcList.forEach(a => {
+          if (a.used || a.src !== k || a.i <= evIdx || a.i >= nextSame) return;
+          a.used = true; total += a.amount;
+          for (let j = a.i; j < evs.length; j++) { const f = evs[j]; if (f.type === 'damageTaken' && !dtUsed[j] && sideOf(f.player) === victim && (f.amount || 0) === a.amount) { dtUsed[j] = 1; st.life[victim] = Math.max(0, st.life[victim] - (f.amount || 0)); break; } }
+        });
+        return total > 0 ? { amount: total, victim: victim } : null;
+      };
+      const arcDmg = arc => (arc && arc.amount > 0) ? arc.amount : undefined;
+      const arcHit = arc => (arc && arc.amount > 0) ? arc.victim : null;
       let atkBuf = [];
       const looseNorm = s => norm(s).replace(/[^a-z0-9]/g, '');   // tolère apostrophe/ponctuation (« Hunter's Klaive » vs « Hunters Klaive »)
-      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm, cp: x.cp }, act: !!x.act, pitch: x.pitch, text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
+      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm, cp: x.cp }, act: !!x.act, pitch: x.pitch, dmg: arcDmg(x.arc), text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
       // Matérialise une carte en « carte seule » MAINTENANT (photo de la main
       // prise à cet instant → les cartes jouées ENSUITE y sont encore visibles).
-      const materialize = x => { push(label, atkSide, bufEntryStep(x)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); };
+      const materialize = x => { push(label, atkSide, bufEntryStep(x), arcHit(x.arc)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); };
       const flushBuf = () => { atkBuf.forEach(materialize); atkBuf = []; };
       // La carte du PROCHAIN lien de combat = l'attaquant du combat en cours.
       const nextAtkCard = () => (chainQ.length ? chainQ[0].card : null);
@@ -326,13 +362,14 @@
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
       const flushAtk = () => {
         if (!openAtk) return;
-        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm, cp: openAtk.cp }, pitch: openAtk.pitch, text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt });
+        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm, cp: openAtk.cp }, pitch: openAtk.pitch, dmg: arcDmg(openAtk.arc), text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt }, arcHit(openAtk.arc));
         // Renforts éventuels (attaque hors-combat) : affichés à part pour ne pas les perdre.
         (openAtk.pumps || []).forEach(p => push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: p.nm, cp: p.cp }, reaction: true, text: HERO[openAtk.side] + ' joue ' + p.nm + (p.pTxt || '') }));
         openAtk = null;
       };
       evs.forEach((e, i) => {
         if (consumed[i] || ended) return;
+        if (e._idx != null) curIdx = e._idx;
         if (e.type === 'played') {
           lastAction = e.card;
           const side = sideOf(e.player); removeCard(side, e.card);
@@ -341,11 +378,18 @@
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
+          const arc = takeArcane(e.card, i, side);   // dégâts d'arcane réels imputables à cette carte
           if (side === atkSide && hasChain) {
-            const entry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: false };
+            const entry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: false, arc: arc };
             if (atkBuf.length === 0 && isAtkCard(e.card)) atkBuf.push(entry);       // c'est l'attaquant
             else if (atkBuf.length > 0) atkBuf.push(entry);                          // renfort (joué APRÈS l'attaquant)
             else materialize(entry);                                                 // action PRÉ-attaque → carte seule, photo prise MAINTENANT
+          } else if (side === atkSide && !hasCombat) {
+            // Tour SANS combat : ce « jeu » n'est pas une attaque (sort d'arcane,
+            // ouverture…) → carte seule IMMÉDIATE avec ses dégâts d'arcane, sans
+            // différé openAtk (qui avalerait les réactions adverses).
+            push(label, side, { type: 'play', side: side, card: { nm: e.card, cp: e.pitch }, pitch: pitches.join(', '), dmg: arcDmg(arc), text: HERO[side] + ' joue ' + e.card + pTxt }, arcHit(arc));
+            if (!isEquip(side, e.card)) toGrave(side, e.card);
           } else if (side === atkSide) {
             // (vieux logs sans chaîne) Cette carte est-elle un RENFORT sur l'attaque
             // en cours (pump/réaction ciblant l'attaque, ex. Lightning Press sur Fry)
@@ -362,17 +406,23 @@
               (openAtk.pumps = openAtk.pumps || []).push({ nm: e.card, cp: e.pitch, pTxt: pTxt });
             } else {
               flushAtk();   // attaque précédente restée sans combat → carte seule
-              openAtk = { nm: e.card, side, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, pumps: [] };
+              openAtk = { nm: e.card, side, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, pumps: [], arc: arc };
             }
           } else {
             curReactions.push({ card: e.card, owner: side, cp: e.pitch });
             // Réaction de défense PENDANT un combat (une attaque est en cours) :
             // on ne l'affiche PAS en étape séparée — sinon elle apparaît AVANT
             // l'attaque qu'elle pare (l'attaque, elle, n'est montrée qu'à l'échange).
-            // Elle figure déjà côté DÉFENSE de l'échange. Hors combat seulement,
-            // on la montre en carte seule.
-            if (!atkBuf.length && !openAtk) {
-              push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, reaction: true, pitch: pitches.join(', '), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt });
+            // Elle figure déjà côté DÉFENSE de l'échange. Hors combat (tour sans
+            // « Combat resolved » — ex. ouverture) OU hors attaque en cours, on la
+            // montre en carte seule (avec ses dégâts d'arcane), sinon elle serait
+            // AVALÉE (main adverse qui « saute » sans explication).
+            if (!hasCombat || (!atkBuf.length && !openAtk)) {
+              push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, reaction: true, pitch: pitches.join(', '), dmg: arcDmg(arc), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt }, arcHit(arc));
+              // Tour sans combat : pas de « Combat resolved » pour envoyer les
+              // réactions au cimetière → on le fait ici. En tour AVEC combat, on
+              // laisse combatResult s'en charger (sinon doublon au cimetière).
+              if (!hasCombat && !isEquip(side, e.card)) toGrave(side, e.card);
             }
           }
         } else if (e.type === 'activated') {
@@ -397,7 +447,8 @@
           // Une ARME activée par l'attaquant EST une attaque (ex. Hunter's Klaive) :
           // en mode chaîne on la met en attente pour qu'elle devienne l'attaquant
           // du combat (au lieu d'une carte seule que la 1re réaction remplacerait).
-          const wpnEntry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: true };
+          const arcA = takeArcane(e.card, i, side);   // capacité qui inflige de l'arcane (ex. pouvoir d'Oscilio)
+          const wpnEntry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: true, arc: arcA };
           if (hasChain && side === atkSide && atkBuf.length > 0) {
             // Activation PENDANT l'attaque en cours (ex. Flick Knives, une réaction
             // sur la dague déjà déclarée) → c'est un RENFORT : il apparaît DANS
@@ -406,7 +457,7 @@
           } else if (hasChain && side === atkSide && WPN[side][norm(e.card)] && (atkBuf.length === 0 ? (isAtkCard(e.card) || !nextAtkCard()) : true)) {
             atkBuf.push(wpnEntry);              // arme = attaquant
           } else {
-            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, pitch: pitches.join(', '), text: HERO[side] + ' active ' + e.card + pTxt });
+            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, pitch: pitches.join(', '), dmg: arcDmg(arcA), text: HERO[side] + ' active ' + e.card + pTxt }, arcHit(arcA));
           }
         } else if (e.type === 'destroyed') {
           // Un ÉQUIPEMENT détruit (armure/Nullrune cassée…) est retiré du plateau
@@ -458,7 +509,21 @@
           const s = sideOf(e.player);
           (e.cards || []).forEach((c, ci) => { const eq = isEquip(s, c); if (!eq) removeCard(s, c); curBlocks.push({ card: c, owner: s, eq, cp: (e.pitches && e.pitches[ci]) || null }); });
         } else if (e.type === 'damageTaken') {
+          if (dtUsed[i]) return;   // déjà appliqué par une étape d'arcane (takeArcane / jeton) → pas de double
           const s = sideOf(e.player); st.life[s] = Math.max(0, st.life[s] - (e.amount || 0));
+        } else if (e.type === 'arcaneDamage') {
+          // Dégâts d'arcane RÉELS non rattachés à une carte jouée = un JETON
+          // (ex. Runechant). Dans un tour SANS combat (partie de sorts), on les
+          // montre en étape autonome — sinon (tour de combat) on laisse la vie se
+          // faire au fil des damageTaken, le clash portant déjà les gros dégâts.
+          if (!e.actual || !(e.amount > 0) || hasCombat) return;
+          const a = arcList.find(x => x.i === i);
+          if (!a || a.used) return;   // déjà pris par une carte
+          a.used = true;
+          const victim = e.dealer ? (sideOf(e.dealer) === 'me' ? 'opp' : 'me') : null;
+          if (victim) { for (let j = i; j < evs.length; j++) { const f = evs[j]; if (f.type === 'damageTaken' && !dtUsed[j] && sideOf(f.player) === victim && (f.amount || 0) === a.amount) { dtUsed[j] = 1; st.life[victim] = Math.max(0, st.life[victim] - a.amount); break; } } }
+          const dSide = e.dealer ? sideOf(e.dealer) : atkSide;
+          push(label, dSide, { type: 'play', side: dSide, card: { nm: e.source }, token: true, dmg: a.amount, text: HERO[dSide] + ' — ' + e.source }, victim);
         } else if (e.type === 'combatResult' && hasChain) {
           // MODE CHAÎNE : l'attaquant est la carte du lien de combat (autoritaire).
           // Les actions PRÉ-attaque ont déjà été affichées « en carte seule » au
@@ -521,6 +586,22 @@
       });
       flushAtk(); flushBuf(); flushTransforms();   // fin de tour : dernière action hors-combat / transfo orpheline affichée
     });
+
+    // MA main FIDÈLE via la HAND TIMELINE (grabber v1.15.3+ : un instantané à chaque
+    // changement, clé = position de log). On remplace, pour CHAQUE étape, ma main
+    // affichée par le dernier instantané dont la position ≤ celle de l'étape — ce qui
+    // rend visibles pioches (Sigil, pouvoir d'Oscilio, Third Eye…) et jeux hors-main.
+    // Absent (vieux logs) → on garde la reconstruction « snapshot − cartes jouées ».
+    const HT = Array.isArray(GAME.handTimeline) ? GAME.handTimeline : [];
+    if (HT.length) {
+      const handAt = idx => {
+        let cards = HT[0].cards;
+        for (let h = 0; h < HT.length; h++) { if (HT[h].pos <= idx + 1) cards = HT[h].cards; else break; }
+        return cards;
+      };
+      steps.forEach(s => { const cards = handAt(s._idx == null ? 0 : s._idx); if (cards) { s.state.meFaceUp = true; s.state.meHandCards = cards.slice(); } });
+    }
+
     // Clone superficiel des joueurs (on ne mute JAMAIS GAME.players, potentiellement
     // partagé/réutilisé ailleurs — ex. dashboard) pour y accrocher les armes créées
     // en jeu, lues par buildZone().
@@ -653,7 +734,7 @@
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'transform') return '<div class="br-banner br-transform br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
-      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + '</div>';
+      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
         // Renforts (pumps/réactions d'attaque, ex. Lightning Press) : petites

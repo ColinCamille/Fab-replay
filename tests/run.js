@@ -608,6 +608,85 @@ const colClash = BR.buildTimeline(colGame).steps.map(s => s.stage).find(st => st
 assert(colClash && colClash.atk && colClash.atk.cp === 3, 'couleur Table : attaquant Lightning Press → bleu (cp 3)');
 assert(colClash && (colClash.blocks || []).some(b => b.nm === 'Sink Below' && b.cp === 2), 'couleur Table : bloc Sink Below → jaune (cp 2)');
 
+// ---------- Dégâts d'arcane : capture + affichage + réactions non avalées ----------
+console.log('Arcane —');
+// classifyLine : forme RÉELLE (« from <src> ») vs MENACÉE.
+const arcReal = Parser.classifyLine('Oscilio Constella Intelligence is dealing 1 arcane damage from Flash Bolt');
+eq(arcReal.type, 'arcaneDamage', 'arcane réel : type');
+eq(arcReal.actual, true, 'arcane réel : actual=true');
+eq(arcReal.source, 'Flash Bolt', 'arcane réel : source = carte');
+eq(arcReal.amount, 1, 'arcane réel : montant');
+const arcThreat = Parser.classifyLine('Flash Bolt is dealing 3 arcane damage');
+eq(arcThreat.type, 'arcaneDamage', 'arcane menacé : type');
+eq(arcThreat.actual, false, 'arcane menacé : actual=false');
+// Garde-fou coût passif : « X was played with a cost of N. » n'est PAS un « played ».
+eq(Parser.classifyLine('Sonata Galaxia was played with a cost of 2.').type, 'info', 'coût passif → info (pas un faux played)');
+
+// Tour SANS combat (sorts) : le sort apparaît avec ses dégâts d'arcane, la réaction
+// adverse N'EST PAS avalée, et un dégât de jeton (Runechant) a son étape autonome.
+const arcGame = {
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Vynnset', equipment: {} } },
+  lifeSeries: { me: [40], opp: [40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: ['Turn to Mindfire'], arsenal: [], events: [
+      { type: 'played', player: 'Me', card: 'Turn to Mindfire' },
+      { type: 'arcaneDamage', dealer: 'Me', source: 'Turn to Mindfire', amount: 6, actual: true },
+      { type: 'damageTaken', player: 'Opp', amount: 6 },
+      { type: 'played', player: 'Opp', card: 'Sink Below' },   // réaction adverse pendant mon tour (hors combat)
+      { type: 'arcaneDamage', dealer: 'Me', source: 'Runechant', amount: 1, actual: true },   // jeton, non rattaché
+      { type: 'damageTaken', player: 'Opp', amount: 1 }
+    ] }
+  ]
+};
+const arcSteps = BR.buildTimeline(arcGame).steps.map(s => s.stage);
+const ttm = arcSteps.find(s => s.type === 'play' && s.card && s.card.nm === 'Turn to Mindfire');
+assert(ttm && ttm.dmg === 6, 'sort d\'arcane : dégâts affichés sur l\'action (6)');
+assert(arcSteps.some(s => s.type === 'play' && s.card && s.card.nm === 'Sink Below' && s.reaction), 'réaction adverse hors combat : montrée (pas avalée)');
+const runeStep = arcSteps.find(s => s.token && s.card && s.card.nm === 'Runechant');
+assert(runeStep && runeStep.dmg === 1, 'dégât de jeton (Runechant) : étape d\'arcane autonome');
+// Vie : appliquée une seule fois (6 + 1 = 7 → 40 → 33), pas de double comptage.
+eq(BR.buildTimeline(arcGame).steps.slice(-1)[0].state.life.opp, 33, 'arcane : vie à jour sans double comptage');
+
+// ---------- HAND TIMELINE : main fidèle par position de log ----------
+console.log('Hand timeline —');
+const htRaw = [
+  '=== Talishar game 42 — 1/1/2026 ===',
+  'Me played Alpha',
+  'Me played Beta',
+  '',
+  '=== HAND TIMELINE (main, à chaque changement | pos = ligne de log) ===',
+  '[0] Alpha, Beta, Gamma',
+  '[1] Beta, Gamma',
+  '[2] (vide)',
+  ''
+].join('\n');
+const htRec = Parser.parse(htRaw);
+eq(htRec.handTimeline.length, 3, 'HAND TIMELINE : 3 entrées parsées');
+eq(htRec.handTimeline[0].pos, 0, 'HAND TIMELINE : position');
+eq(htRec.handTimeline[2].cards.length, 0, 'HAND TIMELINE : (vide) → []');
+// Override dans buildTimeline : la main d'une étape = dernier instantané pos ≤ _idx+1.
+const htGame = {
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Vynnset', equipment: {} } },
+  lifeSeries: { me: [40], opp: [40] },
+  handTimeline: [{ pos: 0, cards: ['Alpha', 'Beta', 'Gamma'] }, { pos: 1, cards: ['Beta', 'Gamma'] }, { pos: 2, cards: ['Gamma'] }],
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: ['Alpha', 'Beta', 'Gamma'], arsenal: [], events: [
+      { type: 'played', player: 'Me', card: 'Alpha', _idx: 0 },
+      { type: 'played', player: 'Me', card: 'Beta', _idx: 1 }
+    ] }
+  ]
+};
+const htSteps = BR.buildTimeline(htGame).steps;
+const aStep = htSteps.find(s => s.stage.type === 'play' && s.stage.card.nm === 'Alpha');
+const bStep = htSteps.find(s => s.stage.type === 'play' && s.stage.card.nm === 'Beta');
+eq(aStep.state.meHandCards.join(','), 'Beta,Gamma', 'HAND TIMELINE : main de l\'étape Alpha (pos≤1)');
+eq(bStep.state.meHandCards.join(','), 'Gamma', 'HAND TIMELINE : main de l\'étape Beta (pos≤2)');
+// Sans timeline (vieux logs) : repli sur la reconstruction (pas d\'exception).
+const htNone = BR.buildTimeline(Object.assign({}, htGame, { handTimeline: [] }));
+assert(htNone.steps.length > 0, 'HAND TIMELINE absente : repli sans erreur');
+
 // ---------- Transformation de héros (Arakni) : instant exact + renfort ----------
 console.log('Transform —');
 (function () {
