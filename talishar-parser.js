@@ -43,6 +43,11 @@
     if ((m = line.match(/^🎲 you rolled (\d+) and (.+?) rolled (\d+)\.$/))) return { type: 'diceRoll', text: line };
     if (/^you chooses who goes first\.$/.test(line)) return { type: 'info', text: line };
     if ((m = line.match(/^(.+?) will go first\.$/))) return { type: 'firstPlayer', player: m[1], text: line };
+    // Annotation de coût (voix passive) : « <Carte> was played with a cost of N. »
+    // — PAS une action « <joueur> played <carte> ». Sans ce garde-fou, la règle
+    // générique plus bas en fait un faux jeu (player=« <Carte> was », card=« with a
+    // cost of N. ») qui apparaissait en étape parasite dans la vue Table.
+    if (/ was played with a cost of \d+\.?$/.test(line)) return { type: 'info', text: line };
     if ((m = line.match(/^(.+?) played (.+?) from arsenal$/))) return { type: 'played', player: m[1], card: m[2], fromArsenal: true, text: line };
     if ((m = line.match(/^(.+?) played (.+)$/))) return { type: 'played', player: m[1], card: m[2], fromArsenal: false, text: line };
     if ((m = line.match(/^(.+?) pitched (.+)$/))) return { type: 'pitched', player: m[1], card: m[2], text: line };
@@ -78,7 +83,14 @@
     if (/^📊 Sending game result/.test(line)) return { type: 'info', text: line };
     if (/^The chain link was resolved\.$/.test(line)) return { type: 'chainLinkResolved', text: line };
     if (/^The combat chain was closed\.$/.test(line)) return { type: 'chainClosed', text: line };
-    if ((m = line.match(/^(.+?) is dealing (\d+) arcane damage(?: from (.+))?$/))) return { type: 'arcaneDamage', text: line };
+    // Dégâts d'arcane. Deux formes :
+    //  · « <carte> is dealing N arcane damage »            → dégâts MENACÉS (avant prévention), source = la carte.
+    //  · « <joueur> is dealing N arcane damage from <src> » → dégâts RÉELS (après prévention), source = <src>.
+    // La vue Table n'affiche que les RÉELS (actual) sur l'action responsable.
+    if ((m = line.match(/^(.+?) is dealing (\d+) arcane damage(?: from (.+))?$/)))
+      return m[3]
+        ? { type: 'arcaneDamage', dealer: m[1].trim(), source: m[3].trim(), amount: parseInt(m[2], 10), actual: true, text: line }
+        : { type: 'arcaneDamage', source: m[1].trim(), amount: parseInt(m[2], 10), actual: false, text: line };
     if (/is dealing \d+ arcane damage\.?$/.test(line)) return { type: 'info', text: line };
     // Transformation de héros (ex. Arakni) : « <forme> becomes <nouvelle forme> ».
     // Placée en dernier : aucune autre règle ne matche « becomes ».
@@ -209,6 +221,27 @@
       out[key] = (!val || val === '(vide)') ? [] : val.split(',').map(s => s.trim()).filter(Boolean);
     }
     return { rest, snapshots: out };
+  }
+
+  // TIMELINE de MA main : un instantané À CHAQUE CHANGEMENT (dédupliqué par le
+  // grabber), clé = POSITION dans le log (nombre de lignes déjà capturées). Sert
+  // à la vue Table pour afficher la main fidèle à chaque étape (pioches, filtre
+  // du pouvoir de héros, cartes jouées hors main…). Format : [pos] a, b, c.
+  // Renvoie un tableau trié par position ; bloc absent (vieux logs) → [].
+  function parseHandTimelineBlock(text, marker) {
+    const out = [];
+    const { rest, body } = sliceBlock(text, marker);
+    if (body == null) return { rest: text, timeline: out };
+    const lineRe = /^\[(\d+)\]\s*(.*)$/gm;
+    let hm;
+    while ((hm = lineRe.exec(body))) {
+      const pos = parseInt(hm[1], 10);
+      if (!isFinite(pos)) continue;
+      const val = hm[2].trim();
+      out.push({ pos, cards: (!val || val === '(vide)') ? [] : val.split(',').map(s => s.trim()).filter(Boolean) });
+    }
+    out.sort((a, b) => a.pos - b.pos);
+    return { rest, timeline: out };
   }
 
   // Bloc terrain : permanents/tokens en jeu, DEUX camps par tour.
@@ -407,6 +440,7 @@
     if (metaRes.meta.heroLabelIssues) metaRes.meta.heroLabelIssues.forEach(w => warnings.push(w));
     const lifeRes = parseLifeSnapshotBlock(text, '=== LIFE SNAPSHOTS'); text = lifeRes.rest;
     const handRes = parseCardSnapshotBlock(text, '=== HAND SNAPSHOTS'); text = handRes.rest;
+    const handTlRes = parseHandTimelineBlock(text, '=== HAND TIMELINE'); text = handTlRes.rest;
     const arsRes = parseCardSnapshotBlock(text, '=== ARSENAL SNAPSHOTS'); text = arsRes.rest;
     const oppArsRes = parseCountSnapshotBlock(text, '=== OPP ARSENAL COUNT'); text = oppArsRes.rest;
     const fieldRes = parseFieldSnapshotBlock(text, '=== FIELD SNAPSHOTS'); text = fieldRes.rest;
@@ -428,6 +462,7 @@
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
     const handSnapshots = handRes.snapshots;
+    const handTimeline = handTlRes.timeline;
     const arsenalSnapshots = arsRes.snapshots;
     const oppArsenalCounts = oppArsRes.snapshots;
     const fieldSnapshots = fieldRes.snapshots;
@@ -505,6 +540,10 @@
       }
       const evt = classifyLine(l);
       if (lineTs && lineTs[idx] != null) evt.ts = lineTs[idx];
+      // Index de ligne d'origine posé DIRECTEMENT sur l'événement (survit au
+      // filtrage undo/dedup, contrairement au tableau parallèle _lineIdx). Sert à
+      // corréler chaque étape de la vue Table à la HAND TIMELINE (position = ligne).
+      evt._idx = idx;
       // Couleur exacte par occurrence : on dépile la file FIFO du nom concerné
       // (même ordre que le journal brut). played/pitched/activated = 1 carte ;
       // blocked = plusieurs. Absent → carte mono-couleur ou vieille partie.
@@ -873,6 +912,7 @@
       oppName: oppName || null,
       result,
       turns,
+      handTimeline,                 // [{ pos, cards }] triés — main fidèle par position de log (vue Table)
       lifeHistory,
       lifeSeries,
       life: finalLife,
