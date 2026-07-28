@@ -67,6 +67,10 @@
     if ((m = line.match(/^🎯(.+?) was chosen as the target\.$/))) return { type: 'targeted', target: m[1], text: line };
     if ((m = line.match(/^(.+?)'s (.+?) was targeted(?: by (.+))?$/))) return { type: 'targetedSecondary', owner: m[1], card: m[2], text: line };
     if ((m = line.match(/^👁️‍🗨️(.+?) reveals (.+)$/))) return { type: 'revealed', player: m[1], card: m[2], text: line };
+    // Carte choisie par une capacité (ex. pouvoir d'Oscilio, Constella Intelligence :
+    // « Card chosen: <carte> »). La ligne ne nomme pas le joueur → rattachée à
+    // l'activation qui précède dans buildTimeline (annotation + retrait de la main).
+    if ((m = line.match(/^Card chosen: (.+)$/))) return { type: 'cardChosen', card: m[1].trim(), text: line };
     if ((m = line.match(/^Selected mode(?:s)? for (.+?) (?:is|are): (.+)$/))) return { type: 'modeSelected', card: m[1], mode: m[2], text: line };
     if ((m = line.match(/^(.+?) gains Go Again!$/))) return { type: 'goAgain', card: m[1], text: line };
     if ((m = line.match(/^(.+?) grants go again$/))) return { type: 'goAgain', card: m[1], text: line };

@@ -1408,6 +1408,14 @@ footer a{color:var(--text-dim)}
 .br-pumps{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:6px}
 .br-pumps-lbl{font:700 .5rem/1 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint)}
 .br-pumps .br-cardrow{max-width:150px}
+/* Réactions/instants du défenseur (sigils, etc.) : petites cartes sous la défense,
+   étiquette « ↩ réactions » → distinctes des vrais bloqueurs (pas de valeur de défense). */
+.br-reacts{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:6px}
+.br-reacts-lbl{font:700 .5rem/1 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint)}
+.br-reacts .br-cardrow{max-width:150px}
+.br-lane .br-reacts .br-pcard{width:44px;opacity:.9}
+/* Carte choisie par une capacité (ex. pouvoir d'Oscilio) annotée sur l'activation. */
+.br-chosen{font-size:.62rem;color:var(--violet,#8b6bff);letter-spacing:.04em;font-weight:700}
 .br-kwline{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:5px;max-width:130px}
 .br-kw{font:700 .52rem/1 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;
   color:var(--gold,#e9c07a);background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.38);

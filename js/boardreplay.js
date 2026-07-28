@@ -444,6 +444,12 @@
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
+          // Carte choisie par la capacité (ex. pouvoir d'Oscilio : « Card chosen: X »).
+          // Rattachée à CETTE activation → annotée sur l'étape, et retirée de MA main
+          // affichée si elle y est (rm() no-ope sinon) : sans ça, une carte bannie de
+          // la main par un pouvoir « traîne » jusqu'au snapshot du tour suivant.
+          let chosen = null;
+          for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'cardChosen') { chosen = f.card; consumed[j] = 1; if (side === 'me') removeCard('me', f.card); break; } }
           // Une ARME activée par l'attaquant EST une attaque (ex. Hunter's Klaive) :
           // en mode chaîne on la met en attente pour qu'elle devienne l'attaquant
           // du combat (au lieu d'une carte seule que la 1re réaction remplacerait).
@@ -457,7 +463,7 @@
           } else if (hasChain && side === atkSide && WPN[side][norm(e.card)] && (atkBuf.length === 0 ? (isAtkCard(e.card) || !nextAtkCard()) : true)) {
             atkBuf.push(wpnEntry);              // arme = attaquant
           } else {
-            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, pitch: pitches.join(', '), dmg: arcDmg(arcA), text: HERO[side] + ' active ' + e.card + pTxt }, arcHit(arcA));
+            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, chosen: chosen, pitch: pitches.join(', '), dmg: arcDmg(arcA), text: HERO[side] + ' active ' + e.card + pTxt + (chosen ? ' → ' + chosen : '') }, arcHit(arcA));
           }
         } else if (e.type === 'destroyed') {
           // Un ÉQUIPEMENT détruit (armure/Nullrune cassée…) est retiré du plateau
@@ -539,12 +545,16 @@
           curReactions.forEach(r => toGrave(r.owner, r.card));
           if (attacker) {
             const defSide = atkSide === 'me' ? 'opp' : 'me';
-            const defCards = curBlocks.map(b => ({ nm: b.card, cp: b.cp })).concat(curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card, cp: r.cp })));
+            // DÉFENSE = seules les cartes loggées « blocked with » (vrais bloqueurs).
+            // Les cartes « played » en réaction par le défenseur (instants sans
+            // valeur de défense, ex. sigils) NE sont PAS des blocs → rangée à part.
+            const defCards = curBlocks.map(b => ({ nm: b.card, cp: b.cp }));
+            const reactions = curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card, cp: r.cp }));
             const blockWho = curBlocks.length ? curBlocks[0].owner : defSide;
             const vt = dmg > 0 ? 'through' : 'blocked';
             const rtxt = dmg > 0 ? (dmg + ' dégât' + (dmg > 1 ? 's' : '') + ' pass' + (dmg > 1 ? 'ent' : 'e')) : '0 dégât — bloqué';
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
-            push(label, atkSide, { type: 'clash', atk: { nm: attacker.nm, cp: attacker.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+            push(label, atkSide, { type: 'clash', atk: { nm: attacker.nm, cp: attacker.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, reactions, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           flushTransforms();   // transfo déclenchée par ce combat (ex. Mask of Deceit) → juste après le clash
           atkBuf = []; curBlocks = []; curReactions = [];
@@ -555,14 +565,17 @@
           curReactions.forEach(r => toGrave(r.owner, r.card));
           if (openAtk) {
             const defSide = openAtk.side === 'me' ? 'opp' : 'me';
-            const defCards = curBlocks.map(b => ({ nm: b.card, cp: b.cp })).concat(curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card, cp: r.cp })));
+            // DÉFENSE = seuls les vrais bloqueurs (« blocked with ») ; les réactions
+            // « played » du défenseur (instants) vont dans une rangée à part.
+            const defCards = curBlocks.map(b => ({ nm: b.card, cp: b.cp }));
+            const reactions = curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card, cp: r.cp }));
             const blockWho = curBlocks.length ? curBlocks[0].owner : defSide;
             const vt = dmg > 0 ? 'through' : 'blocked';
             const rtxt = dmg > 0 ? (dmg + ' dégât' + (dmg > 1 ? 's' : '') + ' pass' + (dmg > 1 ? 'ent' : 'e')) : '0 dégât — bloqué';
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
             const lk = takeChain(openAtk.nm);   // attaque/défense effectives (buffs) de CETTE attaque
             const pumps = (openAtk.pumps || []).map(p => ({ nm: p.nm, cp: p.cp }));
-            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, cp: openAtk.cp, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, pumps: pumps, blocks: defCards, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, cp: openAtk.cp, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, pumps: pumps, blocks: defCards, reactions, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           flushTransforms();   // transfo déclenchée par ce combat (ex. Mask of Deceit) → juste après le clash
           openAtk = null; curBlocks = []; curReactions = [];
@@ -734,13 +747,17 @@
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'transform') return '<div class="br-banner br-transform br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
-      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + '</div>';
+      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
         // Renforts (pumps/réactions d'attaque, ex. Lightning Press) : petites
         // cartes sous l'attaque, pour garder trace de ce qui a été joué dessus.
         const pumps = (s.pumps && s.pumps.length) ? '<div class="br-pumps"><span class="br-pumps-lbl">+ renfort</span><div class="br-cardrow">' + s.pumps.map(p => pcard(p, s.atk.who)).join('') + '</div></div>' : '';
-        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + pumps + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div></div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
+        // Réactions/instants joués par le défenseur (sigils, etc.) : rangée à part,
+        // SOUS la défense, pour signaler qu'ils ont été joués sans les faire passer
+        // pour des bloqueurs (ils n'ont pas de valeur de défense).
+        const reacts = (s.reactions && s.reactions.length) ? '<div class="br-reacts"><span class="br-reacts-lbl">↩ réactions</span><div class="br-cardrow">' + s.reactions.map(r => pcard(r, s.blockWho)).join('') + '</div></div>' : '';
+        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + pumps + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div>' + reacts + '</div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
       }
       return '';
     }

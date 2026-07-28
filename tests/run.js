@@ -592,7 +592,52 @@ const defTl = BR.buildTimeline({
 });
 assert(!defTl.steps.some(s => s.stage.type === 'play' && s.stage.card && s.stage.card.nm === 'Sink Below'), 'défense : la réaction n\'apparaît pas en étape séparée avant l\'attaque');
 const defClash = defTl.steps.map(s => s.stage).find(st => st.type === 'clash');
-assert(defClash && (defClash.blocks || []).some(b => b.nm === 'Sink Below'), 'défense : la réaction figure côté défense de l\'échange');
+// Une carte « played » par le défenseur (instant/réaction) figure dans la rangée
+// « réactions » du clash, PAS dans les blocs (elle n'a pas de valeur de défense).
+assert(defClash && !(defClash.blocks || []).some(b => b.nm === 'Sink Below'), 'défense : la réaction « played » n\'est PAS comptée comme bloc');
+assert(defClash && (defClash.reactions || []).some(b => b.nm === 'Sink Below'), 'défense : la réaction « played » figure dans la rangée réactions');
+
+// Instants sans défense joués pendant un combat (reproduction game 1756262 : Murky
+// Water bloquée par Comet Collision, puis 3 sigils joués). Seul « blocked with » est
+// un bloc ; les sigils « played » vont dans la rangée réactions, pas dans la défense.
+const instTl = BR.buildTimeline({
+  myName: 'Oscilio', oppName: 'Riptide',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Riptide', equipment: {} } },
+  lifeSeries: { me: [40, 31], opp: [40, 40] },
+  turns: [{ player: 'Riptide', label: 'Riptide — Tour 1', hand: [], arsenal: [],
+    chain: [{ turn: 'Riptide#1', card: 'Murky Water', power: 12, defense: 3, kw: [] }],
+    events: [
+      { type: 'played', player: 'Riptide', card: 'Murky Water' },
+      { type: 'blocked', player: 'Oscilio', cards: ['Comet Collision'] },
+      { type: 'played', player: 'Oscilio', card: 'Sigil of Solace' },
+      { type: 'played', player: 'Oscilio', card: 'Sigil of Brilliance' },
+      { type: 'played', player: 'Oscilio', card: 'Chromatic Refinement' },
+      { type: 'combatResult', hit: true, amount: 9 }
+    ] }]
+});
+const instClash = instTl.steps.map(s => s.stage).find(st => st.type === 'clash');
+assert(instClash && (instClash.blocks || []).length === 1 && instClash.blocks[0].nm === 'Comet Collision', 'instants : seul « blocked with » (Comet Collision) est en défense');
+assert(instClash && !(instClash.blocks || []).some(b => /Sigil|Chromatic/.test(b.nm)), 'instants : les sigils ne sont PAS des bloqueurs');
+assert(instClash && ['Sigil of Solace', 'Sigil of Brilliance', 'Chromatic Refinement'].every(nm => (instClash.reactions || []).some(r => r.nm === nm)), 'instants : les 3 instants figurent dans la rangée réactions');
+
+// « Card chosen: X » (pouvoir d'Oscilio) : annoté sur l'activation ET retiré de MA
+// main affichée (sinon la carte bannie « traîne » jusqu'au tour suivant).
+const chosenTl = BR.buildTimeline({
+  myName: 'Oscilio', oppName: 'Riptide',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Riptide', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [{ player: 'Riptide', label: 'Riptide — Tour 1', hand: ['Flash Bolt', 'Comet Collision'], arsenal: [],
+    events: [
+      { type: 'activated', player: 'Oscilio', card: 'Oscilio, Constella Intelligence' },
+      { type: 'cardChosen', card: 'Flash Bolt' }
+    ] }]
+});
+const chosenStep = chosenTl.steps.map(s => s.stage).find(st => st.type === 'play' && st.act);
+assert(chosenStep && chosenStep.chosen === 'Flash Bolt', 'card chosen : l\'activation porte la carte choisie');
+assert(!chosenTl.steps.some(s => s.stage.type === 'play' && s.stage.card && s.stage.card.nm === 'Flash Bolt' && !s.stage.act), 'card chosen : « Card chosen: X » ne crée pas d\'étape parasite');
+const lastChosen = chosenTl.steps.slice(-1)[0];
+assert(lastChosen.state.meHandCards.indexOf('Flash Bolt') < 0, 'card chosen : Flash Bolt retirée de la main affichée');
+assert(lastChosen.state.meHandCards.indexOf('Comet Collision') >= 0, 'card chosen : les autres cartes restent en main');
 
 // Couleur (cp) propagée jusqu'à l'échange Table : attaquant + bloc portent leur pitch.
 const sdBR = (id, nm) => "<span onmouseover=\"ShowDetail(event,'./WebpImages/" + id + ".webp')\">" + nm + "</span>";
