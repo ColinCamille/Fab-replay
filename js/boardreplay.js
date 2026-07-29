@@ -607,12 +607,24 @@
     // Absent (vieux logs) → on garde la reconstruction « snapshot − cartes jouées ».
     const HT = Array.isArray(GAME.handTimeline) ? GAME.handTimeline : [];
     if (HT.length) {
+      const firstPos = HT[0].pos;
       const handAt = idx => {
         let cards = HT[0].cards;
         for (let h = 0; h < HT.length; h++) { if (HT[h].pos <= idx + 1) cards = HT[h].cards; else break; }
         return cards;
       };
-      steps.forEach(s => { const cards = handAt(s._idx == null ? 0 : s._idx); if (cards) { s.state.meFaceUp = true; s.state.meHandCards = cards.slice(); } });
+      steps.forEach(s => {
+        const idx = s._idx == null ? 0 : s._idx;
+        // Étape ANTÉRIEURE au 1er instantané de la timeline : on garde la main déjà
+        // reconstruite (snapshot d'ouverture). Sinon on la rétrograderait vers HT[0],
+        // qui peut être une capture POST-action — carte déjà pitchée/jouée d'entrée
+        // puis re-captée tardivement à cause d'un undo (ex. Persuasive Prognosis
+        // pitchée à la 1re action, vraie main à 4 cartes taguée bien plus loin dans
+        // le log) → main de départ affichée tronquée (3 au lieu de 4).
+        if (idx + 1 < firstPos) return;
+        const cards = handAt(idx);
+        if (cards) { s.state.meFaceUp = true; s.state.meHandCards = cards.slice(); }
+      });
     }
 
     // Clone superficiel des joueurs (on ne mute JAMAIS GAME.players, potentiellement

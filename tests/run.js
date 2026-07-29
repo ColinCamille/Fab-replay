@@ -576,6 +576,36 @@ assert(nimStep && nimStep.state.meHandCards.some(c => /scar for a scar/i.test(c)
 const scarStep = openHandTl.steps.find(s => s.stage.type === 'clash');
 assert(scarStep && !scarStep.state.meHandCards.some(c => /scar for a scar/i.test(c)), 'ouverture : Scar retiré de la main une fois joué (à l\'échange)');
 
+// Ouverture : main de départ NON tronquée par la HAND TIMELINE quand son 1er
+// instantané est tardif (reproduction game 1820277 : Persuasive Prognosis pitchée
+// à la 1re action, puis un undo décale la vraie capture à 4 cartes loin dans le
+// log → HT[0] est une capture post-pitch à 3 cartes). La bannière d'ouverture doit
+// garder les 4 cartes du snapshot, pas rétrograder vers HT[0].
+const openLateTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Arakni, Marionette', equipment: { weaponL: { name: 'Klaive' } } }, opp: { hero: 'Opp', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  handTimeline: [
+    { pos: 3, cards: ['To The Point', 'Stains', 'Incision'] },   // 1re capture DISPO = post-pitch (3 cartes)
+    { pos: 6, cards: ['To The Point', 'Stains'] }
+  ],
+  turns: [{ player: null, label: 'Ouverture', turnNumber: 0,
+    hand: ['Persuasive Prognosis', 'To The Point', 'Stains', 'Incision'], arsenal: [],
+    events: [
+      { type: 'activated', player: 'Me', card: 'Klaive', _idx: 0 },   // 1re action (n'ôte pas de carte de main) → bannière _idx=0
+      { type: 'pitched', player: 'Me', card: 'Persuasive Prognosis', _idx: 2 },
+      { type: 'played', player: 'Me', card: 'To The Point', _idx: 5 }
+    ] }]
+});
+const openBanner = openLateTl.steps.find(s => s.stage.type === 'banner' && /Début de la partie/.test(s.stage.big || ''));
+assert(openBanner, 'ouverture (timeline tardive) : bannière de début présente');
+eq(openBanner.state.meHandCards.length, 4, 'ouverture (timeline tardive) : main de départ à 4 cartes, non tronquée par HT[0]');
+assert(openBanner.state.meHandCards.some(c => /persuasive prognosis/i.test(c)), 'ouverture (timeline tardive) : la carte pitchée d\'entrée figure encore dans la main de départ');
+// Non-régression : une fois passé le 1er instantané (firstPos), la main suit bien
+// la timeline (la carte pitchée a quitté la main, on ne reste pas bloqué à 4).
+const lastOpen = openLateTl.steps[openLateTl.steps.length - 1];
+assert(lastOpen && !lastOpen.state.meHandCards.some(c => /persuasive prognosis/i.test(c)), 'ouverture (timeline tardive) : la main suit la timeline après le 1er instantané (carte pitchée retirée)');
+
 // Ordre : une réaction de DÉFENSE jouée pendant l'attaque adverse (arme) ne doit
 // PAS apparaître en étape AVANT l'attaque — elle figure côté défense de l'échange.
 const defTl = BR.buildTimeline({
