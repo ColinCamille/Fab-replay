@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.17.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. Export texte / téléchargement + localStorage.
+// @version      1.18.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.17.0';
+  const VERSION = '1.18.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -69,6 +69,7 @@
   let endStatsLogged = false;
   let lastTurnKey = null;
   let openingSnapped = false;
+  let openingPreAction = false;  // main d'ouverture captée AVANT la 1re action (mulligan) → fiable, à ne pas réécraser
   let autoPushedFor = null;  // gameName déjà auto-envoyé au dépôt (évite les doublons)
   let autoPushedCount = 0;   // nb de camps de stats déjà auto-envoyés (re-envoi si ↑)
 
@@ -724,14 +725,45 @@
         if (changed) handTimeline.push({ pos: captured.length, cards: hand });
       }
     }
-    // Snapshot d'OUVERTURE : on garde la PLUS GRANDE main observée AVANT toute
-    // action, puis on FIGE dès la 1re baisse de main (1er play/pitch/bloc) ou la
-    // 1re fin de tour. Sinon, quand TU commences (pas d'en-tête « ton tour 1 »
-    // avant ton tour 0), la fenêtre s'étendait jusqu'à ta re-pioche de fin de
-    // tour et capturait la main du tour 1 (cartes en trop). On fige donc avant
-    // la re-pioche. `openingSnapped` sert de verrou (réinitialisé au changement
-    // de partie).
+    // Snapshot d'OUVERTURE — deux régimes.
+    //
+    // (A) Fenêtre PRÉ-ACTION (log encore vide = mulligan / avant ton 1er clic) :
+    //     on lit directement Redux (playerOne.Hand, fiable) et on garde la main
+    //     COURANTE — la plus RÉCENTE gagne (simple affectation), pour que le
+    //     re-tirage de mulligan (même taille) écrase bien la main initiale. C'est
+    //     indispensable quand TU commences : ta 1re action EST la 1re ligne de
+    //     log, donc à `captured.length>0` ta main a déjà baissé et la carte jouée
+    //     est perdue à jamais (ex. Aethersling). En captant ici on fige la vraie
+    //     main de départ. `openingPreAction` mémorise qu'on tient un snapshot sûr.
+    if (!openingSnapped && captured.length === 0) {
+      const g = getGameState();
+      if (g && g.playerOne && Array.isArray(g.playerOne.Hand) && g.playerOne.Hand.length) {
+        const hand = extractMyHandCards();
+        if (hand.length) {
+          handSnapshots['__opening__'] = hand;
+          arsenalSnapshots['__opening__'] = extractMyArsenal();
+          oppArsenalSnapshots['__opening__'] = extractOppArsenalCount();
+          lifeSnapshots['__opening__'] = extractLife();
+          const f0 = extractField(); if (f0) fieldSnapshots['__opening__'] = f0;
+          const hf0 = extractHeroForms(); if (hf0) heroFormSnapshots['__opening__'] = hf0;
+          const gr0 = extractTwoCamp('Graveyard'); if (gr0) graveSnapshots['__opening__'] = gr0;
+          const bn0 = extractTwoCamp('Banish'); if (bn0) banishSnapshots['__opening__'] = bn0;
+          openingPreAction = true;
+        }
+      }
+    }
+    // (B) La 1re ligne de log est arrivée. Si on a un snapshot pré-action fiable
+    //     (A), on FIGE net : toute variation désormais est un play/pitch/pioche,
+    //     pas la main de départ — surtout pas réécraser (B) sur (A). Sinon
+    //     (grabber chargé EN COURS de partie, aucune fenêtre pré-action) on garde
+    //     le repli historique : garder la PLUS GRANDE main observée avant toute
+    //     action, figer à la 1re baisse (1er play/pitch/bloc) ou la 1re fin de
+    //     tour (avant la re-pioche). `openingSnapped` sert de verrou (réinitialisé
+    //     au changement de partie).
     if (!openingSnapped && captured.length > 0) {
+      if (openingPreAction) {
+        openingSnapped = true;                              // main pré-action déjà figée → on la garde
+      } else {
       const endedTurn = captured.some(l => /Attempting to end turn/.test(l));
       const hand = extractMyHandCards();
       const prev = handSnapshots['__opening__'] || [];
@@ -748,6 +780,7 @@
         const bn0 = extractTwoCamp('Banish'); if (bn0) banishSnapshots['__opening__'] = bn0;
       } else if (prev.length && hand.length < prev.length) {
         openingSnapped = true;                              // 1re baisse → main d'ouverture figée
+      }
       }
     }
     let key = null;
@@ -807,7 +840,7 @@
       if (!onGamePage()) return;
       const gn = currentGameName();
       if (gn !== gameName) {
-        gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false; chatLogAdopted = false; frozenPlayers = null;
+        gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false; openingPreAction = false; chatLogAdopted = false; frozenPlayers = null;
         meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null; autoPushedCount = 0; captureIssues = [];
         loadExisting(); updateUI();
       }
@@ -1297,7 +1330,7 @@
     captured = []; lastVisibleSig = ''; handSnapshots = {}; handTimeline = []; arsenalSnapshots = {}; oppArsenalSnapshots = {};
     fieldSnapshots = {}; graveSnapshots = {}; banishSnapshots = {}; lifeSnapshots = {}; tsBatches = []; meta = {};
     chainLinks = []; pendingChain = null;
-    lastTurnKey = null; openingSnapped = false;
+    lastTurnKey = null; openingSnapped = false; openingPreAction = false;
     save(); updateUI();
   }
 
