@@ -522,7 +522,11 @@
       if (th) nameSet.add(th.player);
       if (/^Resolving /.test(l)) return;
       const m = l.match(actionNameRe);
-      if (m) nameSet.add(m[1].trim());
+      // Rejeter les lignes SYSTÈME en voix passive « <Carte> was played with a
+      // cost of N. » (matchent actionNameRe via « played ») : « X was » n'est
+      // jamais un vrai joueur. Sans ça ce fantôme peut être choisi comme myName
+      // quand l'adversaire pose une carte en ouverture avant le tour 1 local.
+      if (m && !/ was$/.test(m[1].trim())) nameSet.add(m[1].trim());
     });
     const names = Array.from(nameSet);
 
