@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.18.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). Export texte / téléchargement + localStorage.
+// @version      1.19.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.18.0';
+  const VERSION = '1.19.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -39,6 +39,7 @@
   let captured = [];
   let lastVisibleSig = '';
   let gameName = '';
+  let spectating = false;       // partie regardée en SPECTATEUR (playerID 3) → aucune capture/envoi
   let boxLogged = false;
   let storeLogged = false;
   let logSource = 'dom';        // 'chatlog' (journal structuré) ou 'dom' (repli)
@@ -86,6 +87,16 @@
   // aux pages de partie — comportement visible identique aux versions ≤ 1.12,
   // et pas de faux gameId tiré d'un nombre présent dans une autre URL.
   function onGamePage() { return /\/game\//.test(location.pathname); }
+
+  // playerID Talishar : 1 = joueur 1, 2 = joueur 2, 3 = SPECTATEUR. Un spectateur
+  // reçoit la partie « comme si tu étais J1 » → sans ce garde on capturerait et
+  // enverrait la partie d'AUTRUI comme si c'était la nôtre. null/NaN = store pas
+  // encore chargé → on ne conclut PAS (pas de blocage à tort au tout début).
+  function isSpectating() {
+    const g = getGameState();
+    const pid = g && g.gameInfo ? Number(g.gameInfo.playerID) : NaN;
+    return Number.isFinite(pid) && pid !== 1 && pid !== 2;
+  }
 
   // ============================================================
   // ACCÈS AU STORE REDUX (v1.8)
@@ -844,6 +855,16 @@
         meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null; autoPushedCount = 0; captureIssues = [];
         loadExisting(); updateUI();
       }
+      // SPECTATEUR (playerID 3) : on ne capture ni n'envoie RIEN — sinon la partie
+      // regardée atterrit dans l'historique comme si elle était à nous. On purge
+      // une éventuelle capture DOM faite avant que le store (donc playerID) soit
+      // lisible, puis on sort avant toute capture/snapshot/auto-envoi.
+      if (isSpectating()) {
+        if (captured.length) { captured = []; tsBatches = []; lastVisibleSig = ''; }
+        if (!spectating) { spectating = true; updateUI(); }
+        return;
+      }
+      spectating = false;
       // Priorité au journal structuré (state.game.chatLog) : chaque entrée y
       // figure une seule fois → fini la duplication née du re-rendu du DOM.
       // Repli sur le panneau DOM quand le store n'est pas accessible.
@@ -1003,6 +1024,18 @@
 
   function updateUI() {
     const nbHands = Object.keys(handSnapshots).length;
+    // Mode spectateur : rien n'est capturé ni envoyé → on le dit clairement et on
+    // n'affiche pas les compteurs (qui n'auraient aucun sens ici).
+    if (spectating) {
+      if (counter) {
+        counter.innerHTML = '<span style="color:#8ab4ff;font-weight:700">👁 Spectateur — capture désactivée</span>'
+          + '<br><span style="opacity:.7">tu regardes cette partie : elle n’est pas ajoutée à ton historique</span>';
+      }
+      if (acctBtn) acctBtn.style.display = 'none';
+      const miniS = ui && ui.querySelector('#tlg-mini-count');
+      if (miniS) miniS.textContent = '👁';
+      return;
+    }
     if (counter) {
       const src = logSource === 'chatlog' ? '⚡ chatLog' : (reduxStore ? '⚡ redux' : '🔍 dom');
       const heroBit = (meta.myHero || '?') + ' vs ' + (meta.oppHero || '?');
@@ -1458,6 +1491,12 @@
   // de la transition.
   async function pushGameToSupabase(silent) {
     if (!sbConfigured()) { if (silent) return; configurePairing(); if (!sbConfigured()) return; }
+    // Refus explicite si on regarde la partie en spectateur (le gate de tick a déjà
+    // vidé `captured`, mais on rend le refus clair et on couvre un éventuel résidu).
+    if (isSpectating()) {
+      if (!silent) alert('Tu es SPECTATEUR de cette partie — envoi désactivé (elle n’est pas à toi et fausserait tes stats).');
+      return;
+    }
     if (!captured.length) { if (!silent) alert('Aucune ligne de log capturée pour cette partie.'); return; }
     const badCapture = captureQuality();
     if (badCapture.length) {
