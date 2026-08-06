@@ -1108,6 +1108,39 @@ console.log('Capture fantôme (ZUP #1750820) —');
   eq(ghostAgg.global.games, 1, 'dashboard : la capture fantôme est exclue de l\'agrégation (1 partie sur 2)');
 })();
 
+// ---------- Régression : faux joueur « <Carte> was played… » (game #1906667) ----------
+// Quand l'adversaire pose une carte en OUVERTURE (avant le tour 1 local), la
+// ligne SYSTÈME « <Carte> was played with a cost of N. » matche actionNameRe
+// (via « played ») et injectait un faux joueur « <Carte> was » dans `names`.
+// Ce fantôme, ajouté AVANT le vrai héros local, était alors choisi comme myName
+// → le tour local n'était plus dans `known` → health.ok=false → partie masquée
+// du dashboard (cas réel Oscilio vs Valda). Le garde-fou « / was$/ » l'exclut.
+console.log('Faux joueur "<Carte> was played…" (#1906667) —');
+(function () {
+  const raw = '=== Talishar game 1906667 — test ===\n\n'
+    + 'Valda Seismic Impact played Imposing Visage\n'
+    + 'Valda Seismic Impact pitched Aftershock\n'
+    + 'Imposing Visage was played with a cost of 3.\n'
+    + 'Resolving play ability of Imposing Visage.\n'
+    + 'Valda Seismic Impact passed\n'
+    + 'Oscilio Constella Intelligence\'s turn 1 has begun.\n'
+    + 'Oscilio Constella Intelligence played Scour\n'
+    + 'Scour was played with a cost of 3.\n'
+    + 'Valda Seismic Impact took 3 damage\n'
+    + 'Valda Seismic Impact\'s turn 1 has begun.\n'
+    + 'Valda Seismic Impact played Crash and Bash\n'
+    + 'Valda Seismic Impact conceded the game.\n'
+    + 'Oscilio Constella Intelligence (Ehecalt) won! 🎉\n'
+    + '\n=== META ===\nme: Oscilio Constella Intelligence\nopponent: Valda Seismic Impact\n'
+    + 'my_hero: Oscilio, Constella Intelligence (oscilio_constella_intelligence)\n'
+    + 'opp_hero: Valda Seismic Impact (valda_seismic_impact)\n';
+  const rec = Parser.parse(raw);
+  assert(rec.health.ok === true, 'faux joueur "was" : partie saine → PAS exclue du dashboard');
+  eq(rec.myName, 'Oscilio Constella Intelligence', 'faux joueur "was" : myName = héros local (pas « Imposing Visage was »)');
+  assert(rec.myName !== 'Imposing Visage was' && rec.oppName !== 'Imposing Visage was', 'faux joueur "was" : le fantôme n\'est jamais un joueur');
+  assert(rec.result && rec.result.iWon === true, 'faux joueur "was" : victoire correctement attribuée au joueur local');
+})();
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);
