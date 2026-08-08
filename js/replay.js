@@ -1336,11 +1336,15 @@
   // injecteur de contexte pour la tester en isolation, sans démarrer le rendu DOM.
   // Ignoré dans le navigateur (`module` indéfini).
   if (typeof module === 'object' && module.exports) {
-    root.reconcileCertain = reconcileCertain;
-    root._setTestContext = (parser, name, equip) => {
-      root.TalisharParser = parser;
-      myName = name;
-      myEquipNamesNorm = new Set((equip || []).map(parser.normName));
+    module.exports = {
+      Replay: root.Replay,
+      reconcileCertain,
+      _setTestContext: (parser, name, equip) => {
+        if (parser) root.TalisharParser = parser;
+        myName = name;
+        const nm = (parser || root.TalisharParser).normName;
+        myEquipNamesNorm = new Set((equip || []).map(nm));
+      }
     };
   }
 })(typeof self !== 'undefined' ? self : this);
