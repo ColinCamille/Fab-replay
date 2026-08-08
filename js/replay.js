@@ -529,26 +529,41 @@
       if (seen.has(nc) || myEquipNamesNorm.has(nc)) return;
       seen.add(nc); result.push(c);
     };
+    // Sur TON PROPRE tour (hors ouverture), l'instantané fiable `t.hand` (capté
+    // par le grabber sur l'en-tête de tour, AVANT que tu agisses) EST déjà ta main
+    // de début de tour. On ne la regonfle donc PAS avec les cartes que tu joues /
+    // pitches ENSUITE : certaines viennent d'une pioche EN COURS de tour (Oscilio,
+    // Prism…), pas de la main de départ → les ajouter gonfle le compte à tort
+    // (ex. Constella Contemplation piochée puis jouée → 4 affichés au lieu de 3).
+    // On garde en revanche la reconstruction quand elle reste fiable :
+    //  - OUVERTURE (turnNumber 0) : si tu commences, l'instantané peut être pris
+    //    APRÈS ton 1er play (ta 1re action = 1re ligne de log) → il manque des cartes.
+    //  - vieux logs SANS instantané (t.hand absent) : on reconstruit depuis le récit.
+    //  - tour ADVERSE : ta main ne fait que DÉCROÎTRE (blocs/réactions, jamais de
+    //    pioche) → rajouter une carte bloquée/jouée reconstruit fidèlement ta main.
+    const trustSnapshot = t.turnNumber !== 0 && Array.isArray(list)
+      && (t.side === 'me' || t.player === myName);
     let lastKnownPlayer = t.player;
     t.events.forEach(e => {
       if (e.player) lastKnownPlayer = e.player;
       if (kind === 'hand') {
         const owner = e.player || (e.type === 'discarded' ? lastKnownPlayer : null);
         if (owner !== myName) return;
-        if (e.type === 'played' && !e.fromArsenal) tryAdd(e.card);
-        if (e.type === 'pitched') tryAdd(e.card);
+        if (e.type === 'played' && !e.fromArsenal && !trustSnapshot) tryAdd(e.card);
+        if (e.type === 'pitched' && !trustSnapshot) tryAdd(e.card);
         // Blocages : ils prouvent qu'une carte était en main AU DÉBUT du tour —
         // sauf au tour d'ouverture. Quand tu es 2e joueur, l'« ouverture »
         // englobe le tour de l'adversaire pendant lequel tu ne fais que bloquer,
         // et l'instantané de main est pris à un autre moment que ces blocages :
         // les empiler gonfle la main (5 cartes au lieu de 4). On ignore donc les
-        // blocages pour le seul tour d'ouverture.
+        // blocages pour le seul tour d'ouverture. (Un blocage n'arrive jamais sur
+        // ton propre tour, donc `trustSnapshot` ne les concerne pas.)
         if (e.type === 'blocked' && e.cards && t.turnNumber !== 0) e.cards.forEach(tryAdd);
         // Une carte défaussée (coût, effet adverse forcé, etc.) vient de la
         // main dans l'immense majorité des cas du jeu — seule une carte jouée
         // depuis l'arsenal peut être détruite sans passer par la main, et ce
         // cas est déjà tracé séparément via l'événement 'played'.
-        if (e.type === 'discarded') tryAdd(e.card);
+        if (e.type === 'discarded' && !trustSnapshot) tryAdd(e.card);
       } else if (kind === 'arsenal') {
         if (e.player !== myName) return;
         if (e.type === 'played' && e.fromArsenal) tryAdd(e.card);
@@ -1315,4 +1330,17 @@
   }
 
   root.Replay = { show, reset, getGame: () => GAME };
+
+  // Export Node (tests) : `reconcileCertain` est une fonction pure mais dépend de
+  // deux variables de module (pseudo local + équipement porté). On l'expose avec un
+  // injecteur de contexte pour la tester en isolation, sans démarrer le rendu DOM.
+  // Ignoré dans le navigateur (`module` indéfini).
+  if (typeof module === 'object' && module.exports) {
+    root.reconcileCertain = reconcileCertain;
+    root._setTestContext = (parser, name, equip) => {
+      root.TalisharParser = parser;
+      myName = name;
+      myEquipNamesNorm = new Set((equip || []).map(parser.normName));
+    };
+  }
 })(typeof self !== 'undefined' ? self : this);

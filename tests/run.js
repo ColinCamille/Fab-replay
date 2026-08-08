@@ -644,6 +644,35 @@ const t1Ban = bannerTl.steps.find(s => s.stage.type === 'banner' && /Ton tour/.t
 eq(t1Ban && t1Ban.state.meHandCards.length, 3, 'game 1906591 : bannière tour 1 à 3 cartes (non tronquée à 2)');
 assert(t1Ban && t1Ban.state.meHandCards.some(c => /constella uplift/i.test(c)), 'game 1906591 : Constella Uplift présente en main au début du tour 1');
 
+// ── Vue DÉROULÉ : reconcileCertain ne gonfle plus la main de début de MON tour ──
+// (game 1906591 : Oscilio pioche en cours de tour → une carte piochée puis jouée
+// ne doit PAS compter dans la main de DÉBUT de tour). L'instantané fiable fait foi.
+const Replay = require('../js/replay.js');
+Replay._setTestContext(Parser, 'Oscilio', []);
+const rcMine = Replay.reconcileCertain(
+  ['Constella Uplift', 'Aether Flare', 'Kindle'],
+  { player: 'Oscilio', side: 'me', turnNumber: 1, events: [
+    { type: 'played', player: 'Oscilio', card: 'Aether Flare' },
+    { type: 'pitched', player: 'Oscilio', card: 'Constella Uplift' },
+    { type: 'played', player: 'Oscilio', card: 'Constella Contemplation' }   // PIOCHÉE en cours de tour
+  ] }, 'hand');
+eq(rcMine.length, 3, 'Déroulé : mon tour = instantané fiable (3), pas gonflé par une carte piochée+jouée');
+assert(!rcMine.some(c => /contemplation/i.test(c)), 'Déroulé : la carte piochée en cours de tour est exclue de la main de début');
+// Ouverture : reconstruction TOUJOURS active (l'instantané peut être capté tard).
+const rcOpen = Replay.reconcileCertain(
+  ['Aether Flare'],
+  { player: 'Oscilio', side: 'me', turnNumber: 0, events: [
+    { type: 'played', player: 'Oscilio', card: 'Comet Storm' }
+  ] }, 'hand');
+assert(rcOpen.some(c => /comet storm/i.test(c)), 'Déroulé : à l\'ouverture, la carte jouée est réintégrée à la main de départ');
+// Tour ADVERSE : reconstruction conservée (ma main ne fait que décroître, jamais pioche).
+const rcOpp = Replay.reconcileCertain(
+  ['Aether Flare'],
+  { player: 'Jarl', side: 'opp', turnNumber: 2, events: [
+    { type: 'blocked', player: 'Oscilio', cards: ['Crown of Providence'] }
+  ] }, 'hand');
+assert(rcOpp.some(c => /crown/i.test(c)), 'Déroulé : sur le tour adverse, une carte de blocage est réintégrée à la main');
+
 // Ordre : une réaction de DÉFENSE jouée pendant l'attaque adverse (arme) ne doit
 // PAS apparaître en étape AVANT l'attaque — elle figure côté défense de l'échange.
 const defTl = BR.buildTimeline({
