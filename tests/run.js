@@ -312,7 +312,17 @@ eq(ccAgg.facets.formats.length, 2, 'facette formats complète malgré le filtre 
 
 // ---------- Board replay : équipement détruit retiré du plateau ----------
 console.log('Board replay —');
+// Fidélité navigateur : boardreplay lit `root.TalisharParser.normName` (fusion des
+// « // », tirets, apostrophes…). En Node il capte `root = self` AU CHARGEMENT — on
+// câble donc `self.TalisharParser` LE TEMPS du require, sinon la normalisation
+// retombe sur un simple lowercase et masque les régressions liées aux noms (ex.
+// carte double-face « Comet Storm // Shock » vs instantané « Comet Storm  Shock »).
+// On restaure aussitôt `self` : les autres modules (db, sync, replay…) exportent
+// via `root === module.exports` et cassent si `self` reste défini pendant leur require.
+const _prevSelf = global.self;
+global.self = { TalisharParser: Parser, CardImages: {} };
 const BR = require('../js/boardreplay.js');
+if (_prevSelf === undefined) delete global.self; else global.self = _prevSelf;
 const eqGame = {
   myName: 'Me', oppName: 'Opp',
   players: {
@@ -616,18 +626,22 @@ const bannerTl = BR.buildTimeline({
   players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Jarl', equipment: {} } },
   lifeSeries: { me: [40, 40, 40], opp: [40, 40, 40] },
   handTimeline: [
-    { pos: 258, cards: ['Comet Storm', 'Echoflash', 'Aether Flare', 'Comet Storm'] }, // ouverture captée TARD
-    { pos: 1, cards: ['Echoflash', 'Aether Flare', 'Comet Storm'] },                  // post-play précoce (3)
-    { pos: 4, cards: ['Aether Flare', 'Comet Storm'] },                               // (2)
+    // NB : instantané = « Comet Storm  Shock » (double espace, forme grabber) alors
+    // que les events log = « Comet Storm // Shock » (slashs). normName doit fusionner
+    // les deux, sinon la ré-intégration à l'ouverture duplique la carte (6 au lieu de 4).
+    { pos: 258, cards: ['Comet Storm  Shock', 'Echoflash', 'Aether Flare', 'Comet Storm  Shock'] }, // ouverture captée TARD
+    { pos: 1, cards: ['Echoflash', 'Aether Flare', 'Comet Storm  Shock'] },           // post-play précoce (3)
+    { pos: 4, cards: ['Aether Flare', 'Comet Storm  Shock'] },                        // (2)
     { pos: 33, cards: ['Constella Uplift', 'Aether Flare', 'Kindle'] },               // vrai début tour 1 (3)
     { pos: 48, cards: ['Constella Uplift', 'Kindle'] },                               // plays tour 1 (2) — pos < _idx en-tête
     { pos: 50, cards: ['Kindle'] }                                                    // (1)
   ],
   turns: [
     { player: null, label: 'Ouverture', turnNumber: 0,
-      hand: ['Comet Storm', 'Echoflash', 'Aether Flare', 'Comet Storm'], arsenal: [],
+      hand: ['Comet Storm  Shock', 'Echoflash', 'Aether Flare', 'Comet Storm  Shock'], arsenal: [],
       events: [
-        { type: 'played', player: 'Oscilio', card: 'Comet Storm', _idx: 2 },
+        { type: 'played', player: 'Oscilio', card: 'Comet Storm // Shock', _idx: 2 },
+        { type: 'pitched', player: 'Oscilio', card: 'Comet Storm // Shock', _idx: 3 },
         { type: 'pitched', player: 'Oscilio', card: 'Echoflash', _idx: 4 }
       ] },
     { player: 'Oscilio', label: 'Oscilio — Tour 1', turnNumber: 1,
