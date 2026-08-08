@@ -966,6 +966,92 @@ console.log('Undo —');
   const bur = Parser.parse(blockUndoRaw);
   const bt1 = bur.turns.find(t => t.turnNumber === 1);
   assert(!(bt1.events || []).some(e => e.type === 'blocked'), 'undo: blocage annulé retiré (plus de carte de défense fantôme)');
+
+  // Annulation CONSENTIE (2 lignes : « requests to undo » + « allowed undoing »).
+  // Talishar y révèle le JEU complet → on retire le played + son pitch de paiement,
+  // pas seulement la dernière action. Sinon la carte annulée puis rejouée (Deathly
+  // Wail) reste en double et apparaît en faux « renfort » (game 1925934, Vynnset T2).
+  eq(Parser.classifyLine('Vynnset requests to undo the last action').type, 'undo', 'undo consenti: « requests to undo » → undo');
+  eq(Parser.classifyLine('Vynnset requests to undo the last action').full, true, 'undo consenti: drapeau full');
+  eq(Parser.classifyLine('Oscilio allowed undoing the last action').type, 'info', 'undo consenti: « allowed undoing » → info (no-op)');
+  const consentRaw = '=== Talishar game 79 — test ===\n\n' +
+    "Vynnset's turn 1 has begun.\n" +
+    'Vynnset played Deathly Wail\n' +
+    '🎯Oscilio was chosen as the target.\n' +
+    'Vynnset pitched Fasting Carcass\n' +
+    'Vynnset requests to undo the last action\n' +
+    'Oscilio allowed undoing the last action\n' +
+    'Vynnset played Deathly Wail\n' +               // rejeu après annulation
+    'Vynnset pitched Fasting Carcass\n' +
+    '\n=== META ===\nme: Oscilio\nopp: Vynnset\n';
+  const cr = Parser.parse(consentRaw);
+  const ct1 = cr.turns.find(t => t.turnNumber === 1);
+  eq((ct1.events || []).filter(e => e.type === 'played' && e.card === 'Deathly Wail').length, 1, 'undo consenti: un seul Deathly Wail restant (le rejoué)');
+  eq((ct1.events || []).filter(e => e.type === 'pitched').length, 1, 'undo consenti: un seul pitch restant (paiement du jeu annulé retiré)');
+})();
+
+// ---------- Bannissement : « <Carte> was banished. » → étape + jetons Runechant ----------
+console.log('Banish / Runechant —');
+(function () {
+  eq(Parser.classifyLine('Deathly Wail was banished.').type, 'banished', 'banish: « was banished » classifié');
+  eq(Parser.classifyLine('Deathly Wail was banished.').card, 'Deathly Wail', 'banish: nom de carte extrait');
+  // « was played with a cost of N » ne doit PAS être capté comme banish/played.
+  eq(Parser.classifyLine('Scour was played with a cost of 3.').type, 'info', 'banish: garde-fou « was played with a cost » intact');
+  // Étape banish de début de tour adverse (Vynnset bannit une carte → moteur de
+  // Runechant). Le Runechant qui inflige des dégâts CE tour doit figurer dans les
+  // jetons adverses dès le début du tour (plancher prouvé, corrige le décalage).
+  const banRec = {
+    myName: 'Me', oppName: 'Vynnset',
+    players: { me: { hero: 'Me', equipment: {} }, opp: { hero: 'Vynnset', equipment: {} } },
+    lifeSeries: { me: [40, 40], opp: [40, 40] },
+    turns: [
+      { player: 'Vynnset', label: 'Vynnset — Tour 1', hand: [], arsenal: [], field: { me: [], opp: [] }, events: [
+        { type: 'cardChosen', card: 'Deathly Wail', _idx: 1 },
+        { type: 'banished', card: 'Deathly Wail', _idx: 2 },
+        { type: 'played', player: 'Vynnset', card: 'Deathly Wail', _idx: 3 },
+        { type: 'arcaneDamage', dealer: 'Vynnset', source: 'Runechant', amount: 1, actual: true, _idx: 4 },
+        { type: 'damageTaken', player: 'Me', amount: 1, _idx: 5 },
+        { type: 'combatResult', hit: true, amount: 6, _idx: 6 }
+      ] }
+    ]
+  };
+  const banSteps = BR.buildTimeline(banRec).steps;
+  const banStep = banSteps.find(s => s.stage.banish);
+  assert(banStep && /bannit Deathly Wail/.test(banStep.stage.text), 'banish: étape « bannit X » présente au début du tour adverse');
+  assert(banSteps.some(s => (s.state.oppTokens || []).some(c => /runechant/i.test(c))), 'runechant: jeton présent côté adverse dès qu\'il frappe ce tour');
+})();
+
+// ---------- Assainissement main : artefacts DOM (HexagonRedGemGlow) écartés ----------
+console.log('Assainissement main —');
+(function () {
+  const junkRaw = [
+    '=== Talishar game 80 — test ===', '',
+    "Me's turn 1 has begun.",
+    'Me played Burn Bare',
+    "Opp's turn 2 has begun.",
+    'Opp played Sting',
+    '', '=== META ===', 'me: Me', 'opp: Opp',
+    'my_equipment: arms=Metacarpus Node (metacarpus_node)',
+    '', '=== HAND SNAPSHOTS (ta main, captée depuis le DOM — jamais celle de l\'adversaire) ===',
+    '[Me #1] Burn Bare, Scour',
+    '[Opp #2] Metacarpus Node, HexagonRedGemGlow-HR6qHYfn',   // capture parasite (équipement + halo)
+    '', '=== HAND TIMELINE (main, à chaque changement | pos = ligne de log) ===',
+    '[3] Burn Bare, Scour',
+    '[5] Metacarpus Node, HexagonRedGemGlow-HR6qHYfn',
+    '[6] Scour'
+  ].join('\n');
+  const jr = Parser.parse(junkRaw);
+  const junkInSnap = Object.values(jr.snapshots.hand).some(v => (v || []).some(c => /gemglow/i.test(c)));
+  assert(!junkInSnap, 'assainissement: artefact HexagonRedGemGlow retiré des instantanés de main');
+  assert(!jr.handTimeline.some(h => (h.cards || []).some(c => /gemglow/i.test(c))), 'assainissement: artefact retiré de la HAND TIMELINE');
+  // L'instantané parasite (parasite SEUL) devient null → repli, pas une main d'équipement.
+  eq(jr.snapshots.hand['Opp#2'], null, 'assainissement: instantané vidé par le filtrage → null (repli)');
+  const jrSteps = BR.buildTimeline(jr).steps;
+  assert(!jrSteps.some(s => (s.state.meHandCards || []).some(c => /gemglow/i.test(c))), 'assainissement: aucune étape n\'affiche l\'artefact en main');
+  // Main de début de tour visible : Burn Bare est en main sur la bannière AVANT
+  // d'être jouée (constat 3 — carte jamais vue en main).
+  const meBanner = jrSteps.find(s => s.stage.type === 'banner' && /Ton tour|Début/.test(s.stage.big) && (s.state.meHandCards || []).indexOf('Burn Bare') >= 0);
+  assert(meBanner && meBanner.state.meHandCards.indexOf('Scour') >= 0, 'main visible: Burn Bare ET Scour présents sur la bannière de début de tour');
 })();
 
 // ---------- Formes de héros par tour (Arakni se transforme) ----------
