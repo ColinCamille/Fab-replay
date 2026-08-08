@@ -614,6 +614,15 @@
         return cards;
       };
       steps.forEach(s => {
+        // Bannière de DÉBUT de tour : elle porte déjà la main FIABLE (instantané
+        // `t.hand` capté sur l'en-tête de tour, ou `hand0` reconstruit à l'ouverture).
+        // La HAND TIMELINE, elle, corrèle par `pos` (compteur du grabber) et non par
+        // `_idx` (ligne du parseur) : ces deux compteurs dérivent, si bien qu'un
+        // instantané post-action peut se retrouver « avant » l'en-tête de tour et
+        // tronquer la main de départ (ex. game 1906591 : tour 0 à 3 cartes au lieu de
+        // 4, tour 1 à 2 au lieu de 3). On NE surcharge donc PAS les bannières — la
+        // timeline ne sert qu'à révéler les changements PENDANT le tour.
+        if (s.stage && s.stage.type === 'banner') return;
         const idx = s._idx == null ? 0 : s._idx;
         // Étape ANTÉRIEURE au 1er instantané de la timeline : on garde la main déjà
         // reconstruite (snapshot d'ouverture). Sinon on la rétrograderait vers HT[0],
