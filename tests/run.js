@@ -606,6 +606,44 @@ assert(openBanner.state.meHandCards.some(c => /persuasive prognosis/i.test(c)), 
 const lastOpen = openLateTl.steps[openLateTl.steps.length - 1];
 assert(lastOpen && !lastOpen.state.meHandCards.some(c => /persuasive prognosis/i.test(c)), 'ouverture (timeline tardive) : la main suit la timeline après le 1er instantané (carte pitchée retirée)');
 
+// Bannière de DÉBUT de tour : compte de main FIABLE, jamais tronqué par la HAND
+// TIMELINE (reproduction game 1906591). L'instantané d'ouverture (4 cartes) est
+// tagué à un `pos` élevé (capture tardive) et se retrouve après des instantanés
+// post-pitch précoces ; le tour 1 a des instantanés dont le `pos` précède le
+// `_idx` de l'en-tête. Les bannières doivent garder les snapshots fiables (4 puis 3).
+const bannerTl = BR.buildTimeline({
+  myName: 'Oscilio', oppName: 'Jarl',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Jarl', equipment: {} } },
+  lifeSeries: { me: [40, 40, 40], opp: [40, 40, 40] },
+  handTimeline: [
+    { pos: 258, cards: ['Comet Storm', 'Echoflash', 'Aether Flare', 'Comet Storm'] }, // ouverture captée TARD
+    { pos: 1, cards: ['Echoflash', 'Aether Flare', 'Comet Storm'] },                  // post-play précoce (3)
+    { pos: 4, cards: ['Aether Flare', 'Comet Storm'] },                               // (2)
+    { pos: 33, cards: ['Constella Uplift', 'Aether Flare', 'Kindle'] },               // vrai début tour 1 (3)
+    { pos: 48, cards: ['Constella Uplift', 'Kindle'] },                               // plays tour 1 (2) — pos < _idx en-tête
+    { pos: 50, cards: ['Kindle'] }                                                    // (1)
+  ],
+  turns: [
+    { player: null, label: 'Ouverture', turnNumber: 0,
+      hand: ['Comet Storm', 'Echoflash', 'Aether Flare', 'Comet Storm'], arsenal: [],
+      events: [
+        { type: 'played', player: 'Oscilio', card: 'Comet Storm', _idx: 2 },
+        { type: 'pitched', player: 'Oscilio', card: 'Echoflash', _idx: 4 }
+      ] },
+    { player: 'Oscilio', label: 'Oscilio — Tour 1', turnNumber: 1,
+      hand: ['Constella Uplift', 'Aether Flare', 'Kindle'], arsenal: [],
+      events: [
+        { type: 'played', player: 'Oscilio', card: 'Aether Flare', _idx: 50 },
+        { type: 'pitched', player: 'Oscilio', card: 'Constella Uplift', _idx: 52 }
+      ] }
+  ]
+});
+const openBan = bannerTl.steps.find(s => s.stage.type === 'banner' && /Début de la partie/.test(s.stage.big || ''));
+eq(openBan && openBan.state.meHandCards.length, 4, 'game 1906591 : bannière d\'ouverture à 4 cartes (non tronquée)');
+const t1Ban = bannerTl.steps.find(s => s.stage.type === 'banner' && /Ton tour/.test(s.stage.big || ''));
+eq(t1Ban && t1Ban.state.meHandCards.length, 3, 'game 1906591 : bannière tour 1 à 3 cartes (non tronquée à 2)');
+assert(t1Ban && t1Ban.state.meHandCards.some(c => /constella uplift/i.test(c)), 'game 1906591 : Constella Uplift présente en main au début du tour 1');
+
 // Ordre : une réaction de DÉFENSE jouée pendant l'attaque adverse (arme) ne doit
 // PAS apparaître en étape AVANT l'attaque — elle figure côté défense de l'échange.
 const defTl = BR.buildTimeline({
