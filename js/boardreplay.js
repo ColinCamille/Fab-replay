@@ -178,6 +178,17 @@
       // ne sont créées qu'en jouant → trompeur. Sans capture : aucun token.
       if (t.field) { st.meTokens = (t.field.me || []).slice(); st.oppTokens = (t.field.opp || []).slice(); }
       else { st.meTokens = []; st.oppTokens = []; }
+      // Jetons Runechant fiables : la capture FIELD est prise par tour et affiche
+      // souvent le Runechant avec un tour de retard. Preuve directe qu'un Runechant
+      // agit CE tour-ci : un « … is dealing N arcane damage from Runechant ». On
+      // garantit alors au moins un jeton Runechant côté lanceur, dès le début du
+      // tour, sans jamais retirer ce que le snapshot montre déjà (plancher prouvé).
+      (t.events || []).forEach(e => {
+        if (e.type !== 'arcaneDamage' || !e.actual || !/^runechant$/i.test(String(e.source || '').trim())) return;
+        const sd = e.dealer ? sideOf(e.dealer) : 'opp';
+        const arr = sd === 'me' ? st.meTokens : st.oppTokens;
+        if (!arr.some(c => /^runechant$/i.test(String(c || '').trim()))) arr.push('Runechant');
+      });
       // Cimetière/banni réels (2 camps) si captés : on cale l'état exact en début
       // de tour ; le cimetière continue de grandir via le log pendant le tour.
       // Sinon (vieux logs), on garde la reconstruction cumulée depuis le récit.
@@ -491,6 +502,16 @@
           }
         } else if (e.type === 'pitched') {
           const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
+        } else if (e.type === 'banished') {
+          // Bannissement (« <Carte> was banished. ») : Vynnset bannit une carte en
+          // début de tour (moteur de Runechant), ou un effet bannit une carte. La
+          // ligne ne nomme pas le joueur → camp = MOI si la carte est dans ma main
+          // affichée, sinon le joueur actif du tour. Étape dédiée + zone Banni.
+          const s = (st.meFaceUp && st.meHandCards.some(c => norm(c) === norm(e.card))) ? 'me' : atkSide;
+          if (s === 'me') removeCard('me', e.card);
+          const bz = s === 'me' ? st.meBanish : st.oppBanish;
+          if (bz.indexOf(e.card) < 0) bz.push(e.card);
+          push(label, s, { type: 'play', side: s, card: { nm: e.card }, banish: true, text: HERO[s] + ' bannit ' + e.card });
         } else if (e.type === 'transform') {
           // Transformation de héros (ex. Arakni) AU MOMENT EXACT où elle survient
           // dans le log (« <forme> becomes <nouvelle forme> »), pas seulement au
@@ -622,8 +643,19 @@
         // tronquer la main de départ (ex. game 1906591 : tour 0 à 3 cartes au lieu de
         // 4, tour 1 à 2 au lieu de 3). On NE surcharge donc PAS les bannières — la
         // timeline ne sert qu'à révéler les changements PENDANT le tour.
-        if (s.stage && s.stage.type === 'banner') return;
         const idx = s._idx == null ? 0 : s._idx;
+        if (s.stage && s.stage.type === 'banner') {
+          // On NE surcharge PAS une bannière qui porte déjà une main fiable
+          // (instantané `t.hand`). Exception : si cette main est VIDE (instantané
+          // parasite écarté à l'assainissement, ex. Oscilio T5/T8), on la seede en
+          // repli sur la timeline propre à la position de début de tour — mieux
+          // qu'une main vide.
+          if ((s.state.meHandCards || []).length === 0 && idx + 1 >= firstPos) {
+            const cards = handAt(idx);
+            if (cards && cards.length) { s.state.meFaceUp = true; s.state.meHandCards = cards.slice(); }
+          }
+          return;
+        }
         // Étape ANTÉRIEURE au 1er instantané de la timeline : on garde la main déjà
         // reconstruite (snapshot d'ouverture). Sinon on la rétrograderait vers HT[0],
         // qui peut être une capture POST-action — carte déjà pitchée/jouée d'entrée
@@ -768,7 +800,7 @@
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'transform') return '<div class="br-banner br-transform br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
-      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + '</div>';
+      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.banish ? '<span class="br-react">🗑 banni</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + '</div>';
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
         // Renforts (pumps/réactions d'attaque, ex. Lightning Press) : petites

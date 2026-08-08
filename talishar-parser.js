@@ -54,6 +54,11 @@
     if ((m = line.match(/^(.+?) activated (.+)$/))) return { type: 'activated', player: m[1], card: m[2], text: line };
     if ((m = line.match(/^(.+?) blocked with (.+)$/))) { const cards = m[2].replace(/,? and /g, ', ').split(',').map(s => s.trim()).filter(Boolean); return { type: 'blocked', player: m[1], cards, text: line }; }
     if ((m = line.match(/^(.+?) was discarded$/))) return { type: 'discarded', card: m[1], text: line };
+    // Bannissement (« <Carte> was banished. ») : Vynnset bannit une carte en début
+    // de tour (moteur de Runechant), ou un effet (Cull…) bannit une carte. La ligne
+    // ne nomme pas le joueur → la vue Table attribue le camp au joueur actif (ou à
+    // MOI si la carte est dans ma main affichée). Sert à matérialiser l'étape banish.
+    if ((m = line.match(/^(.+?) was banished\.?$/))) return { type: 'banished', card: m[1].trim(), text: line };
     // Destruction (ex. armure/Nullrune détruite pour prévenir des dégâts arcaniques,
     // ou carte détruite depuis l'arsenal). `detail` garde le suffixe éventuel
     // (« and prevented 1 arcane damage », « from the arsenal »…). La vue Table
@@ -78,6 +83,14 @@
     if ((m = line.match(/^(.+?) passed priority\. Attempting to end turn\.$/))) return { type: 'endTurn', player: m[1], text: line };
     if ((m = line.match(/^(.+?) passed$/))) return { type: 'passed', player: m[1], text: line };
     if ((m = line.match(/^(.+?) undid their last action$/))) return { type: 'undo', player: m[1], text: line };
+    // Annulation CONSENTIE (nécessite l'accord adverse) loggée en 2 lignes :
+    //   « X requests to undo the last action » puis « Y allowed undoing the last action ».
+    // Talishar y révèle le JEU complet (carte + paiement) → `full:true` demande à la
+    // passe d'annulation de retirer le dernier played/activated + ses pitches, pas
+    // seulement la dernière action (LIFO). Sans ça, une carte annulée puis rejouée
+    // (ex. Deathly Wail) reste en double et apparaît en faux « renfort ».
+    if ((m = line.match(/^(.+?) requests to undo the last action$/))) return { type: 'undo', player: m[1], full: true, text: line };
+    if (/ allowed undoing the last action$/.test(line)) return { type: 'info', text: line };
     if ((m = line.match(/^(.+?) did not sink a card$/))) return { type: 'info', text: line };
     if ((m = line.match(/^(.+?) was put on the bottom of the deck!$/))) return { type: 'deckManipulation', card: m[1], text: line };
     if (/^⤵️ A card was put on the bottom of the deck\.$/.test(line)) return { type: 'deckManipulation', text: line };
@@ -660,15 +673,34 @@
     // Un ancien nettoyage retirait les cartes « prouvées adverses », mais en
     // miroir (même héros des deux côtés) l'adversaire joue des cartes du même
     // nom que les tiennes, ce qui supprimait à tort tes propres cartes.
+    // On retire AUSSI les jetons-artefacts du DOM Talishar : par moments le grabber
+    // capte l'emplacement d'ÉQUIPEMENT à la place de la main (ex. « HexagonRedGemGlow-…
+    // », le halo de gemme hexagonal superposé aux pièces). Ces captures parasites
+    // (équipement + artefact) polluaient la main de certains tours et la HAND
+    // TIMELINE. Signature stable : nom normalisé contenant « gemglow ».
     const myEquipNames = new Set(
       Object.values(meta.myEquipment || {}).map(e => e && e.name).filter(Boolean).map(normName)
     );
-    if (myEquipNames.size) {
-      [handSnapshots, arsenalSnapshots].forEach(snaps => {
-        Object.keys(snaps).forEach(k => {
-          snaps[k] = (snaps[k] || []).filter(c => !myEquipNames.has(normName(c)));
-        });
+    const isJunkCard = c => { const n = normName(c); return myEquipNames.has(n) || /gemglow/.test(n); };
+    // Instantanés main/arsenal : on filtre le parasite ; un instantané VIDÉ par ce
+    // filtrage (il ne contenait QUE du parasite) → null, pour que buildTimeline
+    // retombe sur la reconstruction/timeline au lieu d'afficher une main vide.
+    [handSnapshots, arsenalSnapshots].forEach(snaps => {
+      Object.keys(snaps).forEach(k => {
+        const before = snaps[k] || [];
+        const after = before.filter(c => !isJunkCard(c));
+        snaps[k] = (before.length > 0 && after.length === 0) ? null : after;
       });
+    });
+    // HAND TIMELINE (fidélité par position, vue Table) : jamais assainie jusqu'ici.
+    // On filtre le parasite ET on SUPPRIME les entrées vidées (elles écrasaient la
+    // main en cours de tour avec de l'équipement) pour que handAt() garde la
+    // dernière main valide.
+    for (let i = handTimeline.length - 1; i >= 0; i--) {
+      const before = handTimeline[i].cards || [];
+      const after = before.filter(c => !isJunkCard(c));
+      if (before.length > 0 && after.length === 0) handTimeline.splice(i, 1);
+      else handTimeline[i].cards = after;
     }
 
     // 6) Enrichir chaque tour : snapshots (par nom+numéro du tour) + timing
@@ -724,6 +756,24 @@
       const isAction = p => p.type === 'played' || p.type === 'activated' || p.type === 'pitched' || p.type === 'blocked';
       ev.forEach((e, u) => {
         if (e.type !== 'undo') return;
+        if (e.full) {
+          // Annulation consentie : revert du JEU complet. On remonte au dernier
+          // played/activated du même joueur et on retire ce jeu + ses pitches de
+          // paiement (mêmes joueur, entre ce jeu et l'undo). Le simple LIFO ne
+          // retirerait que le pitch, laissant la carte annulée en double.
+          for (let i = u - 1; i >= 0; i--) {
+            if (remove.has(i)) continue;
+            const p = ev[i];
+            if ((p.type === 'played' || p.type === 'activated') && (!e.player || p.player === e.player)) {
+              remove.add(i);
+              for (let j = i + 1; j < u; j++) {
+                if (!remove.has(j) && ev[j].type === 'pitched' && ev[j].player === e.player) remove.add(j);
+              }
+              break;
+            }
+          }
+          return;
+        }
         for (let i = u - 1; i >= 0; i--) {
           if (remove.has(i)) continue;
           const p = ev[i];
