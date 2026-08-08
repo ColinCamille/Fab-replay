@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.19.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. Export texte / téléchargement + localStorage.
+// @version      1.20.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.19.0';
+  const VERSION = '1.20.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -524,20 +524,40 @@
     });
     return names;
   }
+  // Comme extractZoneCardsDOM mais renvoie « Nom (card_id) » : le card_id (slug du
+  // fichier, ex. « meteoric_impact_blue ») porte l'impression → coloration en main.
+  function extractZoneCardsWithIdDOM(selector) {
+    const imgs = Array.from(document.querySelectorAll(selector));
+    const out = [];
+    imgs.forEach(im => {
+      const src = im.getAttribute('src') || '';
+      const file = src.split('/').pop().split('?')[0];
+      if (!file || /cardback/i.test(file)) return;
+      const id = file.replace(/\.(webp|png|jpe?g)(\?.*)?$/i, '');
+      out.push(slugToName(file) + ' (' + id + ')');
+    });
+    return out;
+  }
 
   function extractMyHandCards() {
     const g = getGameState();
     if (g && g.playerOne && Array.isArray(g.playerOne.Hand)) {
-      const names = cardListNames(g.playerOne.Hand);
-      if (names.length) return names;
+      // « Nom (card_id) » par carte : le card_id porte l'IMPRESSION (…_red/_yellow/
+      // _blue) → la vue Table colore la carte EN MAIN (ex. Meteoric Impact bleu vs
+      // rouge). Rétro-compatible : le parseur retire « (card_id) » et retombe sur le
+      // nom quand l'id est absent (vieux logs / repli DOM).
+      const labels = [];
+      g.playerOne.Hand.forEach(c => { const n = cardLabelWithId(c); if (n) labels.push(n); });
+      if (labels.length) return labels;
     }
-    // Fallback DOM (cascade v1.7)
+    // Fallback DOM (cascade v1.7) : filename → « Nom (card_id) » (l'impression est
+    // dans le nom de fichier, ex. meteoric_impact_blue.webp).
     for (const sel of [
       '[class*="playerHand_" i] img, [class*="handRow" i] img',
       '[class*="handZone_" i][class*="isPlayer" i] img',
       '[class*="pOneHands_" i] img'
     ]) {
-      const cards = extractZoneCardsDOM(sel);
+      const cards = extractZoneCardsWithIdDOM(sel);
       if (cards.length) return cards;
     }
     return [];

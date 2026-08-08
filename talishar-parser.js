@@ -59,6 +59,11 @@
     // ne nomme pas le joueur → la vue Table attribue le camp au joueur actif (ou à
     // MOI si la carte est dans ma main affichée). Sert à matérialiser l'étape banish.
     if ((m = line.match(/^(.+?) was banished\.?$/))) return { type: 'banished', card: m[1].trim(), text: line };
+    // Intimidation (ex. Leave Them Hanging) : le camp ciblé bannit une carte FACE
+    // CACHÉE (nom masqué par la règle) qui REVIENT en fin de tour. Sans étape
+    // explicite, la carte « disparaît » de la main affichée sans raison (game
+    // 1923349 : Kindle au tour 1 de Lyath). On matérialise une étape explicative.
+    if ((m = line.match(/^(.+?) banishes a card face down$/))) return { type: 'intimidate', player: m[1].trim(), text: line };
     // Destruction (ex. armure/Nullrune détruite pour prévenir des dégâts arcaniques,
     // ou carte détruite depuis l'arsenal). `detail` garde le suffixe éventuel
     // (« and prevented 1 arcane damage », « from the arsenal »…). La vue Table
@@ -225,19 +230,37 @@
     return { me: map(payload.byPlayer[myId], myId), opp: otherId ? map(payload.byPlayer[otherId], otherId) : null };
   }
 
+  // Découpe une liste « a, b, c » où chaque carte peut porter son IMPRESSION sous
+  // la forme « Nom (card_id) » (grabber v1.20+, card_id = slug coloré, ex.
+  // « meteoric_impact_blue »). Renvoie les NOMS (rétro-compat : logique aval
+  // inchangée) ET un tableau parallèle de pitches (1/2/3 ou null). Vieux logs
+  // (nom seul) → pitch null. Le motif exige un slug minuscule_underscore, donc
+  // une vraie parenthèse de nom (« (…) » avec espaces/majuscules) n'est pas prise.
+  function splitCardListWithPitch(val) {
+    const names = [], pitches = [];
+    if (!val || val === '(vide)') return { names, pitches };
+    val.split(',').map(s => s.trim()).filter(Boolean).forEach(tok => {
+      const m = tok.match(/^(.*?)\s*\(([a-z0-9_]+)\)$/);
+      if (m) { names.push(m[1].trim()); pitches.push(pitchFromCardId(m[2])); }
+      else { names.push(tok); pitches.push(null); }
+    });
+    return { names, pitches };
+  }
+
   function parseCardSnapshotBlock(text, marker) {
-    const out = {};
+    const out = {}, pitchOut = {};
     const { rest, body } = sliceBlock(text, marker);
-    if (body == null) return { rest: text, snapshots: out };
+    if (body == null) return { rest: text, snapshots: out, pitches: pitchOut };
     const lineRe = /^\[(.+?)\]\s*(.*)$/gm;
     let hm;
     while ((hm = lineRe.exec(body))) {
       const key = labelToKey(hm[1].trim());
       if (!key) continue;
-      const val = hm[2].trim();
-      out[key] = (!val || val === '(vide)') ? [] : val.split(',').map(s => s.trim()).filter(Boolean);
+      const { names, pitches } = splitCardListWithPitch(hm[2].trim());
+      out[key] = names;
+      pitchOut[key] = pitches;
     }
-    return { rest, snapshots: out };
+    return { rest, snapshots: out, pitches: pitchOut };
   }
 
   // TIMELINE de MA main : un instantané À CHAQUE CHANGEMENT (dédupliqué par le
@@ -254,8 +277,8 @@
     while ((hm = lineRe.exec(body))) {
       const pos = parseInt(hm[1], 10);
       if (!isFinite(pos)) continue;
-      const val = hm[2].trim();
-      out.push({ pos, cards: (!val || val === '(vide)') ? [] : val.split(',').map(s => s.trim()).filter(Boolean) });
+      const { names, pitches } = splitCardListWithPitch(hm[2].trim());
+      out.push({ pos, cards: names, pitches });
     }
     out.sort((a, b) => a.pos - b.pos);
     return { rest, timeline: out };
@@ -479,6 +502,7 @@
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
     const handSnapshots = handRes.snapshots;
+    const handPitchSnapshots = handRes.pitches;   // impression (1/2/3|null) parallèle à handSnapshots
     const handTimeline = handTlRes.timeline;
     const arsenalSnapshots = arsRes.snapshots;
     const oppArsenalCounts = oppArsRes.snapshots;
@@ -554,8 +578,20 @@
         const player = th.player, turnNumber = th.turnNumber;
         const key = player + '#' + turnNumber;
         turnCounts[key] = (turnCounts[key] || 0) + 1;
-        const suffix = turnCounts[key] > 1 ? ` (reprise ${turnCounts[key]})` : '';
-        current = { player, turnNumber, label: `${player} — Tour ${turnNumber}${suffix}`, events: [], _lineIdx: [] };
+        // Un même en-tête « <joueur>'s turn N has begun » qui RÉAPPARAÎT = le tour a
+        // été REMBOBINÉ (undo remontant au début du tour ; Talishar re-logue tout le
+        // tour). Les événements déjà captés pour ce tour sont donc CADUQUES (ex.
+        // Oscilio T7, game 1923349 : un Short Shrift re-résolu faisait chuter les PV
+        // à 0 avant que la « reprise » ne les réaligne à 2). On RECYCLE le tour
+        // existant de même clé (on vide ses événements) au lieu d'en créer un 2e :
+        // un seul tour, ne contenant que les événements finaux, et des snapshots
+        // (keyés par player#turnNumber) qui restent cohérents.
+        if (turnCounts[key] > 1) {
+          let prior = null;
+          for (let k = turns.length - 1; k >= 0; k--) { if (turns[k].player === player && turns[k].turnNumber === turnNumber) { prior = turns[k]; break; } }
+          if (prior) { prior.events = []; prior._lineIdx = []; current = prior; return; }
+        }
+        current = { player, turnNumber, label: `${player} — Tour ${turnNumber}`, events: [], _lineIdx: [] };
         turns.push(current);
         return;
       }
@@ -688,8 +724,14 @@
     [handSnapshots, arsenalSnapshots].forEach(snaps => {
       Object.keys(snaps).forEach(k => {
         const before = snaps[k] || [];
-        const after = before.filter(c => !isJunkCard(c));
-        snaps[k] = (before.length > 0 && after.length === 0) ? null : after;
+        // Impressions parallèles (main uniquement) : filtrées AUX MÊMES index pour
+        // rester alignées sur les noms.
+        const pitchArr = (snaps === handSnapshots && Array.isArray(handPitchSnapshots[k])) ? handPitchSnapshots[k] : null;
+        const after = [], afterP = [];
+        before.forEach((c, ci) => { if (!isJunkCard(c)) { after.push(c); if (pitchArr) afterP.push(pitchArr[ci]); } });
+        const emptied = before.length > 0 && after.length === 0;
+        snaps[k] = emptied ? null : after;
+        if (pitchArr) handPitchSnapshots[k] = emptied ? null : afterP;
       });
     });
     // HAND TIMELINE (fidélité par position, vue Table) : jamais assainie jusqu'ici.
@@ -698,9 +740,11 @@
     // dernière main valide.
     for (let i = handTimeline.length - 1; i >= 0; i--) {
       const before = handTimeline[i].cards || [];
-      const after = before.filter(c => !isJunkCard(c));
+      const beforeP = handTimeline[i].pitches || [];
+      const after = [], afterP = [];
+      before.forEach((c, ci) => { if (!isJunkCard(c)) { after.push(c); afterP.push(beforeP[ci] != null ? beforeP[ci] : null); } });
       if (before.length > 0 && after.length === 0) handTimeline.splice(i, 1);
-      else handTimeline[i].cards = after;
+      else { handTimeline[i].cards = after; handTimeline[i].pitches = afterP; }
     }
 
     // 6) Enrichir chaque tour : snapshots (par nom+numéro du tour) + timing
@@ -712,6 +756,7 @@
       const key = snapKeyFor(t, i);
       t.snapshotKey = key;
       t.hand = (key in handSnapshots) ? handSnapshots[key] : null;
+      t.handPitches = (key in handPitchSnapshots) ? handPitchSnapshots[key] : null;   // impression parallèle à t.hand
       t.arsenal = (key in arsenalSnapshots) ? arsenalSnapshots[key] : null;
       // Règle FaB : l'arsenal est toujours vide au tout début de partie (on
       // n'y place une carte qu'à la fin de son propre tour). Quand tu es 2e

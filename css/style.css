@@ -1374,6 +1374,9 @@ footer a{color:var(--text-dim)}
 .br-banner.br-transform{padding:8px 12px;border:1px solid rgba(139,107,255,.45);border-radius:10px;background:linear-gradient(160deg,rgba(139,107,255,.16),rgba(139,107,255,.04))}
 .br-banner.br-transform .br-big{color:var(--violet);font-size:1rem}
 .br-banner.br-transform .br-sub{color:var(--text)}
+.br-banner.br-intimidate{padding:8px 12px;border:1px solid rgba(201,162,39,.45);border-radius:10px;background:linear-gradient(160deg,rgba(201,162,39,.16),rgba(201,162,39,.04))}
+.br-banner.br-intimidate .br-big{color:#c9a227;font-size:1rem}
+.br-banner.br-intimidate .br-sub{color:var(--text)}
 /* Largeur bornée + retour à la ligne : un sous-titre à noms longs (miroir) ne
    doit pas s'étaler sur une seule ligne — sinon il gonfle la largeur mesurée du
    plateau (stabilizeStage) et pousse tout vers la droite. */
@@ -1392,6 +1395,9 @@ footer a{color:var(--text-dim)}
 .br-pcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:9px 3px 3px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.45) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
 .br-pitch-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#82b4dd;background:#16273655;border:1px solid #2c4a6366;border-radius:999px;padding:1px 7px;margin-top:2px;
   max-width:200px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center;border-radius:12px}   /* plafond ABSOLU (indépendant du conteneur) → la liste des cartes pitchées s'enroule et n'élargit jamais le plateau */
+/* Prévention d'arcane : dégâts menacés (buffs compris) réduits par un pitch adverse. */
+.br-arc-prevent{margin-top:5px;font:.62rem 'JetBrains Mono',monospace;color:#c9a227;background:#3a2f0f55;border:1px solid #7a642855;border-radius:12px;padding:2px 8px;
+  max-width:220px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center}
 .br-arrow{color:var(--text-faint);font-size:1.2rem}
 .br-verdict{margin-top:11px;font:700 .8rem 'JetBrains Mono',monospace;padding:5px 12px;border-radius:999px}
 .br-verdict.br-blocked{color:var(--green);background:#4fb87a1a;border:1px solid #4fb87a44}

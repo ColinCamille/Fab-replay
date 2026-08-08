@@ -804,6 +804,124 @@ assert(runeStep && runeStep.dmg === 1, 'dégât de jeton (Runechant) : étape d\
 // Vie : appliquée une seule fois (6 + 1 = 7 → 40 → 33), pas de double comptage.
 eq(BR.buildTimeline(arcGame).steps.slice(-1)[0].state.life.opp, 33, 'arcane : vie à jour sans double comptage');
 
+// ---------- Bugs vue Table (game 1923349) ----------
+console.log('Bugs Table 1923349 —');
+
+// #2 — Arcane MENACÉ + prévention adverse : « <src> is dealing N » (menacé, buffs
+// compris), l'adversaire pitch pour prévenir, puis « … N-x from <src> » (réel).
+// L'étape du sort doit porter le menacé ET les cartes pitchées pour prévenir.
+const prevGame = {
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Lyath', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: null, label: 'Ouverture', turnNumber: 0, hand: [], arsenal: [], events: [] },
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], events: [
+      { type: 'played', player: 'Me', card: 'Aether Flare', _idx: 0 },
+      { type: 'arcaneDamage', source: 'Aether Flare', amount: 5, actual: false, _idx: 1 },       // menacé 5
+      { type: 'pitched', player: 'Opp', card: 'Concealed Object', _idx: 2 },                      // prévention
+      { type: 'arcaneDamage', dealer: 'Me', source: 'Aether Flare', amount: 3, actual: true, _idx: 3 }, // réel 3
+      { type: 'damageTaken', player: 'Opp', amount: 3, _idx: 4 }
+    ] }
+  ]
+};
+const prevStep = BR.buildTimeline(prevGame).steps.map(s => s.stage).find(s => s.type === 'play' && s.card && s.card.nm === 'Aether Flare');
+eq(prevStep && prevStep.dmg, 3, 'arcane prévention : dégât réel 3');
+eq(prevStep && prevStep.threat, 5, 'arcane prévention : montant menacé 5 (buffs compris)');
+assert(prevStep && prevStep.prevent && prevStep.prevent.join(',') === 'Concealed Object', 'arcane prévention : carte pitchée adverse listée');
+
+// #2bis — Un pitch adverse payant un AUTRE effet (hors bloc menacé→réel) N'est PAS
+// pris pour de la prévention (borne serrée entre la ligne menacée et le réel).
+const prevGame2 = {
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Lyath', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: null, label: 'Ouverture', turnNumber: 0, hand: [], arsenal: [], events: [] },
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], events: [
+      { type: 'played', player: 'Me', card: 'Aethersling', _idx: 0 },
+      { type: 'played', player: 'Opp', card: 'Leave Them Hanging', _idx: 1 },
+      { type: 'pitched', player: 'Opp', card: 'Two Steps Ahead', _idx: 2 },      // paie Leave Them Hanging (AVANT le menacé)
+      { type: 'arcaneDamage', source: 'Aethersling', amount: 5, actual: false, _idx: 3 },  // menacé 5
+      { type: 'pitched', player: 'Opp', card: 'Razor Reflex', _idx: 4 },         // VRAIE prévention
+      { type: 'arcaneDamage', dealer: 'Me', source: 'Aethersling', amount: 4, actual: true, _idx: 5 },
+      { type: 'damageTaken', player: 'Opp', amount: 4, _idx: 6 }
+    ] }
+  ]
+};
+const prevStep2 = BR.buildTimeline(prevGame2).steps.map(s => s.stage).find(s => s.type === 'play' && s.card && s.card.nm === 'Aethersling');
+assert(prevStep2 && prevStep2.prevent && prevStep2.prevent.join(',') === 'Razor Reflex', 'arcane prévention : seul le pitch entre menacé et réel compte (pas Two Steps Ahead)');
+
+// #6 — Tour REMBOBINÉ (undo re-loguant tout le tour) : un en-tête « turn N » qui
+// réapparaît RECYCLE le tour existant (événements vidés) au lieu d'en créer un 2e.
+const reRaw = [
+  '=== Talishar game 55 — 1/1/2026 ===',
+  "Me's turn 1 has begun.",
+  'Me played Alpha',
+  'Opp took 9 damage',
+  "Me's turn 1 has begun.",
+  'Me played Beta',
+  ''
+].join('\n');
+const reRec = Parser.parse(reRaw);
+const meTurns = reRec.turns.filter(t => t.turnNumber === 1 && t.player === 'Me');
+eq(meTurns.length, 1, 'reprise : un seul tour 1 (le rembobiné est fusionné)');
+assert(!/reprise/i.test(meTurns[0].label), 'reprise : plus de suffixe « (reprise) »');
+const reCards = meTurns[0].events.filter(e => e.type === 'played').map(e => e.card);
+assert(reCards.length === 1 && reCards[0] === 'Beta', 'reprise : seuls les événements finaux subsistent (Alpha rembobiné écarté)');
+
+// #7 — Couleur en main : HAND TIMELINE/SNAPSHOTS « Nom (card_id) » → pitches par
+// carte ; buildTimeline expose meHandPitches parallèle à meHandCards.
+const hcRaw = [
+  '=== Talishar game 66 — 1/1/2026 ===',
+  "Me's turn 1 has begun.",
+  'Me played Foo',
+  '',
+  '=== HAND SNAPSHOTS (ta main) ===',
+  '[Me #1] Meteoric Impact (meteoric_impact_blue), Kindle (kindle_red), Burn Bare (burn_bare)',
+  '',
+  '=== HAND TIMELINE (main) ===',
+  '[1] Meteoric Impact (meteoric_impact_blue), Kindle (kindle_red)',
+  ''
+].join('\n');
+const hcRec = Parser.parse(hcRaw);
+eq(JSON.stringify(hcRec.handTimeline[0].pitches), '[3,1]', 'couleur : HAND TIMELINE parse les pitches (bleu=3, rouge=1)');
+const hcT1 = hcRec.turns.find(t => t.turnNumber === 1);
+eq(JSON.stringify(hcT1.handPitches), '[3,1,null]', 'couleur : HAND SNAPSHOT pitches (bleu, rouge, mono→null)');
+const hcBanners = BR.buildTimeline(hcRec).steps.filter(s => s.stage.type === 'banner');
+assert(hcBanners.some(s => JSON.stringify(s.state.meHandPitches) === '[3,1,null]'), 'couleur : meHandPitches propagé à la main affichée');
+// Rétro-compat : une main SANS « (card_id) » (vieux log) → pitches null.
+const oldRec = Parser.parse(['=== Talishar game 67 — 1/1/2026 ===', "Me's turn 1 has begun.", 'Me played X', '', '=== HAND TIMELINE (main) ===', '[1] Alpha, Beta', ''].join('\n'));
+eq(JSON.stringify(oldRec.handTimeline[0].pitches), '[null,null]', 'couleur : rétro-compat (nom seul → pitch null)');
+
+// #1 — Main d'ouverture NON gonflée : avec une HAND TIMELINE présente, on n'ajoute
+// PAS les cartes pitchées absentes du snapshot d'ouverture (entrées ensuite).
+const openNoAddTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Opp', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  handTimeline: [{ pos: 1, cards: ['A', 'B', 'C', 'D'] }],
+  turns: [{ player: 'Me', label: 'Ouverture', turnNumber: 0, hand: ['A', 'B', 'C', 'D'], arsenal: [], events: [
+    { type: 'played', player: 'Me', card: 'A', _idx: 0 },
+    { type: 'pitched', player: 'Me', card: 'E', _idx: 1 }   // E PAS dans la main de départ (drawn ensuite)
+  ] }]
+});
+const openNoAdd = openNoAddTl.steps.find(s => s.stage.type === 'banner');
+eq(openNoAdd.state.meHandCards.length, 4, 'ouverture : main NON gonflée par une carte pitchée hors main de départ (HT présente)');
+
+// #3 — Intimidation : « X banishes a card face down » → événement + étape explicative.
+const intiRaw = [
+  '=== Talishar game 88 — 1/1/2026 ===',
+  "Opp's turn 1 has begun.",
+  'Opp played Leave Them Hanging',
+  'Me banishes a card face down',
+  ''
+].join('\n');
+const intiRec = Parser.parse(intiRaw);
+assert(intiRec.turns.some(t => t.events.some(e => e.type === 'intimidate' && e.player === 'Me')), 'intimidation : événement parsé');
+const intiSteps = BR.buildTimeline(intiRec).steps.map(s => s.stage);
+assert(intiSteps.some(s => s.type === 'intimidate'), 'intimidation : étape explicative poussée');
+
 // ---------- HAND TIMELINE : main fidèle par position de log ----------
 console.log('Hand timeline —');
 const htRaw = [

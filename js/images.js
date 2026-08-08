@@ -123,7 +123,7 @@
     const target = strip(name);
     const query = async q => {
       try {
-        const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(q) + '&limit=15');
+        const res = await fetch('https://api.goagain.dev/v1/cards?name=' + encodeURIComponent(q) + '&limit=30');
         if (!res.ok) return [];
         const json = await res.json();
         return json.data || json.cards || json.results || [];
@@ -153,6 +153,12 @@
         const variants = [];
         const poss = name.replace(/^(\S+?)s(\b)/, "$1's$2");     // Fyendals → Fyendal's
         if (poss !== name) variants.push(poss);
+        // Ponctuation retirée : la recherche goagain est sensible aux caractères
+        // spéciaux (« Booze! » → 0 résultat). On retente avec le nom nettoyé
+        // (« Booze »). La comparaison exact() ignore déjà la ponctuation → pas de
+        // faux positif (on n'accepte qu'un nom identique une fois strippé).
+        const noPunct = name.replace(/[^A-Za-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (noPunct && noPunct !== name) variants.push(noPunct);
         if (/-/.test(name)) variants.push(name.replace(/-/g, ' '));       // Trap-Door → Trap Door
         const base = name.split(/[\s,]+/)[0];                     // Scorpio, Volzar, Fyendal…
         if (base && strip(base) !== target) variants.push(base);

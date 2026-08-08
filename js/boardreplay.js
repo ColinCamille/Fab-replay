@@ -130,8 +130,10 @@
     const isEquip = (side, card) => !!EQ[side][norm(card)];
     const ls = GAME.lifeSeries || { me: [], opp: [] };
 
+    // Impression (1/2/3|null) parallèle à cards, alignée sur la longueur des noms.
+    const padPitches = (cards, pitches) => { const p = (pitches || []).slice(0, cards.length); while (p.length < cards.length) p.push(null); return p; };
     const st = {
-      meHandCards: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
+      meHandCards: [], meHandPitches: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
       mePitch: [], oppPitch: [], meArsenal: [], oppArsenalCount: 0,
       meGrave: [], oppGrave: [], meBanish: [], oppBanish: [], meTokens: [], oppTokens: [],
       meEquipGone: [], oppEquipGone: [], meEquipUsed: [], oppEquipUsed: [], meBorn: [], oppBorn: [], life: { me: 0, opp: 0 }
@@ -141,7 +143,7 @@
     // sert à corréler chaque étape à la HAND TIMELINE (main fidèle par position).
     let curIdx = 0;
     const snap = () => ({
-      meHandCards: st.meHandCards.slice(), meHandCount: st.meHandCount, meFaceUp: st.meFaceUp, oppHandCount: st.oppHandCount,
+      meHandCards: st.meHandCards.slice(), meHandPitches: st.meHandPitches.slice(), meHandCount: st.meHandCount, meFaceUp: st.meFaceUp, oppHandCount: st.oppHandCount,
       mePitch: st.mePitch.slice(), oppPitch: st.oppPitch.slice(), meArsenal: st.meArsenal.slice(), oppArsenalCount: st.oppArsenalCount,
       meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(), meBanish: st.meBanish.slice(), oppBanish: st.oppBanish.slice(),
       meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(),
@@ -151,11 +153,17 @@
     });
     const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, _idx: curIdx, form: { me: curForm.me, opp: curForm.opp }, state: snap() });
     const rm = (a, n) => { const k = a.findIndex(x => norm(x) === norm(n)); if (k >= 0) { a.splice(k, 1); return true; } return false; };
+    // Retrait main : splice le nom ET son impression au MÊME index (alignement).
+    const rmHand = n => { const k = st.meHandCards.findIndex(x => norm(x) === norm(n)); if (k >= 0) { st.meHandCards.splice(k, 1); st.meHandPitches.splice(k, 1); return true; } return false; };
     const removeCard = (side, card) => {
-      if (side === 'me') { if (st.meFaceUp) { if (!rm(st.meHandCards, card)) rm(st.meArsenal, card); } else st.meHandCount = Math.max(0, st.meHandCount - 1); }
+      if (side === 'me') { if (st.meFaceUp) { if (!rmHand(card)) rm(st.meArsenal, card); } else st.meHandCount = Math.max(0, st.meHandCount - 1); }
       else st.oppHandCount = Math.max(0, st.oppHandCount - 1);
     };
-    const addPitch = (side, c) => (side === 'me' ? st.mePitch : st.oppPitch).push(c);
+    // Pitch : on garde le NOM ET l'impression (cp = 1 rouge / 2 jaune / 3 bleu,
+    // détectée par occurrence par le parseur, cf. evt.pitch). Sans cp, l'image de
+    // la carte pitchée retombait sur l'impression par défaut (rouge) — ex. Meteoric
+    // Impact BLEU pitché pour Save the Thought affiché en rouge.
+    const addPitch = (side, c, cp) => (side === 'me' ? st.mePitch : st.oppPitch).push({ nm: c, cp: (cp === 1 || cp === 2 || cp === 3) ? cp : null });
     const toGrave = (side, c) => (side === 'me' ? st.meGrave : st.oppGrave).push(c);
 
     (GAME.turns || []).forEach((t, idx) => {
@@ -260,7 +268,12 @@
         // de TA main ce tour-ci (plays hors-arsenal + pitches) si elles manquent,
         // pour que la main de départ soit complète et visible AVANT d'être jouée.
         let hand0 = (t.hand || []).slice();
-        if (actor === MY) {
+        // Rattrapage RÉSERVÉ aux vieux logs SANS HAND TIMELINE : la timeline (grabber
+        // v1.15.3+) donne déjà la main fidèle par position → inutile, et surtout
+        // DANGEREUX ici, car il ré-ajoute des cartes PITCHÉES qui n'étaient PAS dans
+        // la main de départ mais y sont entrées ensuite (ex. Consign To Cosmos via le
+        // pouvoir d'Oscilio) → main d'ouverture gonflée (5 au lieu de 4).
+        if (actor === MY && !(Array.isArray(GAME.handTimeline) && GAME.handTimeline.length)) {
           const cnt = {};
           (t.events || []).forEach(ev => {
             if (sideOf(ev.player) !== 'me') return;
@@ -269,7 +282,7 @@
           Object.keys(cnt).forEach(k => { const have = hand0.filter(c => norm(c) === k).length; for (let m = have; m < cnt[k].n; m++) hand0.push(cnt[k].nm); });
         }
         st.meFaceUp = !!hand0.length;
-        if (st.meFaceUp) st.meHandCards = hand0;
+        if (st.meFaceUp) { st.meHandCards = hand0; st.meHandPitches = padPitches(hand0, t.handPitches); }
         if (actor === MY) st.oppHandCount = 4;
         push(t.label || 'Ouverture', atkSide, { type: 'banner', side: 'me', big: 'Début de la partie', sub: HERO.me + ' vs ' + HERO.opp });
         if (!actor || !(t.events || []).some(e => e.type === 'played' || e.type === 'activated')) return;   // ouverture sans action → juste la bannière
@@ -279,12 +292,12 @@
         // repioché en fin du sien) — mais PAS au début du tour adverse : il
         // garde ce qu'il lui reste après ses blocs, et ne repioche qu'à la fin.
         // L'arsenal adverse n'est pas connu de façon fiable → on ne l'invente pas.
-        if (actor === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.oppHandCount = 4; }
+        if (actor === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.meHandPitches = padPitches(st.meHandCards, t.handPitches); st.oppHandCount = 4; }
         else {
           // Tour adverse : MA main m'est connue (instantané capté au début de
           // son tour) → je l'affiche face visible plutôt que des dos de cartes.
           // Repli sur un compteur (dos) seulement si l'instantané manque.
-          if (t.hand && t.hand.length) { st.meFaceUp = true; st.meHandCards = t.hand.slice(); }
+          if (t.hand && t.hand.length) { st.meFaceUp = true; st.meHandCards = t.hand.slice(); st.meHandPitches = padPitches(st.meHandCards, t.handPitches); }
           else { st.meFaceUp = false; st.meHandCount = 4; }
         }
         // Sous-titre COMPACT (PV seuls) : le nom du héros est déjà dans les
@@ -339,6 +352,11 @@
       // est montré en étape autonome au fil du log (tours sans combat).
       const arcList = [];
       evs.forEach((e, idx) => { if (e.type === 'arcaneDamage' && e.actual && (e.amount || 0) > 0) arcList.push({ i: idx, src: norm(e.source), amount: e.amount, used: false }); });
+      // Dégâts d'arcane MENACÉS (avant prévention) : « <src> is dealing N arcane
+      // damage » SANS « from » (actual=false). Sert à montrer le montant PROPOSÉ
+      // (buffs compris) et à révéler la prévention adverse (menacé − réel).
+      const arcThreat = [];
+      evs.forEach((e, idx) => { if (e.type === 'arcaneDamage' && !e.actual && (e.amount || 0) > 0) arcThreat.push({ i: idx, src: norm(e.source), amount: e.amount, used: false }); });
       const dtUsed = {};   // damageTaken déjà appliqués par une étape d'arcane → le handler damageTaken les saute (pas de double comptage)
       // Somme les dégâts d'arcane réels imputables à la carte jouée/activée à l'index
       // evIdx (lignes « from <carte> » jusqu'au prochain jeu de la MÊME carte),
@@ -347,20 +365,40 @@
       // (comme un clash), sans double compte.
       const takeArcane = (cardNm, evIdx, dealerSide) => {
         const k = norm(cardNm), victim = dealerSide === 'me' ? 'opp' : 'me';
-        let total = 0, nextSame = evs.length;
+        let total = 0, nextSame = evs.length, lastActual = -1;
         for (let j = evIdx + 1; j < evs.length; j++) { const f = evs[j]; if ((f.type === 'played' || f.type === 'activated') && norm(f.card) === k) { nextSame = j; break; } }
         arcList.forEach(a => {
           if (a.used || a.src !== k || a.i <= evIdx || a.i >= nextSame) return;
-          a.used = true; total += a.amount;
+          a.used = true; total += a.amount; if (a.i > lastActual) lastActual = a.i;
           for (let j = a.i; j < evs.length; j++) { const f = evs[j]; if (f.type === 'damageTaken' && !dtUsed[j] && sideOf(f.player) === victim && (f.amount || 0) === a.amount) { dtUsed[j] = 1; st.life[victim] = Math.max(0, st.life[victim] - (f.amount || 0)); break; } }
         });
-        return total > 0 ? { amount: total, victim: victim } : null;
+        if (total <= 0) return null;
+        // Menacé (buffs compris) : somme des lignes « is dealing N arcane damage »
+        // (sans « from ») de la même source dans la fenêtre du sort. On retient aussi
+        // l'index de la 1re ligne menacée (borne basse de la prévention).
+        let threat = 0, firstThreat = -1;
+        arcThreat.forEach(a => { if (a.used || a.src !== k || a.i <= evIdx || a.i >= nextSame) return; a.used = true; threat += a.amount; if (firstThreat < 0 || a.i < firstThreat) firstThreat = a.i; });
+        // Prévention adverse : les pitches du DÉFENSEUR ENTRE la ligne « menacé » et
+        // la dernière ligne de dégâts réels. Borner au bloc menacé→réel est crucial :
+        // sinon un pitch payant un AUTRE effet adverse dans le même intervalle (ex.
+        // Leave Them Hanging joué en réponse, game 1923349 T7) serait pris à tort
+        // pour de la prévention. Sans ligne menacée (firstThreat<0) → pas de prévention.
+        const prevent = [];
+        if (firstThreat >= 0) {
+          const upper = lastActual >= 0 ? lastActual : nextSame;
+          for (let j = firstThreat + 1; j < upper; j++) { const f = evs[j]; if (f.type === 'pitched' && sideOf(f.player) === victim) prevent.push(f.card); }
+        }
+        return { amount: total, victim: victim, threat: threat > total ? threat : null, prevent: prevent };
       };
       const arcDmg = arc => (arc && arc.amount > 0) ? arc.amount : undefined;
       const arcHit = arc => (arc && arc.amount > 0) ? arc.victim : null;
+      // Montant MENACÉ (affiché seulement s'il dépasse le réel = prévention) + les
+      // cartes pitchées par l'adversaire pour prévenir.
+      const arcThr = arc => (arc && arc.threat && arc.threat > (arc.amount || 0)) ? arc.threat : undefined;
+      const arcPrev = arc => (arc && arc.prevent && arc.prevent.length) ? arc.prevent.slice() : undefined;
       let atkBuf = [];
       const looseNorm = s => norm(s).replace(/[^a-z0-9]/g, '');   // tolère apostrophe/ponctuation (« Hunter's Klaive » vs « Hunters Klaive »)
-      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm, cp: x.cp }, act: !!x.act, pitch: x.pitch, dmg: arcDmg(x.arc), text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
+      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm, cp: x.cp }, act: !!x.act, pitch: x.pitch, dmg: arcDmg(x.arc), threat: arcThr(x.arc), prevent: arcPrev(x.arc), text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
       // Matérialise une carte en « carte seule » MAINTENANT (photo de la main
       // prise à cet instant → les cartes jouées ENSUITE y sont encore visibles).
       const materialize = x => { push(label, atkSide, bufEntryStep(x), arcHit(x.arc)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); };
@@ -373,7 +411,7 @@
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
       const flushAtk = () => {
         if (!openAtk) return;
-        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm, cp: openAtk.cp }, pitch: openAtk.pitch, dmg: arcDmg(openAtk.arc), text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt }, arcHit(openAtk.arc));
+        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm, cp: openAtk.cp }, pitch: openAtk.pitch, dmg: arcDmg(openAtk.arc), threat: arcThr(openAtk.arc), prevent: arcPrev(openAtk.arc), text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt }, arcHit(openAtk.arc));
         // Renforts éventuels (attaque hors-combat) : affichés à part pour ne pas les perdre.
         (openAtk.pumps || []).forEach(p => push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: p.nm, cp: p.cp }, reaction: true, text: HERO[openAtk.side] + ' joue ' + p.nm + (p.pTxt || '') }));
         openAtk = null;
@@ -387,7 +425,7 @@
           // Carte jouée depuis l'arsenal adverse → l'arsenal adverse se vide.
           if (e.fromArsenal && side === 'opp') st.oppArsenalCount = Math.max(0, st.oppArsenalCount - 1);
           const pitches = [];
-          for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
+          for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card, f.pitch); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
           const arc = takeArcane(e.card, i, side);   // dégâts d'arcane réels imputables à cette carte
           if (side === atkSide && hasChain) {
@@ -399,7 +437,7 @@
             // Tour SANS combat : ce « jeu » n'est pas une attaque (sort d'arcane,
             // ouverture…) → carte seule IMMÉDIATE avec ses dégâts d'arcane, sans
             // différé openAtk (qui avalerait les réactions adverses).
-            push(label, side, { type: 'play', side: side, card: { nm: e.card, cp: e.pitch }, pitch: pitches.join(', '), dmg: arcDmg(arc), text: HERO[side] + ' joue ' + e.card + pTxt }, arcHit(arc));
+            push(label, side, { type: 'play', side: side, card: { nm: e.card, cp: e.pitch }, pitch: pitches.join(', '), dmg: arcDmg(arc), threat: arcThr(arc), prevent: arcPrev(arc), text: HERO[side] + ' joue ' + e.card + pTxt }, arcHit(arc));
             if (!isEquip(side, e.card)) toGrave(side, e.card);
           } else if (side === atkSide) {
             // (vieux logs sans chaîne) Cette carte est-elle un RENFORT sur l'attaque
@@ -429,7 +467,7 @@
             // montre en carte seule (avec ses dégâts d'arcane), sinon elle serait
             // AVALÉE (main adverse qui « saute » sans explication).
             if (!hasCombat || (!atkBuf.length && !openAtk)) {
-              push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, reaction: true, pitch: pitches.join(', '), dmg: arcDmg(arc), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt }, arcHit(arc));
+              push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, reaction: true, pitch: pitches.join(', '), dmg: arcDmg(arc), threat: arcThr(arc), prevent: arcPrev(arc), text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt }, arcHit(arc));
               // Tour sans combat : pas de « Combat resolved » pour envoyer les
               // réactions au cimetière → on le fait ici. En tour AVEC combat, on
               // laisse combatResult s'en charger (sinon doublon au cimetière).
@@ -453,7 +491,7 @@
           // sont pas grisées (une arme qui attaque n'est pas « épuisée »).
           if (EQ[side][norm(e.card)] && !WPN[side][norm(e.card)]) { const u = side === 'me' ? st.meEquipUsed : st.oppEquipUsed; if (u.indexOf(norm(e.card)) < 0) u.push(norm(e.card)); }
           const pitches = [];
-          for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card); removeCard(side, f.card); } }
+          for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played' || f.type === 'activated') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card, f.pitch); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
           // Carte choisie par la capacité (ex. pouvoir d'Oscilio : « Card chosen: X »).
           // Rattachée à CETTE activation → annotée sur l'étape, et retirée de MA main
@@ -474,7 +512,7 @@
           } else if (hasChain && side === atkSide && WPN[side][norm(e.card)] && (atkBuf.length === 0 ? (isAtkCard(e.card) || !nextAtkCard()) : true)) {
             atkBuf.push(wpnEntry);              // arme = attaquant
           } else {
-            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, chosen: chosen, pitch: pitches.join(', '), dmg: arcDmg(arcA), text: HERO[side] + ' active ' + e.card + pTxt + (chosen ? ' → ' + chosen : '') }, arcHit(arcA));
+            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, chosen: chosen, pitch: pitches.join(', '), dmg: arcDmg(arcA), threat: arcThr(arcA), prevent: arcPrev(arcA), text: HERO[side] + ' active ' + e.card + pTxt + (chosen ? ' → ' + chosen : '') }, arcHit(arcA));
           }
         } else if (e.type === 'destroyed') {
           // Un ÉQUIPEMENT détruit (armure/Nullrune cassée…) est retiré du plateau
@@ -501,7 +539,7 @@
             if (arr.indexOf(key) < 0) arr.push(key);
           }
         } else if (e.type === 'pitched') {
-          const s = sideOf(e.player); addPitch(s, e.card); removeCard(s, e.card);
+          const s = sideOf(e.player); addPitch(s, e.card, e.pitch); removeCard(s, e.card);
         } else if (e.type === 'banished') {
           // Bannissement (« <Carte> was banished. ») : Vynnset bannit une carte en
           // début de tour (moteur de Runechant), ou un effet bannit une carte. La
@@ -512,6 +550,12 @@
           const bz = s === 'me' ? st.meBanish : st.oppBanish;
           if (bz.indexOf(e.card) < 0) bz.push(e.card);
           push(label, s, { type: 'play', side: s, card: { nm: e.card }, banish: true, text: HERO[s] + ' bannit ' + e.card });
+        } else if (e.type === 'intimidate') {
+          // Intimidation : le camp ciblé bannit une carte FACE CACHÉE (nom masqué)
+          // qui revient en fin de tour. On explique la « disparition » d'une carte de
+          // la main (la HAND TIMELINE la retire déjà à cette position).
+          const s = sideOf(e.player);
+          push(label, s, { type: 'intimidate', side: s, big: '↯ Intimidation', sub: (s === 'me' ? 'Tu bannis' : HERO.opp + ' bannit') + ' 1 carte face cachée — elle revient en fin de tour' });
         } else if (e.type === 'transform') {
           // Transformation de héros (ex. Arakni) AU MOMENT EXACT où elle survient
           // dans le log (« <forme> becomes <nouvelle forme> »), pas seulement au
@@ -629,10 +673,11 @@
     const HT = Array.isArray(GAME.handTimeline) ? GAME.handTimeline : [];
     if (HT.length) {
       const firstPos = HT[0].pos;
-      const handAt = idx => {
-        let cards = HT[0].cards;
-        for (let h = 0; h < HT.length; h++) { if (HT[h].pos <= idx + 1) cards = HT[h].cards; else break; }
-        return cards;
+      // Renvoie l'ENTRÉE timeline courante (nom + impression) pour colorer la main.
+      const entryAt = idx => {
+        let e = HT[0];
+        for (let h = 0; h < HT.length; h++) { if (HT[h].pos <= idx + 1) e = HT[h]; else break; }
+        return e;
       };
       steps.forEach(s => {
         // Bannière de DÉBUT de tour : elle porte déjà la main FIABLE (instantané
@@ -651,8 +696,8 @@
           // repli sur la timeline propre à la position de début de tour — mieux
           // qu'une main vide.
           if ((s.state.meHandCards || []).length === 0 && idx + 1 >= firstPos) {
-            const cards = handAt(idx);
-            if (cards && cards.length) { s.state.meFaceUp = true; s.state.meHandCards = cards.slice(); }
+            const e = entryAt(idx);
+            if (e && e.cards && e.cards.length) { s.state.meFaceUp = true; s.state.meHandCards = e.cards.slice(); s.state.meHandPitches = padPitches(e.cards, e.pitches); }
           }
           return;
         }
@@ -663,8 +708,8 @@
         // pitchée à la 1re action, vraie main à 4 cartes taguée bien plus loin dans
         // le log) → main de départ affichée tronquée (3 au lieu de 4).
         if (idx + 1 < firstPos) return;
-        const cards = handAt(idx);
-        if (cards) { s.state.meFaceUp = true; s.state.meHandCards = cards.slice(); }
+        const e = entryAt(idx);
+        if (e && e.cards) { s.state.meFaceUp = true; s.state.meHandCards = e.cards.slice(); s.state.meHandPitches = padPitches(e.cards, e.pitches); }
       });
     }
 
@@ -800,7 +845,17 @@
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'transform') return '<div class="br-banner br-transform br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
-      if (s.type === 'play') return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.banish ? '<span class="br-react">🗑 banni</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + '</div>';
+      if (s.type === 'intimidate') return '<div class="br-banner br-intimidate br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
+      if (s.type === 'play') {
+        // Prévention d'arcane : l'adversaire a pitché pour réduire les dégâts →
+        // on montre le montant MENACÉ (buffs compris), le réel, et les cartes
+        // pitchées. Visible même si tout est prévenu (dmg=0).
+        const prevented = (s.threat && s.threat > (s.dmg || 0)) ? (s.threat - (s.dmg || 0)) : 0;
+        const preventLine = ((s.prevent && s.prevent.length) || prevented > 0)
+          ? '<div class="br-arc-prevent">🛡 ' + (s.threat ? ('menacé ' + s.threat + ' → ' + (s.dmg || 0)) : 'prévention') + (prevented > 0 ? ' (−' + prevented + ')' : '') + (s.prevent && s.prevent.length ? ' · adv pitch ' + esc(s.prevent.join(', ')) : '') + '</div>'
+          : '';
+        return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.banish ? '<span class="br-react">🗑 banni</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + preventLine + '</div>';
+      }
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
         // Renforts (pumps/réactions d'attaque, ex. Lightning Press) : petites
@@ -818,10 +873,14 @@
       const el = $(sel); if (!el) return; const n = cards ? cards.length : 0, key = sel;
       if (!n) { el.classList.remove('br-filled'); el.innerHTML = ''; el.textContent = label; prevCounts[key] = 0; return; }
       el.classList.add('br-filled');
+      // Une entrée peut être un simple nom (arsenal/cimetière) ou un objet
+      // { nm, cp } (pitch, avec impression) → on lit le nom et l'éventuel pitch.
       const top = cards[cards.length - 1];
+      const topNm = (top && typeof top === 'object') ? top.nm : top;
+      const topCp = (top && typeof top === 'object' && (top.cp === 1 || top.cp === 2 || top.cp === 3)) ? top.cp : null;
       let inner = '<span class="br-slot-tag">' + label + '</span>';
       inner += mode === 'back' ? '<div class="br-zcard br-back"></div>'
-        : '<div class="br-zcard br-' + side + (mode === 'grave' ? ' br-grave' : '') + '"><div class="br-art" data-card="' + esc(top) + '"></div><div class="br-nm">' + esc(top) + '</div></div>';
+        : '<div class="br-zcard br-' + side + (mode === 'grave' ? ' br-grave' : '') + '"><div class="br-art" data-card="' + esc(topNm) + '"' + (topCp ? ' data-pitch="' + topCp + '"' : '') + '></div><div class="br-nm">' + esc(topNm) + '</div></div>';
       if (n > 1) inner += '<span class="br-badge">×' + n + '</span>';
       el.innerHTML = inner;
       if (prevCounts[key] != null && n > prevCounts[key]) { el.classList.remove('br-bump'); void el.offsetWidth; el.classList.add('br-bump'); }
@@ -839,7 +898,8 @@
       if (s.meFaceUp) {
         mh.innerHTML = '';
         if (!s.meHandCards.length) { mh.innerHTML = '<span class="br-handempty">main vide</span>'; return; }
-        s.meHandCards.forEach(c => { const d = document.createElement('div'); d.className = 'br-pcard br-me br-inhand'; d.innerHTML = '<div class="br-art" data-card="' + esc(c) + '"></div><div class="br-nm">' + esc(c) + '</div>'; mh.appendChild(d); });
+        const hp = s.meHandPitches || [];
+        s.meHandCards.forEach((c, k) => { const cp = (hp[k] === 1 || hp[k] === 2 || hp[k] === 3) ? hp[k] : null; const d = document.createElement('div'); d.className = 'br-pcard br-me br-inhand'; d.innerHTML = '<div class="br-art" data-card="' + esc(c) + '"' + (cp ? ' data-pitch="' + cp + '"' : '') + '></div><div class="br-nm">' + esc(c) + '</div>'; mh.appendChild(d); });
       } else backs(mh, s.meHandCount, 'main vide');
     }
     function applyEquipState(zoneSel, goneArr, usedArr) {
