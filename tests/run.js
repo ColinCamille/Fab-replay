@@ -1426,6 +1426,107 @@ console.log('Faux joueur "<Carte> was played…" (#1906667) —');
   assert(rec.result && rec.result.iWon === true, 'faux joueur "was" : victoire correctement attribuée au joueur local');
 })();
 
+// ---------- Bugs vue Table (game 1930124, Oscilio vs Hala) ----------
+console.log('Bugs Table 1930124 —');
+
+// A+B+D+G — Tour adverse où le DÉFENSEUR (moi) réagit en brûlant l'attaquant à
+// l'arcane, active Volzar (arme-buff, loggée APRÈS le sort) et se soigne (Sigil) :
+//  · les réactions d'arcane/soin s'affichent en ÉTAPES PROPRES (pas noyées nues
+//    dans la rangée « réactions » du clash) ;
+//  · Volzar est RÉORDONNÉ juste AVANT le sort qu'il renforce ;
+//  · le gain de vie porte « heal ».
+const t1930 = BR.buildTimeline({
+  myName: 'Osc', oppName: 'Hala',
+  players: { me: { hero: 'Osc', equipment: { weaponL: { name: 'Volzar Meteor Storm' } } }, opp: { hero: 'Hala', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [{ player: 'Hala', label: 'Hala — Tour 1', turnNumber: 1, hand: [], arsenal: [],
+    chain: [{ turn: 'Hala#1', card: 'Command and Conquer', power: 6, defense: 0, kw: [] }],
+    events: [
+      { type: 'played', player: 'Hala', card: 'Command and Conquer', _idx: 0 },
+      { type: 'played', player: 'Osc', card: 'Echoflash', _idx: 1 },
+      { type: 'arcaneDamage', dealer: 'Osc', source: 'Echoflash', amount: 1, actual: true, _idx: 2 },
+      { type: 'damageTaken', player: 'Hala', amount: 1, _idx: 3 },
+      { type: 'played', player: 'Osc', card: 'Constella Contemplation', _idx: 4 },
+      { type: 'activated', player: 'Osc', card: 'Volzar, Meteor Storm', _idx: 5 },        // arme-buff loggée APRÈS le sort
+      { type: 'arcaneDamage', dealer: 'Osc', source: 'Constella Contemplation', amount: 2, actual: true, _idx: 6 },
+      { type: 'damageTaken', player: 'Hala', amount: 2, _idx: 7 },
+      { type: 'played', player: 'Osc', card: 'Sigil of Solace', _idx: 8 },
+      { type: 'lifeGained', player: 'Osc', amount: 3, _idx: 9 },
+      { type: 'damageTaken', player: 'Osc', amount: 6, _idx: 10 },   // « took 6 damage » du coup encaissé
+      { type: 'combatResult', hit: true, amount: 6, _idx: 11 }
+    ] }]
+});
+const st1930 = t1930.steps.map(s => s.stage);
+const echoStep = st1930.find(s => s.type === 'play' && s.card && s.card.nm === 'Echoflash');
+assert(echoStep && echoStep.dmg === 1 && echoStep.reaction, 'défenseur arcane : Echoflash en étape propre avec ses dégâts (1)');
+const constStep = st1930.find(s => s.type === 'play' && s.card && s.card.nm === 'Constella Contemplation');
+assert(constStep && constStep.dmg === 2, 'défenseur arcane : Constella Contemplation en étape propre (dégât 2)');
+const sigilStep = st1930.find(s => s.type === 'play' && s.card && s.card.nm === 'Sigil of Solace');
+assert(sigilStep && sigilStep.heal === 3, 'gain de vie : Sigil of Solace porte « heal » (+3)');
+const clash1930 = st1930.find(s => s.type === 'clash');
+assert(clash1930 && !(clash1930.reactions || []).some(r => /Echoflash|Constella|Sigil/.test(r.nm)), 'défenseur arcane : les réactions à effet ne restent PAS nues dans le clash');
+const iVolzar = st1930.findIndex(s => s.type === 'play' && s.card && /Volzar/.test(s.card.nm));
+const iConst = st1930.findIndex(s => s.type === 'play' && s.card && s.card.nm === 'Constella Contemplation');
+assert(iVolzar >= 0 && iConst >= 0 && iVolzar < iConst, 'Volzar : affiché AVANT le sort qu\'il renforce');
+// Vie : Hala −1 −2 (arcane) = 37 ; moi +3 (Sigil) −6 (C&C) = 37 en fin de tour.
+const last1930 = t1930.steps.slice(-1)[0];
+eq(last1930.state.life.opp, 37, 'arcane défenseur : vie adverse à jour (−3)');
+eq(last1930.state.life.me, 37, 'gain de vie appliqué mid-tour (+3) puis coup encaissé (−6)');
+
+// G — Un tour SANS aucun jeu (que des passes) le signale dans la bannière.
+const passTl = BR.buildTimeline({
+  myName: 'Osc', oppName: 'Hala',
+  players: { me: { hero: 'Osc', equipment: {} }, opp: { hero: 'Hala', equipment: {} } },
+  lifeSeries: { me: [40, 40, 40], opp: [40, 40, 40] },
+  turns: [
+    { player: 'Hala', label: 'Hala — Tour 1', turnNumber: 1, hand: [], arsenal: [], events: [{ type: 'played', player: 'Hala', card: 'Sink Below', _idx: 0 }] },
+    { player: 'Osc', label: 'Osc — Tour 1', turnNumber: 1, hand: [], arsenal: [], events: [{ type: 'passed', player: 'Osc', _idx: 1 }] }
+  ]
+});
+const passBanner = passTl.steps.find(s => s.stage.type === 'banner' && s.turn.indexOf('Osc') >= 0);
+assert(passBanner && /passe/.test(passBanner.stage.sub), 'tour sans action : la bannière signale « passe »');
+
+// C — Undo CONSENTI dont l'action annulée appartient à l'AUTRE joueur que le
+// demandeur (Hala demande, l'activation de Volzar d'Osc est annulée) : une seule
+// activation restante ET une seule ligne d'arcane menacée (pas 6+6=12).
+const undoOtherRaw = [
+  '=== Talishar game 80 — test ===', '',
+  "Osc's turn 1 has begun.",
+  'Osc played Meteoric Impact',
+  'Osc activated Volzar, Meteor Storm',
+  'Meteoric Impact is dealing 6 arcane damage',
+  'Hala requests to undo the last action',
+  'Osc allowed undoing the last action',
+  'Osc activated Volzar, Meteor Storm',
+  'Meteoric Impact is dealing 6 arcane damage',
+  'Osc is dealing 6 arcane damage from Meteoric Impact',
+  'Hala took 6 damage',
+  '', '=== META ===', 'me: Osc', 'opp: Hala'
+].join('\n');
+const uor = Parser.parse(undoOtherRaw);
+const uot1 = uor.turns.find(t => t.turnNumber === 1);
+eq((uot1.events || []).filter(e => e.type === 'activated' && /Volzar/.test(e.card)).length, 1, 'undo consenti (action adverse) : une seule activation Volzar');
+eq((uot1.events || []).filter(e => e.type === 'arcaneDamage' && !e.actual).length, 1, 'undo consenti (action adverse) : une seule ligne d\'arcane menacée (pas doublée)');
+
+// F — Main RÉCONCILIÉE : un instantané périmé du grabber liste encore une carte que
+// J'AI déjà jouée (réaction de défense non re-captée) → elle est retirée de la main.
+const reconcileTl = BR.buildTimeline({
+  myName: 'Osc', oppName: 'Hala',
+  players: { me: { hero: 'Osc', equipment: {} }, opp: { hero: 'Hala', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  handTimeline: [{ pos: 1, cards: ['Shelter from the Storm', 'Sink Below'] }],   // périmé : Shelter encore listée
+  turns: [{ player: 'Hala', label: 'Hala — Tour 1', turnNumber: 1, hand: ['Shelter from the Storm', 'Sink Below'], arsenal: [],
+    chain: [{ turn: 'Hala#1', card: 'Zenith Blade', power: 5, defense: 0, kw: [] }],
+    events: [
+      { type: 'activated', player: 'Hala', card: 'Zenith Blade', _idx: 2 },
+      { type: 'played', player: 'Osc', card: 'Shelter from the Storm', _idx: 5 },   // jouée APRÈS l'instantané (pos 1)
+      { type: 'combatResult', hit: false, _idx: 8 }
+    ] }]
+});
+const lastRec = reconcileTl.steps.slice(-1)[0];
+assert(lastRec.state.meHandCards.indexOf('Shelter from the Storm') < 0, 'réconciliation main : la carte déjà jouée est retirée de la main affichée');
+assert(lastRec.state.meHandCards.indexOf('Sink Below') >= 0, 'réconciliation main : les cartes non jouées restent en main');
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);

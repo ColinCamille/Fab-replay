@@ -1370,6 +1370,14 @@ footer a{color:var(--text-dim)}
    partie — souvent hors combat (arcane, effet…) — soit toujours lisible. */
 .br-banner.br-end{padding:10px 12px;border:1px solid var(--accent,var(--gold));border-radius:10px;background:linear-gradient(160deg,rgba(201,162,39,.14),rgba(201,162,39,.04))}
 .br-banner.br-end .br-big{font-size:1.15rem}
+/* Étape terminale : la carte de fin prend TOUTE la bande centrale (les 2 compteurs
+   de PV latéraux sont masqués — leurs valeurs finales sont déjà dans le sous-titre),
+   donc centrée et exploitant l'espace à gauche au lieu d'étirer le plateau à droite
+   sur mobile (le sous-titre long ne peut plus élargir .br-mid au-delà de l'étape 0
+   sur laquelle fitBoard a calé l'échelle). Largeur bornée en plus, par sécurité. */
+.br-mid--end .br-lifeside{display:none}
+.br-banner.br-end{max-width:min(92vw,360px);margin-inline:auto}
+.br-banner.br-end .br-big,.br-banner.br-end .br-sub{max-width:100%;overflow-wrap:anywhere}
 /* Transformation de héros (Arakni change de forme en cours de partie). */
 .br-banner.br-transform{padding:8px 12px;border:1px solid rgba(139,107,255,.45);border-radius:10px;background:linear-gradient(160deg,rgba(139,107,255,.16),rgba(139,107,255,.04))}
 .br-banner.br-transform .br-big{color:var(--violet);font-size:1rem}
@@ -1402,6 +1410,7 @@ footer a{color:var(--text-dim)}
 .br-verdict{margin-top:11px;font:700 .8rem 'JetBrains Mono',monospace;padding:5px 12px;border-radius:999px}
 .br-verdict.br-blocked{color:var(--green);background:#4fb87a1a;border:1px solid #4fb87a44}
 .br-verdict.br-through{color:var(--red);background:#e0555a1a;border:1px solid #e0555a55}
+.br-verdict.br-heal{color:#4fb87a;background:#4fb87a1a;border:1px solid #4fb87a44}
 /* Puissance d'attaque EFFECTIVE (buffs compris) : pastille rouge « ⚔N » en
    coin de la carte d'attaque. + mots-clés (go again, dominate…) sous la carte. */
 .br-pw{position:absolute;top:-7px;left:-7px;z-index:3;min-width:22px;height:22px;padding:0 5px;

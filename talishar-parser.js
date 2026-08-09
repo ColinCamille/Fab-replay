@@ -803,19 +803,24 @@
         if (e.type !== 'undo') return;
         if (e.full) {
           // Annulation consentie : revert du JEU complet. On remonte au dernier
-          // played/activated du même joueur et on retire ce jeu + ses pitches de
-          // paiement (mêmes joueur, entre ce jeu et l'undo). Le simple LIFO ne
-          // retirerait que le pitch, laissant la carte annulée en double.
-          for (let i = u - 1; i >= 0; i--) {
-            if (remove.has(i)) continue;
-            const p = ev[i];
-            if ((p.type === 'played' || p.type === 'activated') && (!e.player || p.player === e.player)) {
-              remove.add(i);
-              for (let j = i + 1; j < u; j++) {
-                if (!remove.has(j) && ev[j].type === 'pitched' && ev[j].player === e.player) remove.add(j);
-              }
-              break;
-            }
+          // played/activated à annuler et on retire ce jeu + les effets de sa
+          // résolution (menace/dégâts d'arcane, dégâts subis, gain de vie, carte
+          // choisie, pitch de paiement) situés entre lui et l'undo — sinon une
+          // résolution annulée PUIS rejouée est comptée deux fois (ex. game 1930124
+          // T8 : Volzar en double + arcane « menacé » cumulé 6+6=12 au lieu de 6).
+          // L'action annulée n'appartient PAS forcément au demandeur : dans une
+          // annulation consentie l'adversaire peut demander à l'actif d'annuler SON
+          // jeu (Hala demande, l'activation de Volzar d'Oscilio est annulée). On
+          // vise donc la dernière action DU DEMANDEUR si elle existe (cas game 79),
+          // sinon la dernière action de N'IMPORTE QUEL joueur (cas ci-dessus).
+          const isPlay = p => p.type === 'played' || p.type === 'activated';
+          const isEffect = q => q.type === 'pitched' || q.type === 'arcaneDamage' || q.type === 'damageTaken' || q.type === 'lifeGained' || q.type === 'cardChosen';
+          let target = -1;
+          if (e.player) { for (let i = u - 1; i >= 0; i--) { if (!remove.has(i) && isPlay(ev[i]) && ev[i].player === e.player) { target = i; break; } } }
+          if (target < 0) { for (let i = u - 1; i >= 0; i--) { if (!remove.has(i) && isPlay(ev[i])) { target = i; break; } } }
+          if (target >= 0) {
+            remove.add(target);
+            for (let j = target + 1; j < u; j++) { if (!remove.has(j) && isEffect(ev[j])) remove.add(j); }
           }
           return;
         }
