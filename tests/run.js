@@ -587,6 +587,43 @@ const arsInf = BR.buildTimeline({
 assert(arsInf.steps.some(s => s.turn === 'B — Tour 2' && s.stage.type === 'banner' && s.state.oppArsenalCount === 1), 'arsenal adverse inféré : dos affiché au tour où il joue depuis l\'arsenal');
 eq(arsInf.steps.slice(-1)[0].state.oppArsenalCount, 0, 'arsenal adverse inféré : vidé après la carte jouée');
 
+// Arcane TOTALEMENT prévenu (game 1943702, T11 Snapback) : réel 0 mais menace + pitchs
+// adverses doivent quand même s'afficher (comme la vue Déroulé). Régression : avant, la
+// carte réduite à 0 perdait threat/prevent (takeArcane sortait sur total<=0). On teste
+// aussi une prévention PARTIELLE (Meteoric Impact, réel > 0) → non-régression.
+const arcPrevTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Pleiades', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [30, 30] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 11', hand: [], arsenal: [], grave: { me: [], opp: [] }, chain: [], events: [
+      // Meteoric Impact : menacé 6 → réel 3 (prévention partielle, pitch Up on a Pedestal)
+      { type: 'played', player: 'Me', card: 'Meteoric Impact' },
+      { type: 'arcaneDamage', source: 'Meteoric Impact', amount: 6, actual: false },
+      { type: 'pitched', player: 'Opp', card: 'Up on a Pedestal' },
+      { type: 'arcaneDamage', dealer: 'Me', source: 'Meteoric Impact', amount: 3, actual: true },
+      { type: 'damageTaken', player: 'Opp', amount: 3 },
+      // Snapback : menacé 3 → réel 0 (prévention TOTALE, pitch Righteous Cleansing + Command and Conquer)
+      { type: 'played', player: 'Me', card: 'Snapback' },
+      { type: 'arcaneDamage', source: 'Snapback', amount: 3, actual: false },
+      { type: 'pitched', player: 'Opp', card: 'Righteous Cleansing' },
+      { type: 'pitched', player: 'Opp', card: 'Command and Conquer' },
+      { type: 'arcaneDamage', dealer: 'Me', source: 'Snapback', amount: 0, actual: true },
+      { type: 'damageTaken', player: 'Opp', amount: 0 }
+    ] }
+  ]
+});
+const findPlay = nm => arcPrevTl.steps.find(s => s.stage && s.stage.type === 'play' && s.stage.card && s.stage.card.nm === nm);
+const snapStep = findPlay('Snapback');
+assert(!!snapStep, 'arcane 0 : étape Snapback présente');
+eq(snapStep.stage.threat, 3, 'arcane totalement prévenu : montant menacé (3) affiché sur Snapback');
+eq((snapStep.stage.prevent || []).join(','), 'Righteous Cleansing,Command and Conquer', 'arcane totalement prévenu : pitchs de prévention adverse affichés');
+eq(snapStep.stage.dmg, undefined, 'arcane totalement prévenu : aucun dégât réel (dmg non affiché)');
+const metStep = findPlay('Meteoric Impact');
+eq(metStep.stage.threat, 6, 'prévention partielle : menacé 6 conservé (non-régression)');
+eq(metStep.stage.dmg, 3, 'prévention partielle : 3 dégâts réels');
+eq((metStep.stage.prevent || []).join(','), 'Up on a Pedestal', 'prévention partielle : pitch de prévention affiché');
+
 // Attaque effective + renfort : un pump joué SUR l'attaque (ciblant la carte
 // d'attaque) reste un renfort ; la VRAIE carte d'attaque reste l'attaquant, avec
 // sa puissance effective (buffs). Pas de doublon en « carte seule ».
