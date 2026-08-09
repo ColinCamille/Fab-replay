@@ -151,6 +151,73 @@ const evBlock = colEvs.find(e => e.type === 'blocked');
 assert(evBlock && Array.isArray(evBlock.pitches) && evBlock.pitches[0] === 1 && evBlock.pitches[1] === 1, 'couleur : blocs (défense) colorés par carte (Unmovable rouge, Sink Below rouge)');
 assert(Parser.pitchFromCardId('x_yellow') === 2 && Parser.pitchFromCardId('wrenchtastic') === null, 'couleur : pitchFromCardId (suffixe → pitch, mono-impression → null)');
 
+// ── Journal TRONQUÉ (tampon roulant Talishar, longue partie) ─────────────────
+// Le corps du log DÉMARRE au tour 3 (les tours 1-2 ont défilé hors du tampon)
+// avec une fin de tour orpheline en tête, MAIS les instantanés (main/vie/formes)
+// couvrent les tours 1-3. Le parseur doit : détecter la troncature (record.truncated
+// sans health.ok=false → partie gardée au dashboard), reconstruire les tours 1-2,
+// déplacer la fin orpheline hors de l'Ouverture, et NE PAS faire fuiter la main du
+// tour 1 sur le tour 3 (bug d'origine : Sigil/Shelter en main au « tour 5 »).
+console.log('Journal tronqué —');
+const truncRaw = [
+  '=== Talishar game 999 — 1/1/2026 ===',
+  '',
+  'Beta pitched Foo',                                    // fin orpheline du tour 2 (Alpha)
+  'Alpha played Bolt',
+  'Beta took 3 damage',
+  'Alpha passed priority. Attempting to end turn.',
+  "Beta's turn 3 has begun.",
+  'Beta passed priority. Attempting to end turn.',
+  "Alpha's turn 3 has begun.",
+  'Alpha played Meteor',
+  'Alpha pitched Ember',
+  'Alpha passed priority. Attempting to end turn.',
+  '',
+  '=== HAND SNAPSHOTS (ta main) ===',
+  '[OUVERTURE] Kindle, Snapback',
+  '[Beta #1] Aaa, Bbb, Ccc',
+  '[Alpha #1] Bbb, Ccc',
+  '[Beta #2] Ddd, Eee',
+  '[Alpha #2] Ddd, Eee',
+  '[Beta #3] Meteor, Ember, Fff',
+  '[Alpha #3] Meteor, Ember, Fff',
+  '',
+  '=== LIFE SNAPSHOTS (vie et deck : toi / adversaire) ===',
+  '[OUVERTURE] me=40 opp=40 myDeck=60 oppDeck=60',
+  '[Beta #1] me=40 opp=37 myDeck=59 oppDeck=60',
+  '[Alpha #1] me=40 opp=37 myDeck=59 oppDeck=59',
+  '[Beta #2] me=38 opp=37 myDeck=58 oppDeck=59',
+  '[Alpha #2] me=38 opp=37 myDeck=58 oppDeck=58',
+  '[Beta #3] me=38 opp=34 myDeck=57 oppDeck=58',
+  '[Alpha #3] me=38 opp=34 myDeck=57 oppDeck=57',
+  '',
+  '=== HERO FORMS (forme du héros par tour : toi | adversaire) ===',
+  '[OUVERTURE] me: Alpha | opp: Beta',
+  '[Beta #1] me: Alpha | opp: Beta',
+  '[Alpha #1] me: Alpha | opp: Beta',
+  '[Beta #2] me: Alpha | opp: Beta',
+  '[Alpha #2] me: Alpha | opp: Beta',
+  '[Beta #3] me: Alpha | opp: Beta',
+  '[Alpha #3] me: Alpha | opp: Beta',
+  '',
+  '=== META ===',
+  'me: Alpha',
+  ''
+].join('\n');
+const truncRec = Parser.parse(truncRaw);
+assert(truncRec.truncated && truncRec.truncated.firstLoggedTurn === 3, 'tronqué : détecté, 1er tour loggé = 3');
+eq(JSON.stringify(truncRec.truncated.missingTurns), '[1,2]', 'tronqué : tours manquants = [1,2]');
+assert(truncRec.health.ok === true, 'tronqué : health.ok reste true (partie conservée au dashboard)');
+assert(truncRec.warnings.some(w => /tronqué/i.test(w)), 'tronqué : un warning explicite est émis');
+eq(truncRec.turns[0].events.length, 0, 'tronqué : l\'Ouverture ne contient plus la fin orpheline');
+const t3Alpha = truncRec.turns.find(t => t.turnNumber === 3 && t.player === 'Alpha');
+eq(JSON.stringify(t3Alpha.hand), '["Meteor","Ember","Fff"]', 'tronqué : main du tour 3 = instantané #3 (pas de fuite de la main du tour 1)');
+const rBeta1 = truncRec.turns.find(t => t.turnNumber === 1 && t.player === 'Beta');
+assert(rBeta1 && rBeta1.reconstructed && JSON.stringify(rBeta1.hand) === '["Aaa","Bbb","Ccc"]', 'tronqué : tour 1 reconstruit avec sa main d\'instantané');
+const rAlpha2 = truncRec.turns.find(t => t.turnNumber === 2 && t.player === 'Alpha');
+assert(rAlpha2 && rAlpha2.reconstructed && rAlpha2.truncatedTail && rAlpha2.events.length > 0, 'tronqué : la fin orpheline est rattachée au tour reconstruit (Alpha #2), marqué truncatedTail');
+assert(truncRec.turns.filter(t => t.turnNumber > 0).every((t, i, a) => i === 0 || a[i - 1].turnNumber <= t.turnNumber), 'tronqué : tours dans l\'ordre chronologique');
+
 // Miroir : la main ne doit PAS avoir été filtrée par les cartes adverses.
 const t1 = rec.turns.find(t => t.player === 'Ehecalt' && t.turnNumber === 1);
 assert(t1 && Array.isArray(t1.hand) && t1.hand.indexOf('Bloodrush Bellow') >= 0, 'main tour 1 conservée (miroir)');
@@ -1229,6 +1296,36 @@ console.log('Grabber merge —');
     'merge: re-rendus complets répétés → aucun doublon (journal = 1 seule copie)');
   // Re-rendu identique répété : longueur stable.
   eq(run([full2, full2, full2]).length, full2.length, 'merge: re-rendu identique → longueur stable');
+
+  // ── stitchAdopt : adoption du chatLog sans perdre les 1ers tours (anti-troncature).
+  const sa0 = src.indexOf('function stitchAdopt');
+  const sabs = src.indexOf('{', sa0);
+  let sad = 0, sa1 = sabs;
+  for (; sa1 < src.length; sa1++) { const c = src[sa1]; if (c === '{') sad++; else if (c === '}' && --sad === 0) { sa1++; break; } }
+  const stitchAdopt = eval('(' + src.slice(sa0, sa1) + ')');
+  // Fenêtre chatLog TRONQUÉE (démarre au tour 3) alors que l'accumulé a les tours
+  // 1-2 → on préserve le préfixe puis on bascule (bug : la partie « commençait au
+  // tour 3 »). Aucune duplication (pas de chevauchement de n° de tour).
+  const capPrefix = ["Alpha's turn 1 has begun.", 'Alpha played A', "Beta's turn 2 has begun.", 'Beta played B'];
+  const visTrunc = ["Alpha's turn 3 has begun.", 'Alpha played C'];
+  eq(stitchAdopt(capPrefix, visTrunc).join('|'), capPrefix.concat(visTrunc).join('|'),
+    'stitchAdopt: fenêtre chatLog tronquée → préfixe (tours 1-2) préservé + fenêtre');
+  // Chevauchement complet (le chatLog démarre AUSSI au tour 1) → on adopte la
+  // fenêtre seule, pas de doublon des premiers tours.
+  const visFull = ["Alpha's turn 1 has begun.", 'Alpha played A', "Beta's turn 2 has begun.", 'Beta played B', "Alpha's turn 3 has begun."];
+  eq(stitchAdopt(capPrefix, visFull).join('|'), visFull.join('|'),
+    'stitchAdopt: chatLog complet (démarre au tour 1) → adopté seul (aucun doublon)');
+  // Chevauchement PARTIEL : accumulé tours 1-5, fenêtre tours 3-4 → on garde 1-2
+  // puis la fenêtre (3-4), sans dupliquer 3.
+  const capLong = ["A's turn 1 has begun.", "A's turn 2 has begun.", "A's turn 3 has begun.", "A's turn 4 has begun.", "A's turn 5 has begun."];
+  const visMid = ["A's turn 3 has begun.", "A's turn 4 has begun."];
+  eq(stitchAdopt(capLong, visMid).join('|'), ["A's turn 1 has begun.", "A's turn 2 has begun.", "A's turn 3 has begun.", "A's turn 4 has begun."].join('|'),
+    'stitchAdopt: chevauchement partiel → préfixe (1-2) + fenêtre (3-4), tour 3 non dupliqué');
+  // Format DOM (« Turn N<joueur> ») pour l'accumulé, chatLog pour la fenêtre.
+  eq(stitchAdopt(['Turn 1Alpha', 'Alpha played A'], visTrunc).join('|'), ['Turn 1Alpha', 'Alpha played A'].concat(visTrunc).join('|'),
+    'stitchAdopt: préfixe au format DOM (Turn N<joueur>) reconnu et préservé');
+  // Accumulé vide → adopte la fenêtre.
+  eq(stitchAdopt([], visTrunc).join('|'), visTrunc.join('|'), 'stitchAdopt: accumulé vide → fenêtre');
 
   // ── chatLogToLines : journal structuré (state.game.chatLog) → format parseur.
   // Dépendances de la fonction (référencées par clôture lexicale à l'eval).
