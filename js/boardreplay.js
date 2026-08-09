@@ -446,12 +446,21 @@
           a.used = true; total += a.amount; if (a.i > lastActual) lastActual = a.i;
           for (let j = a.i; j < evs.length; j++) { const f = evs[j]; if (f.type === 'damageTaken' && !dtUsed[j] && sideOf(f.player) === victim && (f.amount || 0) === a.amount) { dtUsed[j] = 1; st.life[victim] = Math.max(0, st.life[victim] - (f.amount || 0)); break; } }
         });
-        if (total <= 0) return null;
         // Menacé (buffs compris) : somme des lignes « is dealing N arcane damage »
         // (sans « from ») de la même source dans la fenêtre du sort. On retient aussi
-        // l'index de la 1re ligne menacée (borne basse de la prévention).
+        // l'index de la 1re ligne menacée (borne basse de la prévention). Calculé AVANT
+        // le court-circuit total<=0 : une carte TOTALEMENT prévenue (réel 0, ex. Snapback
+        // pitché à mort) n'a aucune entrée arcList (filtrée >0) mais doit quand même
+        // révéler son montant menacé + la prévention adverse (comme la vue Déroulé).
         let threat = 0, firstThreat = -1;
         arcThreat.forEach(a => { if (a.used || a.src !== k || a.i <= evIdx || a.i >= nextSame) return; a.used = true; threat += a.amount; if (firstThreat < 0 || a.i < firstThreat) firstThreat = a.i; });
+        // Prévention TOTALE (aucun dégât réel > 0) : pas de lastActual via arcList (les
+        // lignes « 0 arcane » y sont exclues). On borne alors la fenêtre à la 1re ligne
+        // « is dealing 0 arcane damage from <carte> » qui suit la menace.
+        if (lastActual < 0 && firstThreat >= 0) {
+          for (let j = firstThreat + 1; j < nextSame; j++) { const f = evs[j]; if (f.type === 'arcaneDamage' && f.actual && norm(f.source) === k) { lastActual = j; break; } }
+        }
+        if (total <= 0 && threat <= 0) return null;   // vraiment aucun arcane lié à cette carte
         // Prévention adverse : les pitches du DÉFENSEUR ENTRE la ligne « menacé » et
         // la dernière ligne de dégâts réels. Borner au bloc menacé→réel est crucial :
         // sinon un pitch payant un AUTRE effet adverse dans le même intervalle (ex.
