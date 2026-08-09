@@ -224,9 +224,21 @@
         '<div class="mh-hint">Les statistiques ci-dessous peuvent être erronées. Le journal brut est conservé : une mise à jour du lecteur pourra ré-analyser cette partie.</div>' +
       '</div>';
 
+    // Bandeau INFO (ton neutre, pas une alerte) quand le journal a été tronqué par
+    // le tampon roulant de Talishar : les premiers tours n'ont plus de texte, mais
+    // la partie reste légitime (résultat + stats complets) et ces tours sont
+    // reconstruits depuis les instantanés.
+    const trunc = GAME.truncated;
+    const truncHtml = !trunc ? '' :
+      '<div class="match-trunc">' +
+        '<div class="mt-title">✂️ Journal tronqué par Talishar — tours 1–' + trunc.count + ' sans texte</div>' +
+        '<div class="mt-hint">Sur les longues parties, le tampon de journal de Talishar est plein : le texte des premiers tours a défilé avant la capture. Ces tours sont <b>reconstruits depuis les instantanés</b> (main, vie, arsenal) — le détail des actions n’est pas disponible. Le reste de la partie et le résultat sont complets.</div>' +
+      '</div>';
+
     el.innerHTML =
       '<div class="match-card">' +
         healthHtml +
+        truncHtml +
         '<div class="match-heroes">' +
           sideHtml(me, curMe, 'me') +
           '<div class="match-mid"><span class="vs">VS</span></div>' +
@@ -774,7 +786,13 @@
     const nLabel = t.turnNumber === 0 ? 'Ouverture' : 'Tour ' + t.turnNumber;
     const kind = mine ? '⚔ Ton tour' : (active ? '🛡 Tour adverse' : '⚑ Ouverture');
     const dur = t.durationSec != null ? root.TalisharParser.formatDuration(t.durationSec) : null;
-    const dealt = t.damageToOpp || 0, taken = t.damageToMe || 0;
+    // Tour reconstruit et vide de texte : les dégâts calculés depuis les événements
+    // valent 0 → on retombe sur les stats officielles Talishar (mon côté) si dispo.
+    let dealt = t.damageToOpp || 0, taken = t.damageToMe || 0;
+    if (t.reconstructed && t.endStatsTurn && !t.events.length) {
+      dealt = t.endStatsTurn.dealt || 0;
+      taken = t.endStatsTurn.taken || 0;
+    }
     const div = document.createElement('div');
     div.className = 'rturn-sum' + (mine ? '' : ' opp');
     div.innerHTML =
@@ -788,6 +806,31 @@
         + '<div class="pill dealt">⚔ <span class="lbl">Infligé</span> <b>' + dealt + '</b></div>'
         + '<div class="pill taken">🩸 <span class="lbl">Subi</span> <b>' + taken + '</b></div>'
       + '</div>';
+    return div;
+  }
+
+  // Encart pour un tour RECONSTRUIT (journal tronqué par Talishar) : on explique
+  // que le texte des actions manque et on montre le résumé officiel Talishar quand
+  // il existe (mon côté seulement — endStats ne couvre pas l'adversaire).
+  function buildReconstructedNote(t) {
+    const div = document.createElement('div');
+    div.className = 'rturn-recon';
+    const es = t.endStatsTurn;
+    let stats = '';
+    if (es) {
+      const bits = [];
+      if (es.dealt) bits.push('⚔ Infligé <b>' + es.dealt + '</b>');
+      if (es.taken) bits.push('🩸 Subi <b>' + es.taken + '</b>');
+      if (es.pitched) bits.push('🔥 Pitché <b>' + es.pitched + '</b>');
+      if (es.lifeGained) bits.push('➕ Vie <b>' + es.lifeGained + '</b>');
+      if (es.lifeAtEnd != null) bits.push('❤ Fin <b>' + es.lifeAtEnd + '</b>');
+      if (bits.length) stats = '<div class="rr-stats">' + bits.join(' · ') + '</div>';
+    }
+    const head = t.truncatedTail
+      ? '🧩 Seule la <b>fin</b> de ce tour a été captée — son début a défilé hors du journal Talishar.'
+      : '🧩 Tour <b>reconstruit</b> — le texte du journal manque (tronqué par Talishar). Main / vie / arsenal ci-dessous proviennent des instantanés.';
+    div.innerHTML = '<div class="rr-head">' + head + '</div>' + stats
+      + (es ? '' : '<div class="rr-hint">Détail des actions indisponible pour ce tour.</div>');
     return div;
   }
 
@@ -853,6 +896,7 @@
     const defender = active === myName ? oppName : myName;
 
     wrap.appendChild(buildTurnSummary(t, active));
+    if (t.reconstructed) wrap.appendChild(buildReconstructedNote(t));
     wrap.appendChild(buildHoldBar(t));
 
     const { exchanges, oppResponses, secondary } = groupTurn(t, active, defender);

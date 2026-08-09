@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.20.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. Export texte / téléchargement + localStorage.
+// @version      1.21.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.20.0';
+  const VERSION = '1.21.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -374,6 +374,15 @@
     let ends = 0, starts = 0;
     for (const e of g.chatLog) { const t = strip(e); if (/Attempting to end turn/.test(t)) ends++; if (TURN_START_RE.test(t)) starts++; }
     if (ends >= 2 && starts === 0) issues.push('marqueur de début de tour [[TURN_START]] introuvable (format changé ?)');
+    // Journal tronqué en tête : notre journal ACCUMULÉ démarre au-delà du tour 1
+    // (partie ouverte en cours de route, 1ers tours déjà hors du tampon roulant
+    // Talishar → irrécupérables). Simple AVERTISSEMENT (ne bloque PAS l'envoi : les
+    // instantanés couvrent la partie et le parseur reconstruit ces tours).
+    if (Array.isArray(captured) && captured.length) {
+      let ft = null;
+      for (const l of captured) { const m = String(l).match(/'s turn (\d+) has begun\.$/) || String(l).match(/^Turn (\d+)\s*\S/); if (m) { ft = +m[1]; break; } }
+      if (ft != null && ft > 1) issues.push('journal tronqué en tête (démarre au tour ' + ft + ' — 1ers tours hors tampon Talishar)');
+    }
     canaryIssues = issues;
     if (issues.length && !runCanary._warned) {
       runCanary._warned = true;
@@ -459,6 +468,40 @@
     const r = mergeLines(captured, visible);
     captured = r.lines;
     if (r.from >= 0 && r.from <= captured.length - 1) recordTsBatch(r.from, captured.length - 1);
+  }
+
+  // Adoption du journal structuré (chatLog) quand un préfixe a DÉJÀ été accumulé
+  // (capture DOM antérieure, ou état restauré après un rechargement de page).
+  // Le `chatLog` de Talishar est un tampon BORNÉ : sur une longue partie il démarre
+  // déjà TRONQUÉ (ex. « turn 5 » — les 1ers tours ont défilé). Avant, on JETAIT tout
+  // l'accumulé dès que son 1er élément différait de la fenêtre chatLog → perte
+  // définitive des premiers tours (partie « qui commence au tour 5 »). Ici on
+  // PRÉSERVE le préfixe des tours que le chatLog ne contient plus, puis on bascule
+  // sur le chatLog pour la suite : aucun chevauchement de n° de tour → aucune
+  // duplication. Fonction PURE (testée dans tests/run.js).
+  function stitchAdopt(captured, visible) {
+    if (!captured || !captured.length) return (visible || []).slice();
+    if (!visible || !visible.length) return captured.slice();
+    // N° de tour d'une ligne, tous formats connus (chatLog « X's turn N has begun »,
+    // séparateur DOM « Turn N<joueur> », marqueur brut « [[TURN_START:N:j]] »).
+    const turnNoOf = line => {
+      const s = String(line);
+      let m = s.match(/'s turn (\d+) has begun/); if (m) return +m[1];
+      m = s.match(/^Turn (\d+)\s*\S/); if (m) return +m[1];
+      m = s.match(/\[\[TURN_START:(\d+):\d+\]\]/); if (m) return +m[1];
+      return null;
+    };
+    // 1er n° de tour repérable dans la fenêtre chatLog.
+    let firstVis = null;
+    for (const l of visible) { const n = turnNoOf(l); if (n != null) { firstVis = n; break; } }
+    if (firstVis == null) return visible.slice();          // pas de tour repérable → adopter
+    // 1re ligne de l'accumulé entamant le tour `firstVis` (ou un tour ultérieur).
+    // Par défaut, si AUCUN tour de l'accumulé n'atteint firstVis, tout l'accumulé
+    // précède la fenêtre → on le conserve intégralement (cut = fin).
+    let cut = captured.length;
+    for (let i = 0; i < captured.length; i++) { const n = turnNoOf(captured[i]); if (n != null && n >= firstVis) { cut = i; break; } }
+    if (cut <= 0) return visible.slice();                  // l'accumulé démarre déjà à firstVis → adopter la fenêtre
+    return captured.slice(0, cut).concat(visible);         // préfixe conservé + fenêtre chatLog
   }
 
   // ============================================================
@@ -899,7 +942,10 @@
         if (!chatLogAdopted) {
           chatLogAdopted = true;
           if (captured.length && captured[0] !== visible[0]) {
-            captured = []; tsBatches = []; lastVisibleSig = '';
+            // Avant : on jetait TOUT l'accumulé → perte des 1ers tours quand le
+            // chatLog démarre déjà tronqué. Maintenant : on préserve le préfixe des
+            // tours absents de la fenêtre chatLog, puis on bascule dessus.
+            captured = stitchAdopt(captured, visible); tsBatches = []; lastVisibleSig = '';
           }
         }
       } else {

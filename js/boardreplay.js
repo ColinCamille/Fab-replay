@@ -259,6 +259,23 @@
         st.oppArsenalCount = oppFromArsenal ? 1 : 0;
       }
 
+      // Tour RECONSTRUIT (journal tronqué par Talishar) : aucun texte d'action à
+      // rejouer. On pose une bannière explicite + l'état (main/vie/arsenal issus des
+      // instantanés, déjà calés ci-dessus) puis on passe au tour suivant. Le tour
+      // dont seule la FIN a été captée (truncatedTail) garde ses événements et suit
+      // le flux normal ci-dessous.
+      if (t.reconstructed && !(t.events && t.events.length)) {
+        if (actor === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.meHandPitches = padPitches(st.meHandCards, t.handPitches); st.oppHandCount = 4; }
+        else if (t.hand && t.hand.length) { st.meFaceUp = true; st.meHandCards = t.hand.slice(); st.meHandPitches = padPitches(st.meHandCards, t.handPitches); }
+        else { st.meFaceUp = false; st.meHandCount = 4; }
+        const es = t.endStatsTurn;
+        const sub = (es && (es.dealt || es.taken))
+          ? ('reconstruit · ⚔ ' + (es.dealt || 0) + ' · 🩸 ' + (es.taken || 0) + ' · Toi ' + st.life.me + ' · Adv ' + st.life.opp + ' PV')
+          : ('reconstruit — texte indisponible · Toi ' + st.life.me + ' · Adv ' + st.life.opp + ' PV');
+        push(label, atkSide, { type: 'banner', side: atkSide, big: actor === MY ? 'Ton tour (reconstruit)' : 'Tour adverse (reconstruit)', sub });
+        return;
+      }
+
       if (opening) {
         // Bannière de début PUIS on rejoue les actions du 1er tour (comme le
         // Déroulé) au lieu de sauter le tour. Main de départ affichée.
@@ -309,7 +326,8 @@
         // lever l'ambiguïté « bug d'affichage » vs « le joueur a réellement passé ».
         const noAction = !(t.events || []).some(e => e.type === 'played' || e.type === 'activated');
         push(label, atkSide, { type: 'banner', side: atkSide, big: actor === MY ? 'Ton tour' : 'Tour adverse',
-          sub: 'Toi ' + st.life.me + ' · Adv ' + st.life.opp + ' PV' + (noAction ? ' · passe (aucune action)' : '') });
+          sub: 'Toi ' + st.life.me + ' · Adv ' + st.life.opp + ' PV' + (noAction ? ' · passe (aucune action)' : '')
+            + (t.truncatedTail ? ' · fin de tour seulement (journal tronqué)' : '') });
       }
 
       // D — Réordonner les activations d'ARME-buff (ex. Volzar, Meteor Storm) juste
@@ -740,7 +758,14 @@
     // affichée par le dernier instantané dont la position ≤ celle de l'étape — ce qui
     // rend visibles pioches (Sigil, pouvoir d'Oscilio, Third Eye…) et jeux hors-main.
     // Absent (vieux logs) → on garde la reconstruction « snapshot − cartes jouées ».
-    const HT = Array.isArray(GAME.handTimeline) ? GAME.handTimeline : [];
+    // JOURNAL TRONQUÉ : quand Talishar a fait défiler les premiers tours hors du
+    // tampon, les POSITIONS de la HAND TIMELINE (compteur de lignes du grabber) ne
+    // s'alignent plus sur le log retenu (renuméroté) → des mains anciennes (ex.
+    // instantané #1 : Sigil of Aether, Shelter) « saignaient » sur des tours bien
+    // plus tardifs (tour 5). On DÉSACTIVE alors la surcharge par position et on
+    // retombe sur la main-instantané par tour (t.hand, clé « joueur#tour », fiable)
+    // moins les cartes jouées — comme les vieux logs sans timeline.
+    const HT = (Array.isArray(GAME.handTimeline) && !GAME.truncated) ? GAME.handTimeline : [];
     if (HT.length) {
       const firstPos = HT[0].pos;
       // Renvoie l'ENTRÉE timeline courante (nom + impression) pour colorer la main.

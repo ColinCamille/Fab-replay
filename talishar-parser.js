@@ -701,6 +701,69 @@
       if (fp) { turns[0].player = fp; turns[0].label = fp + ' — Ouverture (joue en premier)'; }
     }
 
+    // 4bis) TRONCATURE DU JOURNAL (tampon roulant Talishar)
+    // Le `state.game.chatLog` de Talishar est un tampon BORNÉ : sur une partie
+    // longue, ses premières lignes défilent hors du tampon avant la capture. Le
+    // corps du log DÉMARRE alors en plein milieu (ex. « turn 5 »), la fin du tour
+    // précédent reste orpheline (sans en-tête) dans l'Ouverture, et les tours
+    // antérieurs n'ont plus de texte — ALORS QUE les instantanés (main/vie/arsenal/
+    // formes) et END GAME STATS, eux, couvrent la partie depuis le tour 1. On
+    // détecte l'écart et on RECONSTRUIT les tours manquants depuis les instantanés,
+    // au lieu de laisser la fin orpheline polluer l'Ouverture (« tour 0 » incohérent :
+    // sort sans pitch, Volzar sans cimetière, carte hors main de départ, PV en moins…).
+    // NB : on NE marque PAS health.ok=false (la partie est légitime, résultat +
+    // endStats complets) pour la garder dans le tableau de bord ; simple `warnings`.
+    let truncated = null;
+    {
+      const realTurns0 = turns.filter(t => t.turnNumber > 0);
+      const firstLoggedTurn = realTurns0.length ? Math.min.apply(null, realTurns0.map(t => t.turnNumber)) : 0;
+      // n° de tour connus des instantanés (clés « Nom#N »), hors ouverture.
+      const snapTurnNos = new Set();
+      const collectNos = obj => Object.keys(obj || {}).forEach(k => { const mm = k.match(/#(\d+)$/); if (mm) snapTurnNos.add(parseInt(mm[1], 10)); });
+      collectNos(lifeSnapshots); collectNos(handSnapshots); collectNos(heroFormSnapshots);
+      const missingTurns = [];
+      for (let n = 1; n < firstLoggedTurn; n++) if (snapTurnNos.has(n)) missingTurns.push(n);
+      // On ne reconstruit que si les deux joueurs (donc l'ordre de manche) sont connus.
+      if (missingTurns.length && myName && oppName) {
+        // Ordre intra-manche : 1re manche loggée COMPLÈTE (2 tours consécutifs de
+        // même n°). Repli : le 1er tour loggé ouvre la manche.
+        let roundOrder = [realTurns0[0].player, realTurns0[0].player === myName ? oppName : myName];
+        for (let i = 0; i < realTurns0.length - 1; i++) {
+          if (realTurns0[i + 1].turnNumber === realTurns0[i].turnNumber) { roundOrder = [realTurns0[i].player, realTurns0[i + 1].player]; break; }
+        }
+        // Tour immédiatement AVANT le 1er tour loggé : c'est SA fin orpheline qui est
+        // retombée dans l'Ouverture (turns[0]).
+        const firstReal = realTurns0[0];
+        let precPlayer, precTurn;
+        if (firstReal.player === roundOrder[0]) { precPlayer = roundOrder[1]; precTurn = firstLoggedTurn - 1; }
+        else { precPlayer = roundOrder[0]; precTurn = firstLoggedTurn; }
+        // Fabrique des tours reconstruits (VIDES ; les instantanés les rempliront au
+        // §6 via la clé « joueur#tour »). Deux par manche manquante, dans l'ordre.
+        const mk = (pl, n) => ({ player: pl, turnNumber: n, label: pl + ' — Tour ' + n + ' (reconstruit)', events: [], _lineIdx: [], reconstructed: true });
+        const synth = [];
+        missingTurns.forEach(n => { roundOrder.forEach(pl => { synth.push(mk(pl, n)); }); });
+        // Le tour « précédent » (fin orpheline) n'est pas toujours dans missingTurns
+        // (démarrage en MILIEU de manche) : on l'ajoute alors explicitement.
+        let precTurnObj = synth.find(t => t.player === precPlayer && t.turnNumber === precTurn);
+        if (!precTurnObj) { precTurnObj = mk(precPlayer, precTurn); synth.push(precTurnObj); }
+        // Déplacer la fin orpheline (événements retombés dans l'Ouverture) vers ce
+        // tour reconstruit, et rendre à l'Ouverture son seul rôle : la main de départ.
+        if (turns[0] && turns[0].events.length) {
+          precTurnObj.events = turns[0].events;
+          precTurnObj._lineIdx = turns[0]._lineIdx || [];
+          precTurnObj.truncatedTail = true;   // début du tour perdu, seule la fin subsiste
+          turns[0].events = [];
+          turns[0]._lineIdx = [];
+        }
+        // Insérer entre l'Ouverture et le 1er tour loggé, dans l'ordre chronologique.
+        synth.sort((a, b) => (a.turnNumber - b.turnNumber) || (roundOrder.indexOf(a.player) - roundOrder.indexOf(b.player)));
+        turns.splice(1, 0, ...synth);
+        truncated = { firstLoggedTurn, missingTurns: missingTurns.slice(), count: firstLoggedTurn - 1 };
+        warnings.push('Log tronqué par Talishar : le texte des tours 1–' + (firstLoggedTurn - 1) +
+          ' manque (tampon de journal roulant, partie longue). Replay partiel — ces tours sont reconstruits depuis les instantanés.');
+      }
+    }
+
     // 5) Sanitize : un équipement porté (casque, torse, arme...) ne peut
     // structurellement jamais être une carte de main ou d'arsenal — on le
     // retire s'il s'y trouve. On NE retire RIEN d'autre : les instantanés de
@@ -752,6 +815,10 @@
       if (t.turnNumber === 0 && i === 0) return '__opening__';
       return (t.player || myName) + '#' + t.turnNumber;
     }
+    // Résumé officiel Talishar par tour (mon côté SEULEMENT — endStats ne couvre
+    // que le joueur local). Rattaché à chaque tour ci-dessous ; sert surtout à
+    // renseigner les tours reconstruits (dégâts/pitchs/vie sans texte de journal).
+    const esMe0 = (endStatsRes.endStats && endStatsRes.endStats.me) || null;
     turns.forEach((t, i) => {
       const key = snapKeyFor(t, i);
       t.snapshotKey = key;
@@ -775,6 +842,10 @@
       t.heroForm = (key in heroFormSnapshots) ? heroFormSnapshots[key] : null;
       t.life = (key in lifeSnapshots) ? lifeSnapshots[key] : null;
       t.side = t.player === myName ? 'me' : (t.player === oppName ? 'opp' : null);
+      // Stats officielles de CE tour (mon côté) — endStats.turns est numéroté comme
+      // le journal (turn_5 = mon tour 5). null côté adverse / vieux logs.
+      t.endStatsTurn = (t.side === 'me' && esMe0 && Array.isArray(esMe0.turns))
+        ? (esMe0.turns.find(x => x.turn === t.turnNumber) || null) : null;
       // timing depuis les événements horodatés du tour
       const tss = t.events.map(e => e.ts).filter(v => v != null);
       t.startTs = tss.length ? Math.min.apply(null, tss) : null;
@@ -873,8 +944,10 @@
     let reconMe = startLifeMe, reconOpp = startLifeOpp;
     turns.forEach((t, ti) => {
       const snap = t.life;
-      // recoupement (tolérance 2 : petits soins/effets non parsés tolérés)
-      if (snap && snap.me != null && Math.abs(snap.me - reconMe) > 2)
+      // recoupement (tolérance 2 : petits soins/effets non parsés tolérés). Les
+      // tours RECONSTRUITS n'ont pas d'événements → la reconstruction par deltas
+      // diverge forcément du snapshot : on ne recoupe pas (faux positifs garantis).
+      if (!t.reconstructed && snap && snap.me != null && Math.abs(snap.me - reconMe) > 2)
         warnings.push(`Vie (toi) début tour ${ti} : relevé=${snap.me} vs calcul=${reconMe} — un effet a pu échapper au parseur.`);
       const meVal = (snap && snap.me != null) ? snap.me : reconMe;
       const oppVal = (snap && snap.opp != null) ? snap.opp : reconOpp;
@@ -1029,6 +1102,7 @@
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,
       endStats: endStatsRes.endStats,
+      truncated,                    // { firstLoggedTurn, missingTurns, count } si journal tronqué, sinon null
       warnings,
       health,
       rawChatLog,
