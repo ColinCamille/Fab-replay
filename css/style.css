@@ -1417,6 +1417,9 @@ footer a{color:var(--text-dim)}
 .br-pcard .br-nm{position:absolute;left:0;right:0;bottom:0;z-index:2;font-size:.5rem;line-height:1.05;padding:9px 3px 3px;color:#e9e6da;text-align:center;background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.45) 60%,transparent);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px #000}
 .br-pitch-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#82b4dd;background:#16273655;border:1px solid #2c4a6366;border-radius:999px;padding:1px 7px;margin-top:2px;
   max-width:200px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center;border-radius:12px}   /* plafond ABSOLU (indépendant du conteneur) → la liste des cartes pitchées s'enroule et n'élargit jamais le plateau */
+/* Défausse provoquée par la carte (ex. Golden Tipple) : même gabarit que le pitch, teinte « défausse » (gris/rouge sourd). */
+.br-discard-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#d79a9a;background:#2a171755;border:1px solid #63393966;padding:1px 7px;margin-top:2px;
+  max-width:200px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center;border-radius:12px}
 /* Prévention d'arcane : dégâts menacés (buffs compris) réduits par un pitch adverse. */
 .br-arc-prevent{margin-top:5px;font:.62rem 'JetBrains Mono',monospace;color:#c9a227;background:#3a2f0f55;border:1px solid #7a642855;border-radius:12px;padding:2px 8px;
   max-width:220px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center}
@@ -1467,8 +1470,22 @@ footer a{color:var(--text-dim)}
 .br-act{font-size:.66rem;color:#f0b429;letter-spacing:.05em;text-transform:uppercase;font-weight:700}
 /* Aperçu grande carte au survol d'une tuile (desktop) */
 .br-preview{position:fixed;width:224px;height:313px;border-radius:14px;background-size:contain;background-repeat:no-repeat;background-position:center;background-color:#0c0f17;
-  border:1px solid var(--line-2);box-shadow:0 10px 34px rgba(0,0,0,.7);opacity:0;pointer-events:none;z-index:2100;transition:opacity .1s}
+  border:1px solid var(--line-2);box-shadow:0 10px 34px rgba(0,0,0,.7);opacity:0;pointer-events:none;z-index:2300;transition:opacity .1s}
 .br-preview.show{opacity:1}
+/* Zone cliquable (cimetière/banni/pitch/arsenal) : curseur main + léger halo. */
+.br-slot.br-clickable{cursor:pointer}
+.br-slot.br-clickable:hover{outline:2px solid var(--accent,#82b4dd);outline-offset:1px}
+/* Overlay « contenu d'une zone » : liste TOUTES les cartes de la zone à l'étape
+   courante. Dans le conteneur (position:absolute) → OK en plein écran natif. */
+.br-zoom{position:absolute;inset:0;z-index:2200;display:flex;align-items:center;justify-content:center;background:rgba(6,8,14,.82);padding:16px}
+.br-zoom[hidden]{display:none}
+.br-zoom-panel{background:var(--panel,#0f1420);border:1px solid var(--line-2,#33405e);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.7);max-width:min(680px,94%);max-height:88%;display:flex;flex-direction:column;overflow:hidden}
+.br-zoom-head{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line,#22304a)}
+.br-zoom-title{font:700 .8rem 'JetBrains Mono',monospace;color:var(--text,#e9e6da)}
+.br-zoom-close{margin-left:auto;cursor:pointer;background:transparent;border:1px solid var(--line-2,#33405e);border-radius:6px;color:var(--text-dim,#cdd2e0);font-size:.9rem;line-height:1;padding:3px 8px}
+.br-zoom-close:hover{background:#ffffff14}
+.br-zoom-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px;padding:14px;overflow-y:auto}
+.br-zoom-grid .br-zcard{width:100%;aspect-ratio:5/7;height:auto}
 .br-timeline{margin-top:14px}
 .br-tl-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
 .br-tl-lbl{font:.72rem 'JetBrains Mono',monospace;color:var(--text-dim)}
@@ -1525,7 +1542,7 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-tokrow{gap:6px;max-width:300px}
   #boardReplay .br-tok{width:62px}
   #boardReplay .br-playone{max-width:100%}
-  #boardReplay .br-pitch-pill{max-width:100%;white-space:normal;text-align:center}
+  #boardReplay .br-pitch-pill,#boardReplay .br-discard-pill{max-width:100%;white-space:normal;text-align:center}
   #boardReplay .br-big{font-size:1.5rem}
   #boardReplay .br-sub{font-size:.95rem}
   #boardReplay .br-cardrow{max-width:none}
