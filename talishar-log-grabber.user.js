@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.21.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. Export texte / téléchargement + localStorage.
+// @version      1.22.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.21.0';
+  const VERSION = '1.22.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -26,6 +26,7 @@
   const LS_ARSENAL_PREFIX = 'taliArsenal_';
   const LS_OPPARS_PREFIX = 'taliOppArs_';
   const LS_FIELD_PREFIX = 'taliField_';
+  const LS_FIELDTL_PREFIX = 'taliFieldTl_';
   const LS_GRAVE_PREFIX = 'taliGrave_';
   const LS_BANISH_PREFIX = 'taliBanish_';
   const LS_LIFE_PREFIX = 'taliLife_';
@@ -58,6 +59,7 @@
   let arsenalSnapshots = {};
   let oppArsenalSnapshots = {};  // clé tour -> nombre de cartes en arsenal ADVERSE (face cachée : compte seul, jamais le nom)
   let fieldSnapshots = {};  // clé tour -> { me: [noms], opp: [noms] } (permanents/tokens en jeu)
+  let fieldTimeline = [];   // [{ pos, me, opp }] à CHAQUE changement du terrain (jetons/auras éphémères)
   let graveSnapshots = {};  // clé tour -> { me, opp } (cimetière, zone publique)
   let banishSnapshots = {}; // clé tour -> { me, opp } (banni, zone publique)
   let heroFormSnapshots = {}; // clé tour -> { me, opp } (FORME du héros ce tour-là : Arakni se transforme)
@@ -515,6 +517,7 @@
       localStorage.setItem(LS_ARSENAL_PREFIX + gameName, JSON.stringify(arsenalSnapshots));
       localStorage.setItem(LS_OPPARS_PREFIX + gameName, JSON.stringify(oppArsenalSnapshots));
       localStorage.setItem(LS_FIELD_PREFIX + gameName, JSON.stringify(fieldSnapshots));
+      localStorage.setItem(LS_FIELDTL_PREFIX + gameName, JSON.stringify(fieldTimeline));
       localStorage.setItem(LS_GRAVE_PREFIX + gameName, JSON.stringify(graveSnapshots));
       localStorage.setItem(LS_BANISH_PREFIX + gameName, JSON.stringify(banishSnapshots));
       localStorage.setItem(LS_HEROFORM_PREFIX + gameName, JSON.stringify(heroFormSnapshots));
@@ -536,6 +539,7 @@
     arsenalSnapshots = read(LS_ARSENAL_PREFIX + gameName, {});
     oppArsenalSnapshots = read(LS_OPPARS_PREFIX + gameName, {});
     fieldSnapshots = read(LS_FIELD_PREFIX + gameName, {});
+    fieldTimeline = read(LS_FIELDTL_PREFIX + gameName, []);
     graveSnapshots = read(LS_GRAVE_PREFIX + gameName, {});
     banishSnapshots = read(LS_BANISH_PREFIX + gameName, {});
     heroFormSnapshots = read(LS_HEROFORM_PREFIX + gameName, {});
@@ -797,6 +801,16 @@
         const last = handTimeline.length ? handTimeline[handTimeline.length - 1].cards : null;
         const changed = !last || last.length !== hand.length || hand.some((c, k) => c !== last[k]);
         if (changed) handTimeline.push({ pos: captured.length, cards: hand });
+      }
+      // TIMELINE du TERRAIN : à CHAQUE tick, si les permanents (2 camps) ont CHANGÉ,
+      // on ajoute { pos, me, opp }. Scanner plus souvent que l'instantané par-tour
+      // rattrape les jetons/auras créés PUIS consommés dans un même tour (ex. Ponder
+      // de Turn to Mindfire, aura sous effet de carte) — invisibles aux frontières.
+      const f = extractField();
+      if (f) {
+        const lastF = fieldTimeline.length ? fieldTimeline[fieldTimeline.length - 1] : null;
+        const same = a => lastF && lastF[a].length === f[a].length && f[a].every((c, k) => c === lastF[a][k]);
+        if (!lastF || !(same('me') && same('opp'))) fieldTimeline.push({ pos: captured.length, me: f.me, opp: f.opp });
       }
     }
     // Snapshot d'OUVERTURE — deux régimes.
@@ -1151,6 +1165,16 @@
     return '\n=== HAND TIMELINE (main, à chaque changement | pos = ligne de log) ===\n' + lines.join('\n') + '\n';
   }
 
+  // TIMELINE du TERRAIN : un instantané par CHANGEMENT (dédupliqué), clé = position
+  // de log. Format : [pos] me: … | opp: …. Révèle les jetons/auras éphémères d'un
+  // même tour (vue Table). Vide → bloc omis (rétrocompat).
+  function fieldTimelineBlockText() {
+    if (!fieldTimeline.length) return '';
+    const fmt = a => (a && a.length) ? a.join(', ') : '(vide)';
+    const lines = fieldTimeline.map(e => '[' + e.pos + '] me: ' + fmt(e.me) + ' | opp: ' + fmt(e.opp));
+    return '\n=== FIELD TIMELINE (terrain, à chaque changement | pos = ligne de log) ===\n' + lines.join('\n') + '\n';
+  }
+
   // Bloc « 2 camps » (terrain / cimetière / banni) : [tour] me: … | opp: …
   function twoCampBlock(title, snaps) {
     const keys = Object.keys(snaps);
@@ -1297,6 +1321,7 @@
       + snapshotBlockText('OPP ARSENAL COUNT (arsenal adverse : NOMBRE de cartes face cachée — le nom reste inconnu)', oppArsenalSnapshots,
           v => String(v == null ? 0 : v))
       + fieldBlockText()
+      + fieldTimelineBlockText()
       + graveBlockText()
       + banishBlockText()
       + heroFormBlockText()
@@ -1427,7 +1452,7 @@
   function clearLog() {
     if (!confirm('Effacer le log, les snapshots et les métadonnées capturés de cette partie ?')) return;
     captured = []; lastVisibleSig = ''; handSnapshots = {}; handTimeline = []; arsenalSnapshots = {}; oppArsenalSnapshots = {};
-    fieldSnapshots = {}; graveSnapshots = {}; banishSnapshots = {}; lifeSnapshots = {}; tsBatches = []; meta = {};
+    fieldSnapshots = {}; fieldTimeline = []; graveSnapshots = {}; banishSnapshots = {}; lifeSnapshots = {}; tsBatches = []; meta = {};
     chainLinks = []; pendingChain = null;
     lastTurnKey = null; openingSnapped = false; openingPreAction = false;
     save(); updateUI();

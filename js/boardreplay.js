@@ -234,16 +234,23 @@
       // Transformation de héros (Arakni) : si la forme relevée en début de ce tour
       // diffère de la forme courante, on la met à jour ET on annonce le changement
       // par une étape dédiée (visible dans la timeline + le plateau qui suit).
+      // On met à jour la FORME courante tôt (pour que tout ce tour affiche la bonne
+      // forme), mais on DIFFÈRE l'étape « Transformation » : poussée maintenant, elle
+      // porterait la main de FIN du tour précédent (la main de CE tour n'est posée
+      // qu'à la bannière, plus bas) et serait ensuite écrasée par un instantané
+      // intermédiaire de la HAND TIMELINE → « flicker » du compte de main. On la
+      // pousse APRÈS la bannière, avec la main de début de tour, comme la bannière.
+      const startTransforms = [];
       if (t.heroForm) {
         ['me', 'opp'].forEach(sd => {
           const nf = t.heroForm[sd];
           if (nf && !sameHero(nf, curForm[sd])) {
             const prev = curForm[sd];
             curForm[sd] = nf;
-            // Bannière SEULEMENT si une forme antérieure était déjà connue (vraie
+            // Étape SEULEMENT si une forme antérieure était déjà connue (vraie
             // transformation). Sinon (forme initiale pas encore résolue au 1er
             // instantané) on l'établit en silence — pas de « null → X » parasite.
-            if (prev) push(t.label || label, sd, { type: 'transform', side: sd, big: '🕷 Transformation', sub: prev + ' → ' + nf });
+            if (prev) startTransforms.push({ sd, prev, nf });
           }
         });
       }
@@ -329,6 +336,14 @@
           sub: 'Toi ' + st.life.me + ' · Adv ' + st.life.opp + ' PV' + (noAction ? ' · passe (aucune action)' : '')
             + (t.truncatedTail ? ' · fin de tour seulement (journal tronqué)' : '') });
       }
+
+      // Transformations de DÉBUT de tour (différées ci-dessus) : poussées APRÈS la
+      // bannière → elles portent la main de début de tour (snap() à jour). Marquées
+      // startOfTurn:true pour que la surcharge par HAND TIMELINE les laisse tranquilles
+      // (comme les bannières) au lieu d'y coller une main intermédiaire.
+      startTransforms.forEach(({ sd, prev, nf }) => {
+        push(t.label || label, sd, { type: 'transform', side: sd, startOfTurn: true, big: '🕷 Transformation', sub: prev + ' → ' + nf });
+      });
 
       // D — Réordonner les activations d'ARME-buff (ex. Volzar, Meteor Storm) juste
       // AVANT le sort qu'elles renforcent. Le log les logue APRÈS le sort (juste avant
@@ -498,6 +513,30 @@
         // Renforts éventuels (attaque hors-combat) : affichés à part pour ne pas les perdre.
         (openAtk.pumps || []).forEach(p => push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: p.nm, cp: p.cp }, reaction: true, text: HERO[openAtk.side] + ' joue ' + p.nm + (p.pTxt || '') }));
         openAtk = null;
+      };
+      // Combat NON résolu (abandon EN PLEIN combat, journal tronqué…) : aucun
+      // « Combat resolved » ne fermera l'échange. L'attaquant en attente et SURTOUT
+      // les bloqueurs (dont un bloc ÉQUIPEMENT, ex. Crown of Providence) + la
+      // puissance effective de la chaîne (ex. Kiss of Death à 11) seraient perdus.
+      // On matérialise alors un échange « interrompu » (sans nombre de dégâts).
+      // Ne se déclenche QUE s'il y a un attaquant en attente ET au moins un bloc /
+      // une réaction en attente (sinon flushAtk/flushBuf gèrent la carte seule).
+      const flushPendingCombat = () => {
+        const pendingAtk = hasChain ? (atkBuf.length ? atkBuf[0] : null) : openAtk;
+        if (!pendingAtk || (!curBlocks.length && !curReactions.length)) return;
+        const link = hasChain ? (chainQ.shift() || null) : takeChain(pendingAtk.nm);
+        const after = hasChain ? atkBuf.slice(1) : (openAtk.pumps || []);
+        if (!isEquip(atkSide, pendingAtk.nm)) toGrave(atkSide, pendingAtk.nm);
+        after.forEach(x => { if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); });
+        curBlocks.forEach(b => { if (!b.eq) toGrave(b.owner, b.card); });
+        curReactions.forEach(r => toGrave(r.owner, r.card));
+        const defSide = atkSide === 'me' ? 'opp' : 'me';
+        const defCards = curBlocks.map(b => ({ nm: b.card, cp: b.cp }));
+        const reactions = curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card, cp: r.cp }));
+        const blockWho = curBlocks.length ? curBlocks[0].owner : defSide;
+        const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
+        push(label, atkSide, { type: 'clash', atk: { nm: pendingAtk.nm, cp: pendingAtk.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, reactions, blockWho, verdict: 'interrupted', result: 'combat interrompu' , text: blkTxt });
+        atkBuf = []; openAtk = null; curBlocks = []; curReactions = [];
       };
       evs.forEach((e, i) => {
         if (consumed[i] || ended) return;
@@ -747,6 +786,7 @@
           // le coup fatal n'apparaissait alors nulle part. On affiche le vainqueur,
           // les PV finaux (perdant à 0 sur une mort, PV réels sur un abandon) et
           // la dernière carte jouée/activée comme « coup fatal ».
+          flushPendingCombat();   // combat en cours au moment de l'abandon → échange interrompu (bloc équipement + puissance conservés)
           flushAtk(); flushBuf(); flushTransforms();
           const conceded = e.type === 'conceded';
           const winnerSide = conceded ? (sideOf(e.player) === 'me' ? 'opp' : 'me') : (e.player ? sideOf(e.player) : null);
@@ -759,6 +799,7 @@
           ended = true;
         }
       });
+      flushPendingCombat();   // combat jamais résolu (journal tronqué en plein échange) → échange interrompu
       flushAtk(); flushBuf(); flushTransforms();   // fin de tour : dernière action hors-combat / transfo orpheline affichée
     });
 
@@ -817,7 +858,9 @@
         // 4, tour 1 à 2 au lieu de 3). On NE surcharge donc PAS les bannières — la
         // timeline ne sert qu'à révéler les changements PENDANT le tour.
         const idx = s._idx == null ? 0 : s._idx;
-        if (s.stage && s.stage.type === 'banner') {
+        // Bannière OU transfo de DÉBUT de tour : même traitement (main de début de
+        // tour fiable, pas de surcharge par position — seed-si-vide seulement).
+        if (s.stage && (s.stage.type === 'banner' || (s.stage.type === 'transform' && s.stage.startOfTurn))) {
           // On NE surcharge PAS une bannière qui porte déjà une main fiable
           // (instantané `t.hand`). Exception : si cette main est VIDE (instantané
           // parasite écarté à l'assainissement, ex. Oscilio T5/T8), on la seede en
@@ -841,6 +884,22 @@
         if (idx + 1 < firstPos) return;
         const e = entryAt(idx);
         if (e && e.cards) { const r = reconcile(e.cards, e.pitches, e.pos, idx); s.state.meFaceUp = true; s.state.meHandCards = r.cards; s.state.meHandPitches = padPitches(r.cards, r.pitches); }
+      });
+    }
+
+    // TERRAIN FIDÈLE via la FIELD TIMELINE (grabber v1.22.0+ : le terrain capté à
+    // CHAQUE changement, pas seulement aux frontières de tour). Révèle les jetons/auras
+    // ÉPHÉMÈRES créés PUIS consommés dans un même tour (ex. Ponder de Turn to Mindfire),
+    // que l'instantané par-tour rate. On surcharge, pour chaque étape, les tokens des
+    // deux camps par le dernier instantané dont la position ≤ celle de l'étape. Absent
+    // (vieux logs) ou journal tronqué → on garde le terrain par-tour (t.field) + le
+    // plancher Runechant, aucun changement.
+    const FT = (Array.isArray(GAME.fieldTimeline) && !GAME.truncated) ? GAME.fieldTimeline : [];
+    if (FT.length) {
+      const fieldAt = idx => { let e = null; for (let h = 0; h < FT.length; h++) { if (FT[h].pos <= idx + 1) e = FT[h]; else break; } return e; };
+      steps.forEach(s => {
+        const e = fieldAt(s._idx == null ? 0 : s._idx);
+        if (e) { s.state.meTokens = (e.me || []).slice(); s.state.oppTokens = (e.opp || []).slice(); }
       });
     }
 
@@ -996,7 +1055,7 @@
         // SOUS la défense, pour signaler qu'ils ont été joués sans les faire passer
         // pour des bloqueurs (ils n'ont pas de valeur de défense).
         const reacts = (s.reactions && s.reactions.length) ? '<div class="br-reacts"><span class="br-reacts-lbl">↩ réactions</span><div class="br-cardrow">' + s.reactions.map(r => pcard(r, s.blockWho)).join('') + '</div></div>' : '';
-        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + pumps + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div>' + reacts + '</div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : '💥 ') + esc(s.result) + '</div>';
+        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + pumps + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div>' + reacts + '</div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : s.verdict === 'interrupted' ? '⚔ ' : '💥 ') + esc(s.result) + '</div>';
       }
       return '';
     }

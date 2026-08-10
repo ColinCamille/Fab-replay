@@ -284,6 +284,28 @@
     return { rest, timeline: out };
   }
 
+  // TIMELINE du TERRAIN (permanents/tokens en jeu, DEUX camps) à chaque changement.
+  // Clé = position de log (comme HAND TIMELINE). Sert à révéler les jetons/auras
+  // créés PUIS consommés dans un même tour (ex. Ponder de Turn to Mindfire), que
+  // l'instantané par-tour (pris aux frontières de tour) rate. Format d'une ligne :
+  //   [pos] me: a, b | opp: c, d
+  function parseFieldTimelineBlock(text, marker) {
+    const out = [];
+    const { rest, body } = sliceBlock(text, marker);
+    if (body == null) return { rest: text, timeline: out };
+    const lineRe = /^\[(\d+)\]\s*(.*)$/gm;
+    const parseList = s => (!s || /^\(vide\)$/i.test(s.trim())) ? [] : s.split(',').map(x => x.trim()).filter(Boolean);
+    let hm;
+    while ((hm = lineRe.exec(body))) {
+      const pos = parseInt(hm[1], 10);
+      if (!isFinite(pos)) continue;
+      const mm = hm[2].match(/me:\s*(.*?)\s*\|\s*opp:\s*(.*)$/i);
+      out.push({ pos, me: mm ? parseList(mm[1]) : [], opp: mm ? parseList(mm[2]) : [] });
+    }
+    out.sort((a, b) => a.pos - b.pos);
+    return { rest, timeline: out };
+  }
+
   // Bloc terrain : permanents/tokens en jeu, DEUX camps par tour.
   // Format d'une ligne : [LABEL] me: a, b | opp: c, d
   function parseFieldSnapshotBlock(text, marker) {
@@ -481,6 +503,7 @@
     const lifeRes = parseLifeSnapshotBlock(text, '=== LIFE SNAPSHOTS'); text = lifeRes.rest;
     const handRes = parseCardSnapshotBlock(text, '=== HAND SNAPSHOTS'); text = handRes.rest;
     const handTlRes = parseHandTimelineBlock(text, '=== HAND TIMELINE'); text = handTlRes.rest;
+    const fieldTlRes = parseFieldTimelineBlock(text, '=== FIELD TIMELINE'); text = fieldTlRes.rest;
     const arsRes = parseCardSnapshotBlock(text, '=== ARSENAL SNAPSHOTS'); text = arsRes.rest;
     const oppArsRes = parseCountSnapshotBlock(text, '=== OPP ARSENAL COUNT'); text = oppArsRes.rest;
     const fieldRes = parseFieldSnapshotBlock(text, '=== FIELD SNAPSHOTS'); text = fieldRes.rest;
@@ -504,6 +527,7 @@
     const handSnapshots = handRes.snapshots;
     const handPitchSnapshots = handRes.pitches;   // impression (1/2/3|null) parallèle à handSnapshots
     const handTimeline = handTlRes.timeline;
+    const fieldTimeline = fieldTlRes.timeline;
     const arsenalSnapshots = arsRes.snapshots;
     const oppArsenalCounts = oppArsRes.snapshots;
     const fieldSnapshots = fieldRes.snapshots;
@@ -819,12 +843,47 @@
     // que le joueur local). Rattaché à chaque tour ci-dessous ; sert surtout à
     // renseigner les tours reconstruits (dégâts/pitchs/vie sans texte de journal).
     const esMe0 = (endStatsRes.endStats && endStatsRes.endStats.me) || null;
+
+    // Résolution d'instantané TOLÉRANTE À LA FORME du héros. Le grabber écrit le nom
+    // des en-têtes de tour en résolvant [[TURN_START]] une fois (forme figée, ex.
+    // « Arakni Trap Door » PARTOUT), alors que les libellés d'instantanés portent la
+    // forme du MOMENT (« Arakni Marionette #1 »…). Dès qu'Arakni se transforme, la
+    // clé exacte (snapKeyFor = player#tour) ne trouve plus l'instantané rangé sous
+    // l'ancienne forme → hand/arsenal/vie… null aux tours concernés. On mappe donc
+    // le nom de forme d'un libellé vers un CÔTÉ (me/opp) et on retombe, à défaut de
+    // clé exacte, sur une clé « X#même-tour » du bon côté.
+    const normLoose = s => normName(s || '').replace(/[^a-z0-9]/g, '');
+    const formsBySide = { me: new Set(), opp: new Set() };
+    const seedForm = (side, n) => { const k = normLoose(n); if (k) formsBySide[side].add(k); };
+    seedForm('me', myName); seedForm('opp', oppName);
+    if (meta.myHero && meta.myHero.name) seedForm('me', meta.myHero.name);
+    if (meta.oppHero && meta.oppHero.name) seedForm('opp', meta.oppHero.name);
+    Object.keys(heroFormSnapshots).forEach(k => { const hf = heroFormSnapshots[k]; if (!hf) return; seedForm('me', hf.me); seedForm('opp', hf.opp); });
+    // Côté d'un nom de forme : 'me'/'opp'/null. Ambigu (même forme des deux côtés,
+    // ex. miroir) → null (on ne devine pas, on garde le comportement exact).
+    const sideOfName = n => { const k = normLoose(n); const inMe = formsBySide.me.has(k), inOpp = formsBySide.opp.has(k); return (inMe && !inOpp) ? 'me' : (inOpp && !inMe) ? 'opp' : null; };
+    // Renvoie la valeur d'instantané pour ce tour, ou `dflt` si introuvable : clé
+    // exacte d'abord, sinon clé de même n° de tour dont le nom mappe sur le même côté.
+    const resolveSnap = (map, t, i, dflt) => {
+      const key = snapKeyFor(t, i);
+      if (key in map) return map[key];
+      if (t.turnNumber === 0) return dflt;                        // ouverture : clé unique
+      const want = t.player === myName ? 'me' : (t.player === oppName ? 'opp' : null);
+      if (!want) return dflt;
+      for (const k in map) {
+        const mm = k.match(/^(.+)#(\d+)$/);
+        if (!mm || parseInt(mm[2], 10) !== t.turnNumber) continue;
+        if (sideOfName(mm[1]) === want) return map[k];
+      }
+      return dflt;
+    };
+
     turns.forEach((t, i) => {
       const key = snapKeyFor(t, i);
       t.snapshotKey = key;
-      t.hand = (key in handSnapshots) ? handSnapshots[key] : null;
-      t.handPitches = (key in handPitchSnapshots) ? handPitchSnapshots[key] : null;   // impression parallèle à t.hand
-      t.arsenal = (key in arsenalSnapshots) ? arsenalSnapshots[key] : null;
+      t.hand = resolveSnap(handSnapshots, t, i, null);
+      t.handPitches = resolveSnap(handPitchSnapshots, t, i, null);   // impression parallèle à t.hand
+      t.arsenal = resolveSnap(arsenalSnapshots, t, i, null);
       // Règle FaB : l'arsenal est toujours vide au tout début de partie (on
       // n'y place une carte qu'à la fin de son propre tour). Quand tu es 2e
       // joueur, le grabber capte l'instantané d'ouverture trop tard et peut y
@@ -833,14 +892,14 @@
       // Arsenal ADVERSE : compte de cartes face cachée (0/1) capté par le grabber
       // (le NOM reste inconnu — zone privée). null si non capté (vieux logs).
       // Vide forcé à l'ouverture (même règle FaB que pour mon arsenal).
-      t.oppArsenalCount = (t.turnNumber === 0) ? 0 : ((key in oppArsenalCounts) ? oppArsenalCounts[key] : null);
+      t.oppArsenalCount = (t.turnNumber === 0) ? 0 : resolveSnap(oppArsenalCounts, t, i, null);
       // Permanents/tokens + cimetière + banni (2 camps) captés par le grabber.
-      t.field = (key in fieldSnapshots) ? fieldSnapshots[key] : null;
-      t.grave = (key in graveSnapshots) ? graveSnapshots[key] : null;
-      t.banish = (key in banishSnapshots) ? banishSnapshots[key] : null;
+      t.field = resolveSnap(fieldSnapshots, t, i, null);
+      t.grave = resolveSnap(graveSnapshots, t, i, null);
+      t.banish = resolveSnap(banishSnapshots, t, i, null);
       // Forme du héros à ce tour (Arakni se transforme) : { me, opp } ou null.
-      t.heroForm = (key in heroFormSnapshots) ? heroFormSnapshots[key] : null;
-      t.life = (key in lifeSnapshots) ? lifeSnapshots[key] : null;
+      t.heroForm = resolveSnap(heroFormSnapshots, t, i, null);
+      t.life = resolveSnap(lifeSnapshots, t, i, null);
       t.side = t.player === myName ? 'me' : (t.player === oppName ? 'opp' : null);
       // Stats officielles de CE tour (mon côté) — endStats.turns est numéroté comme
       // le journal (turn_5 = mon tour 5). null côté adverse / vieux logs.
@@ -1094,6 +1153,7 @@
       result,
       turns,
       handTimeline,                 // [{ pos, cards }] triés — main fidèle par position de log (vue Table)
+      fieldTimeline,                // [{ pos, me, opp }] triés — terrain fidèle par position (jetons éphémères)
       lifeHistory,
       lifeSeries,
       life: finalLife,

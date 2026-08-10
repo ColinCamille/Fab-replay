@@ -1661,6 +1661,117 @@ const lastRec = reconcileTl.steps.slice(-1)[0];
 assert(lastRec.state.meHandCards.indexOf('Shelter from the Storm') < 0, 'réconciliation main : la carte déjà jouée est retirée de la main affichée');
 assert(lastRec.state.meHandCards.indexOf('Sink Below') >= 0, 'réconciliation main : les cartes non jouées restent en main');
 
+// ---------- Bugs Table 1945057 (Oscilio vs Arakni qui se transforme) ----------
+console.log('Bugs Table 1945057 —');
+(function () {
+  // A — Résolution d'instantané TOLÉRANTE À LA FORME : l'en-tête de tour porte le
+  // nom figé (« Arakni Trap Door »), les libellés d'instantanés la forme du moment
+  // (« Arakni Marionette #1 »). La clé exacte échoue → on retombe par côté+tour.
+  const formRaw = [
+    '=== Talishar game 100 — test ===', '',
+    "Arakni Trap Door's turn 1 has begun.",
+    'Arakni Trap Door played Kiss of Death',
+    "Oscilio's turn 1 has begun.",
+    'Oscilio played Burn Bare',
+    '', '=== HAND SNAPSHOTS ===',
+    '[Arakni Marionette #1] Comet Storm, Shelter, Sigil, Swell',   // libellé = forme du moment
+    '[Oscilio #1] Alpha, Beta',
+    '', '=== ARSENAL SNAPSHOTS ===',
+    '[Arakni Marionette #1] Burn Bare',
+    '[Oscilio #1] (vide)',
+    '', '=== HERO FORMS (forme du héros par tour : toi | adversaire) ===',
+    '[Arakni Marionette #1] me: Oscilio | opp: Arakni Marionette',
+    '[Oscilio #1] me: Oscilio | opp: Arakni Marionette',
+    '', '=== META ===', 'me: Oscilio', 'opp: Arakni Trap Door',
+    'my_hero: Oscilio (oscilio)', 'opp_hero: Arakni, Marionette (arakni_marionette)'
+  ].join('\n');
+  const formRec = Parser.parse(formRaw);
+  const arakT1 = formRec.turns.find(t => t.player === 'Arakni Trap Door' && t.turnNumber === 1);
+  assert(arakT1 && Array.isArray(arakT1.hand) && arakT1.hand.length === 4,
+    'instantané par forme : main de début de tour adverse résolue malgré le nom de forme différent (bug 1)');
+  assert(arakT1 && Array.isArray(arakT1.arsenal) && arakT1.arsenal.indexOf('Burn Bare') >= 0,
+    'instantané par forme : arsenal (Burn Bare) résolu malgré le nom de forme différent (bug 2)');
+
+  // B — Combat INTERROMPU par un abandon (aucun « Combat resolved ») : l'échange
+  // doit quand même être rendu, avec la puissance de chaîne (11) et le bloc
+  // ÉQUIPEMENT (Crown of Providence) — sinon tous deux perdus (bugs 5 & 6).
+  const concedeTl = BR.buildTimeline({
+    myName: 'Osc', oppName: 'Arak',
+    players: { me: { hero: 'Osc', equipment: { head: { name: 'Crown of Providence' } } }, opp: { hero: 'Arak', equipment: {} } },
+    lifeSeries: { me: [40], opp: [40] },
+    turns: [{ player: 'Arak', label: 'Arak — Tour 4', turnNumber: 4, hand: [], arsenal: [],
+      chain: [{ turn: 'Arak#4', card: 'Kiss of Death', power: 11, defense: 6, kw: [] }],
+      events: [
+        { type: 'played', player: 'Arak', card: 'Kiss of Death', _idx: 1 },
+        { type: 'blocked', player: 'Osc', cards: ['Crown of Providence'] },
+        { type: 'conceded', player: 'Arak', _idx: 3 }
+      ] }]
+  });
+  const interClash = concedeTl.steps.map(s => s.stage).find(st => st.type === 'clash' && st.verdict === 'interrupted');
+  assert(interClash, 'combat interrompu : un échange « interrupted » est rendu malgré l\'abandon (bug 5)');
+  assert(interClash && interClash.atk.nm === 'Kiss of Death' && interClash.atk.power === 11,
+    'combat interrompu : puissance effective de chaîne (11) conservée (bug 6)');
+  assert(interClash && interClash.blocks.some(b => b.nm === 'Crown of Providence'),
+    'combat interrompu : le bloc ÉQUIPEMENT (Crown of Providence) est affiché en défense (bug 5)');
+
+  // C — Transfo de DÉBUT de tour : elle porte la main de DÉBUT de tour (comme la
+  // bannière), pas une main intermédiaire de la HAND TIMELINE (bug 3 : plus de
+  // flicker 2→3). L'étape transfo est marquée startOfTurn.
+  const transHandTl = BR.buildTimeline({
+    myName: 'Osc', oppName: 'Arak',
+    players: { me: { hero: 'Osc', equipment: {} }, opp: { hero: 'Arakni, Trap-Door', equipment: {} } },
+    lifeSeries: { me: [40, 40], opp: [40, 40] },
+    handTimeline: [{ pos: 3, cards: ['Solo'] }, { pos: 11, cards: ['A', 'B', 'C'] }],
+    turns: [
+      { player: 'Arak', label: 'Arak — Tour 3', turnNumber: 3, hand: [], arsenal: [],
+        heroForm: { me: 'Osc', opp: 'Arakni, Trap-Door' },   // = forme courante → pas de transfo ici
+        events: [{ type: 'played', player: 'Arak', card: 'Zap', _idx: 4 }] },
+      { player: 'Osc', label: 'Osc — Tour 4', turnNumber: 4, hand: ['A', 'B', 'C'], arsenal: [],
+        heroForm: { me: 'Osc', opp: 'Arakni, Marionette' },   // Trap-Door → Marionette au début de MON tour
+        events: [{ type: 'played', player: 'Osc', card: 'A', _idx: 12 }] }
+    ]
+  });
+  const startTrans = transHandTl.steps.find(s => s.stage.type === 'transform' && s.stage.startOfTurn);
+  assert(startTrans && /Marionette/.test(startTrans.stage.sub), 'transfo début de tour : marquée startOfTurn (Trap-Door → Marionette)');
+  eq(startTrans.state.meHandCards.length, 3, 'transfo début de tour : montre la main de début de tour (3), pas une main intermédiaire (bug 3)');
+})();
+
+// ---------- FIELD TIMELINE : terrain fidèle par position (jetons éphémères) ----------
+console.log('Field timeline —');
+(function () {
+  const ftRaw = [
+    '=== Talishar game 101 — test ===', '',
+    'Me played Turn to Mindfire',
+    'Me played Snapback',
+    '', '=== FIELD TIMELINE (terrain, à chaque changement | pos = ligne de log) ===',
+    '[0] me: (vide) | opp: (vide)',
+    '[1] me: Ponder | opp: (vide)',
+    '[2] me: (vide) | opp: (vide)',
+    ''
+  ].join('\n');
+  const ftRec = Parser.parse(ftRaw);
+  eq(ftRec.fieldTimeline.length, 3, 'FIELD TIMELINE : 3 entrées parsées');
+  eq(ftRec.fieldTimeline[1].me.join(','), 'Ponder', 'FIELD TIMELINE : jeton éphémère capté (me: Ponder)');
+  // Override dans buildTimeline : tokens d'une étape = dernier instantané pos ≤ _idx+1.
+  const ftGame = {
+    myName: 'Me', oppName: 'Opp',
+    players: { me: { hero: 'Osc', equipment: {} }, opp: { hero: 'Arak', equipment: {} } },
+    lifeSeries: { me: [40], opp: [40] },
+    fieldTimeline: [{ pos: 0, me: [], opp: [] }, { pos: 1, me: ['Ponder'], opp: [] }, { pos: 2, me: [], opp: [] }],
+    turns: [{ player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], events: [
+      { type: 'played', player: 'Me', card: 'Turn to Mindfire', _idx: 0 },
+      { type: 'played', player: 'Me', card: 'Snapback', _idx: 1 }
+    ] }]
+  };
+  const ftSteps = BR.buildTimeline(ftGame).steps;
+  const tmStep = ftSteps.find(s => s.stage.type === 'play' && s.stage.card.nm === 'Turn to Mindfire');
+  assert(tmStep && (tmStep.state.meTokens || []).indexOf('Ponder') >= 0,
+    'FIELD TIMELINE : le jeton créé (Ponder) apparaît sur l\'étape correspondante (bug 4)');
+  // Sans FIELD TIMELINE (vieux logs) : repli sans erreur, pas de surcharge.
+  const ftNone = BR.buildTimeline(Object.assign({}, ftGame, { fieldTimeline: [] }));
+  assert(ftNone.steps.length > 0, 'FIELD TIMELINE absente : repli sans erreur');
+})();
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);
