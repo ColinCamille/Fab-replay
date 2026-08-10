@@ -564,6 +564,65 @@ const actionTl = BR.buildTimeline({
 });
 eq((actionTl.players.me.createdWeapons || []).length, 0, 'arme créée : une carte simplement JOUÉE (Spinal Crush) n\'est PAS une arme');
 
+// Défausse provoquée par une carte (ex. Golden Tipple) : la ligne « X was
+// discarded » suit la résolution du jeu responsable → annotée sur l'étape de
+// cette carte (petite pill Table) ET envoyée au cimetière du camp qui a joué.
+// (1) Carte NON-attaque (tour sans combat) → étape « play ».
+const discPlayTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'X', equipment: {} }, opp: { hero: 'Y', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], grave: { me: [], opp: [] },
+      events: [
+        { type: 'played', player: 'Me', card: 'Golden Tipple' },
+        { type: 'resolving', card: 'Golden Tipple' },
+        { type: 'discarded', card: 'Sawbones, Dock Hand' }
+      ] }
+  ]
+});
+const discPlayStep = discPlayTl.steps.map(s => s.stage).find(st => st.type === 'play' && st.card && st.card.nm === 'Golden Tipple');
+assert(discPlayStep && (discPlayStep.discards || []).indexOf('Sawbones, Dock Hand') >= 0, 'défausse : annotée sur l\'étape de la carte responsable (play)');
+assert(discPlayTl.steps.slice(-1)[0].state.meGrave.indexOf('Sawbones, Dock Hand') >= 0, 'défausse : carte envoyée au cimetière du joueur');
+
+// (2) Carte d'ATTAQUE (chaîne) qui défausse en coût de jeu → l'annotation suit
+// l'attaquant jusque dans l'échange (clash.atk.discards).
+const discClashTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'X', equipment: {} }, opp: { hero: 'Y', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], grave: { me: [], opp: [] },
+      chain: [{ turn: 'Me#1', card: 'Golden Tipple', power: 1, defense: 0, kw: [] }],
+      events: [
+        { type: 'played', player: 'Me', card: 'Golden Tipple' },
+        { type: 'resolving', card: 'Golden Tipple' },
+        { type: 'discarded', card: 'Sawbones, Dock Hand' },
+        { type: 'damageTaken', player: 'Opp', amount: 1 },
+        { type: 'combatResult', hit: true, amount: 1 }
+      ] }
+  ]
+});
+const discClashStep = discClashTl.steps.map(s => s.stage).find(st => st.type === 'clash' && st.atk && st.atk.nm === 'Golden Tipple');
+assert(discClashStep && (discClashStep.atk.discards || []).indexOf('Sawbones, Dock Hand') >= 0, 'défausse : annotée sur l\'attaquant dans l\'échange (clash)');
+
+// (3) Défausse par une capacité ACTIVÉE (ex. pouvoir de héros) → étape « play » activée.
+const discActTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'X', equipment: {} }, opp: { hero: 'Y', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], grave: { me: [], opp: [] },
+      events: [
+        { type: 'activated', player: 'Me', card: 'Gravy Bones, Shipwrecked Looter' },
+        { type: 'resolving', card: 'Gravy Bones, Shipwrecked Looter' },
+        { type: 'discarded', card: 'Fiddler\'s Green' }
+      ] }
+  ]
+});
+const discActStep = discActTl.steps.map(s => s.stage).find(st => st.type === 'play' && st.act && st.card && st.card.nm === 'Gravy Bones, Shipwrecked Looter');
+assert(discActStep && (discActStep.discards || []).indexOf('Fiddler\'s Green') >= 0, 'défausse : annotée sur une capacité activée');
+
 // Arsenal adverse — chemin CAPTÉ : le compte du tour fait autorité.
 const arsCap = BR.buildTimeline({
   myName: 'Me', oppName: 'Opp',

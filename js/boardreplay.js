@@ -496,7 +496,7 @@
       const arcPrev = arc => (arc && arc.prevent && arc.prevent.length) ? arc.prevent.slice() : undefined;
       let atkBuf = [];
       const looseNorm = s => norm(s).replace(/[^a-z0-9]/g, '');   // tolère apostrophe/ponctuation (« Hunter's Klaive » vs « Hunters Klaive »)
-      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm, cp: x.cp }, act: !!x.act, pitch: x.pitch, dmg: arcDmg(x.arc), threat: arcThr(x.arc), prevent: arcPrev(x.arc), heal: x.heal, text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
+      const bufEntryStep = x => ({ type: 'play', side: atkSide, card: { nm: x.nm, cp: x.cp }, act: !!x.act, pitch: x.pitch, discards: x.discards, dmg: arcDmg(x.arc), threat: arcThr(x.arc), prevent: arcPrev(x.arc), heal: x.heal, text: HERO[atkSide] + (x.act ? ' active ' : ' joue ') + x.nm + (x.pTxt || '') });
       // Matérialise une carte en « carte seule » MAINTENANT (photo de la main
       // prise à cet instant → les cartes jouées ENSUITE y sont encore visibles).
       const materialize = x => { push(label, atkSide, bufEntryStep(x), arcHit(x.arc)); if (!isEquip(atkSide, x.nm)) toGrave(atkSide, x.nm); };
@@ -509,7 +509,7 @@
       // dans l'échange (clash) → plus de doublon « carte seule » puis « échange ».
       const flushAtk = () => {
         if (!openAtk) return;
-        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm, cp: openAtk.cp }, pitch: openAtk.pitch, dmg: arcDmg(openAtk.arc), threat: arcThr(openAtk.arc), prevent: arcPrev(openAtk.arc), heal: openAtk.heal, text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt }, arcHit(openAtk.arc));
+        push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: openAtk.nm, cp: openAtk.cp }, pitch: openAtk.pitch, discards: openAtk.discards, dmg: arcDmg(openAtk.arc), threat: arcThr(openAtk.arc), prevent: arcPrev(openAtk.arc), heal: openAtk.heal, text: HERO[openAtk.side] + ' joue ' + openAtk.nm + openAtk.pTxt }, arcHit(openAtk.arc));
         // Renforts éventuels (attaque hors-combat) : affichés à part pour ne pas les perdre.
         (openAtk.pumps || []).forEach(p => push(label, openAtk.side, { type: 'play', side: openAtk.side, card: { nm: p.nm, cp: p.cp }, reaction: true, text: HERO[openAtk.side] + ' joue ' + p.nm + (p.pTxt || '') }));
         openAtk = null;
@@ -535,8 +535,24 @@
         const reactions = curReactions.filter(r => r.owner === defSide).map(r => ({ nm: r.card, cp: r.cp }));
         const blockWho = curBlocks.length ? curBlocks[0].owner : defSide;
         const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
-        push(label, atkSide, { type: 'clash', atk: { nm: pendingAtk.nm, cp: pendingAtk.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, reactions, blockWho, verdict: 'interrupted', result: 'combat interrompu' , text: blkTxt });
+        push(label, atkSide, { type: 'clash', atk: { nm: pendingAtk.nm, cp: pendingAtk.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [], discards: pendingAtk.discards }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, reactions, blockWho, verdict: 'interrupted', result: 'combat interrompu' , text: blkTxt });
         atkBuf = []; openAtk = null; curBlocks = []; curReactions = [];
+      };
+      // Défausses provoquées par une carte (ex. Golden Tipple : « discard a card »
+      // en coût de jeu → « <Carte> was discarded »). La ligne ne nomme PAS de
+      // joueur et suit la RÉSOLUTION du played/activated responsable, avant le
+      // prochain jeu/activation. On ramasse donc les `discarded` de cette fenêtre
+      // pour les annoter sur la carte responsable (petite pill, cf. rendu) et les
+      // envoyer au cimetière du camp qui a joué la carte, dès l'action (le snapshot
+      // t.grave du tour suivant les recouvre → pas de double comptage).
+      const collectDiscards = start => {
+        const out = [];
+        for (let j = start + 1; j < evs.length; j++) {
+          const f = evs[j];
+          if (f.type === 'played' || f.type === 'activated') break;
+          if (f.type === 'discarded' && !consumed[j]) { out.push(f.card); consumed[j] = 1; }
+        }
+        return out;
       };
       evs.forEach((e, i) => {
         if (consumed[i] || ended) return;
@@ -549,10 +565,12 @@
           const pitches = [];
           for (let j = i + 1; j < evs.length; j++) { const f = evs[j]; if (f.type === 'played') break; if (f.type === 'pitched' && f.player === e.player) { pitches.push(f.card); consumed[j] = 1; addPitch(side, f.card, f.pitch); removeCard(side, f.card); } }
           const pTxt = pitches.length ? ' (pitch ' + pitches.join(', ') + ')' : '';
+          const discards = collectDiscards(i);       // cartes défaussées par cet effet (ex. Golden Tipple)
+          discards.forEach(c => toGrave(side, c));    // au cimetière du camp qui a joué la carte
           const arc = takeArcane(e.card, i, side);   // dégâts d'arcane réels imputables à cette carte
           const heal = takeHeal(i, side);            // gain de vie provoqué par cette carte (ex. Sigil of Solace)
           if (side === atkSide && hasChain) {
-            const entry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: false, arc: arc, heal: heal };
+            const entry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), discards: discards, pTxt: pTxt, act: false, arc: arc, heal: heal };
             if (atkBuf.length === 0 && isAtkCard(e.card)) atkBuf.push(entry);       // c'est l'attaquant
             else if (atkBuf.length > 0) atkBuf.push(entry);                          // renfort (joué APRÈS l'attaquant)
             else materialize(entry);                                                 // action PRÉ-attaque → carte seule, photo prise MAINTENANT
@@ -560,7 +578,7 @@
             // Tour SANS combat : ce « jeu » n'est pas une attaque (sort d'arcane,
             // ouverture…) → carte seule IMMÉDIATE avec ses dégâts d'arcane, sans
             // différé openAtk (qui avalerait les réactions adverses).
-            push(label, side, { type: 'play', side: side, card: { nm: e.card, cp: e.pitch }, pitch: pitches.join(', '), dmg: arcDmg(arc), threat: arcThr(arc), prevent: arcPrev(arc), heal: heal, text: HERO[side] + ' joue ' + e.card + pTxt }, arcHit(arc));
+            push(label, side, { type: 'play', side: side, card: { nm: e.card, cp: e.pitch }, pitch: pitches.join(', '), discards: discards, dmg: arcDmg(arc), threat: arcThr(arc), prevent: arcPrev(arc), heal: heal, text: HERO[side] + ' joue ' + e.card + pTxt }, arcHit(arc));
             if (!isEquip(side, e.card)) toGrave(side, e.card);
           } else if (side === atkSide) {
             // (vieux logs sans chaîne) Cette carte est-elle un RENFORT sur l'attaque
@@ -578,7 +596,7 @@
               (openAtk.pumps = openAtk.pumps || []).push({ nm: e.card, cp: e.pitch, pTxt: pTxt });
             } else {
               flushAtk();   // attaque précédente restée sans combat → carte seule
-              openAtk = { nm: e.card, side, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, pumps: [], arc: arc, heal: heal };
+              openAtk = { nm: e.card, side, cp: e.pitch, pitch: pitches.join(', '), discards: discards, pTxt: pTxt, pumps: [], arc: arc, heal: heal };
             }
           } else {
             // Réaction du DÉFENSEUR. Elle devient une ÉTAPE PROPRE (avec ses dégâts
@@ -591,7 +609,7 @@
             // DÉFENSE du clash (curReactions) pour ne pas apparaître AVANT l'attaque.
             const hasEffect = !!arcHit(arc) || !!heal;
             if (!hasCombat || (!atkBuf.length && !openAtk) || hasEffect) {
-              push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, reaction: true, pitch: pitches.join(', '), dmg: arcDmg(arc), threat: arcThr(arc), prevent: arcPrev(arc), heal: heal, text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt }, arcHit(arc));
+              push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, reaction: true, pitch: pitches.join(', '), discards: discards, dmg: arcDmg(arc), threat: arcThr(arc), prevent: arcPrev(arc), heal: heal, text: HERO[side] + ' joue ' + e.card + ' en réaction' + pTxt }, arcHit(arc));
               // Montrée en étape propre → elle NE passe PAS par curReactions : on
               // l'envoie donc au cimetière ici (sauf équipement), au lieu de laisser
               // combatResult s'en charger (il ne la verra pas).
@@ -628,9 +646,11 @@
           // Une ARME activée par l'attaquant EST une attaque (ex. Hunter's Klaive) :
           // en mode chaîne on la met en attente pour qu'elle devienne l'attaquant
           // du combat (au lieu d'une carte seule que la 1re réaction remplacerait).
+          const discardsA = collectDiscards(i);       // défausse provoquée par la capacité (ex. pouvoir de Gravy Bones)
+          discardsA.forEach(c => toGrave(side, c));
           const arcA = takeArcane(e.card, i, side);   // capacité qui inflige de l'arcane (ex. pouvoir d'Oscilio)
           const healA = takeHeal(i, side);            // capacité qui soigne (rare, mais possible)
-          const wpnEntry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), pTxt: pTxt, act: true, arc: arcA, heal: healA };
+          const wpnEntry = { nm: e.card, cp: e.pitch, pitch: pitches.join(', '), discards: discardsA, pTxt: pTxt, act: true, arc: arcA, heal: healA };
           if (hasChain && side === atkSide && atkBuf.length > 0) {
             // Activation PENDANT l'attaque en cours (ex. Flick Knives, une réaction
             // sur la dague déjà déclarée) → c'est un RENFORT : il apparaît DANS
@@ -639,7 +659,7 @@
           } else if (hasChain && side === atkSide && WPN[side][norm(e.card)] && (atkBuf.length === 0 ? (isAtkCard(e.card) || !nextAtkCard()) : true)) {
             atkBuf.push(wpnEntry);              // arme = attaquant
           } else {
-            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, chosen: chosen, pitch: pitches.join(', '), dmg: arcDmg(arcA), threat: arcThr(arcA), prevent: arcPrev(arcA), heal: healA, text: HERO[side] + ' active ' + e.card + pTxt + (chosen ? ' → ' + chosen : '') }, arcHit(arcA));
+            push(label, side, { type: 'play', side, card: { nm: e.card, cp: e.pitch }, act: true, chosen: chosen, pitch: pitches.join(', '), discards: discardsA, dmg: arcDmg(arcA), threat: arcThr(arcA), prevent: arcPrev(arcA), heal: healA, text: HERO[side] + ' active ' + e.card + pTxt + (chosen ? ' → ' + chosen : '') }, arcHit(arcA));
           }
         } else if (e.type === 'destroyed') {
           // Un ÉQUIPEMENT détruit (armure/Nullrune cassée…) est retiré du plateau
@@ -755,7 +775,7 @@
             const vt = dmg > 0 ? 'through' : 'blocked';
             const rtxt = dmg > 0 ? (dmg + ' dégât' + (dmg > 1 ? 's' : '') + ' pass' + (dmg > 1 ? 'ent' : 'e')) : '0 dégât — bloqué';
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
-            push(label, atkSide, { type: 'clash', atk: { nm: attacker.nm, cp: attacker.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [] }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, reactions, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+            push(label, atkSide, { type: 'clash', atk: { nm: attacker.nm, cp: attacker.cp, who: atkSide, power: link ? link.power : null, kw: link ? link.kw : [], discards: attacker.discards }, pumps: after.map(x => ({ nm: x.nm, cp: x.cp })), blocks: defCards, reactions, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           flushTransforms();   // transfo déclenchée par ce combat (ex. Mask of Deceit) → juste après le clash
           atkBuf = []; curBlocks = []; curReactions = [];
@@ -776,7 +796,7 @@
             const blkTxt = defCards.length ? ((blockWho === 'me' ? 'Tu défends' : HERO.opp + ' défend') + ' : ' + defCards.map(b => b.nm).join(', ')) : 'non bloqué';
             const lk = takeChain(openAtk.nm);   // attaque/défense effectives (buffs) de CETTE attaque
             const pumps = (openAtk.pumps || []).map(p => ({ nm: p.nm, cp: p.cp }));
-            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, cp: openAtk.cp, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [] }, pumps: pumps, blocks: defCards, reactions, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
+            push(label, openAtk.side, { type: 'clash', atk: { nm: openAtk.nm, cp: openAtk.cp, who: openAtk.side, power: lk ? lk.power : null, kw: lk ? lk.kw : [], discards: openAtk.discards }, pumps: pumps, blocks: defCards, reactions, blockWho, verdict: vt, result: rtxt, text: blkTxt }, dmg > 0 ? defSide : null);
           }
           flushTransforms();   // transfo déclenchée par ce combat (ex. Mask of Deceit) → juste après le clash
           openAtk = null; curBlocks = []; curReactions = [];
@@ -1031,6 +1051,9 @@
     const pitchAttr = c => (c && (c.cp === 1 || c.cp === 2 || c.cp === 3)) ? ' data-pitch="' + c.cp + '"' : '';
     const pcard = (c, side, lg) => '<div class="br-pcard br-' + side + (lg ? ' br-lg' : '') + '" data-card="' + esc(c.nm) + '"><div class="br-art" data-card="' + esc(c.nm) + '"' + pitchAttr(c) + '></div><div class="br-nm">' + esc(c.nm) + '</div>' + pwBadge(c) + '</div>';
     const kwLine = c => (c && c.kw && c.kw.length) ? '<div class="br-kwline">' + c.kw.map(k => '<span class="br-kw">' + esc(KW_LABEL[k] || k) + '</span>').join('') + '</div>' : '';
+    // Cartes défaussées PAR cette carte (ex. Golden Tipple) : petite pill façon
+    // « pitch », pour montrer ce qui a quitté la main en coût/effet de jeu.
+    const discardLine = d => (d && d.length) ? '<span class="br-discard-pill">🗑 défausse ' + esc(d.join(', ')) + '</span>' : '';
     function buildStage(s) {
       if (s.type === 'banner') return '<div class="br-banner br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
       if (s.type === 'end') return '<div class="br-banner br-end br-' + s.side + '"><div class="br-big">' + esc(s.big) + '</div><div class="br-sub">' + esc(s.sub) + '</div></div>';
@@ -1044,7 +1067,7 @@
         const preventLine = ((s.prevent && s.prevent.length) || prevented > 0)
           ? '<div class="br-arc-prevent">🛡 ' + (s.threat ? ('menacé ' + s.threat + ' → ' + (s.dmg || 0)) : 'prévention') + (prevented > 0 ? ' (−' + prevented + ')' : '') + (s.prevent && s.prevent.length ? ' · adv pitch ' + esc(s.prevent.join(', ')) : '') + '</div>'
           : '';
-        return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.banish ? '<span class="br-react">🗑 banni</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + (s.heal > 0 ? '<div class="br-verdict br-heal">❤️ +' + s.heal + ' vie</div>' : '') + preventLine + '</div>';
+        return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.banish ? '<span class="br-react">🗑 banni</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + discardLine(s.discards) + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + (s.heal > 0 ? '<div class="br-verdict br-heal">❤️ +' + s.heal + ' vie</div>' : '') + preventLine + '</div>';
       }
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
@@ -1055,13 +1078,13 @@
         // SOUS la défense, pour signaler qu'ils ont été joués sans les faire passer
         // pour des bloqueurs (ils n'ont pas de valeur de défense).
         const reacts = (s.reactions && s.reactions.length) ? '<div class="br-reacts"><span class="br-reacts-lbl">↩ réactions</span><div class="br-cardrow">' + s.reactions.map(r => pcard(r, s.blockWho)).join('') + '</div></div>' : '';
-        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + pumps + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div>' + reacts + '</div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : s.verdict === 'interrupted' ? '⚔ ' : '💥 ') + esc(s.result) + '</div>';
+        return '<div class="br-phase">Combat</div><div class="br-duel"><div class="br-side"><span class="br-duel-who">Attaque</span>' + pcard(s.atk, s.atk.who) + kwLine(s.atk) + discardLine(s.atk.discards) + pumps + '</div><span class="br-arrow">→</span><div class="br-side"><span class="br-duel-who">Défense</span><div class="br-cardrow">' + bl + '</div>' + reacts + '</div></div><div class="br-verdict br-' + s.verdict + '">' + (s.verdict === 'blocked' ? '✓ ' : s.verdict === 'interrupted' ? '⚔ ' : '💥 ') + esc(s.result) + '</div>';
       }
       return '';
     }
-    function fillSlot(sel, label, cards, side, mode) {
+    function fillSlot(sel, label, cards, side, mode, zone) {
       const el = $(sel); if (!el) return; const n = cards ? cards.length : 0, key = sel;
-      if (!n) { el.classList.remove('br-filled'); el.innerHTML = ''; el.textContent = label; prevCounts[key] = 0; return; }
+      if (!n) { el.classList.remove('br-filled', 'br-clickable'); el.removeAttribute('data-zone'); el.innerHTML = ''; el.textContent = label; prevCounts[key] = 0; return; }
       el.classList.add('br-filled');
       // Une entrée peut être un simple nom (arsenal/cimetière) ou un objet
       // { nm, cp } (pitch, avec impression) → on lit le nom et l'éventuel pitch.
@@ -1073,6 +1096,10 @@
         : '<div class="br-zcard br-' + side + (mode === 'grave' ? ' br-grave' : '') + '"><div class="br-art" data-card="' + esc(topNm) + '"' + (topCp ? ' data-pitch="' + topCp + '"' : '') + '></div><div class="br-nm">' + esc(topNm) + '</div></div>';
       if (n > 1) inner += '<span class="br-badge">×' + n + '</span>';
       el.innerHTML = inner;
+      // Zone à cartes NOMMÉES (cimetière/banni/pitch/mon arsenal) → cliquable pour
+      // voir TOUT le contenu (l'arsenal adverse est face cachée « back » → non).
+      if (zone && mode !== 'back') { el.classList.add('br-clickable'); el.setAttribute('data-zone', zone); el.setAttribute('data-side', side); }
+      else { el.classList.remove('br-clickable'); el.removeAttribute('data-zone'); }
       if (prevCounts[key] != null && n > prevCounts[key]) { el.classList.remove('br-bump'); void el.offsetWidth; el.classList.add('br-bump'); }
       prevCounts[key] = n;
     }
@@ -1141,14 +1168,14 @@
       $('#br-mLifeTok').textContent = stt.life.me; $('#br-oLifeTok').textContent = stt.life.opp;
       $('#br-turnPill').textContent = s.turn;
       renderHands(stt);
-      fillSlot('#br-mPitch', 'Pitch', stt.mePitch, 'me', 'up');
-      fillSlot('#br-oPitch', 'Pitch', stt.oppPitch, 'opp', 'up');
-      fillSlot('#br-mArsenal', 'Arsenal', stt.meArsenal, 'me', 'up');
+      fillSlot('#br-mPitch', 'Pitch', stt.mePitch, 'me', 'up', 'pitch');
+      fillSlot('#br-oPitch', 'Pitch', stt.oppPitch, 'opp', 'up', 'pitch');
+      fillSlot('#br-mArsenal', 'Arsenal', stt.meArsenal, 'me', 'up', 'arsenal');
       fillSlot('#br-oArsenal', 'Arsenal', stt.oppArsenalCount > 0 ? ['?'] : [], 'opp', 'back');
-      fillSlot('#br-mGrave', 'Cimetière', stt.meGrave, 'me', 'grave');
-      fillSlot('#br-oGrave', 'Cimetière', stt.oppGrave, 'opp', 'grave');
-      fillSlot('#br-mBanish', 'Banni', stt.meBanish, 'me', 'grave');
-      fillSlot('#br-oBanish', 'Banni', stt.oppBanish, 'opp', 'grave');
+      fillSlot('#br-mGrave', 'Cimetière', stt.meGrave, 'me', 'grave', 'grave');
+      fillSlot('#br-oGrave', 'Cimetière', stt.oppGrave, 'opp', 'grave', 'grave');
+      fillSlot('#br-mBanish', 'Banni', stt.meBanish, 'me', 'grave', 'banish');
+      fillSlot('#br-oBanish', 'Banni', stt.oppBanish, 'opp', 'grave', 'banish');
       // Tokens/permanents : on regroupe les exemplaires identiques en UNE tuile
       // avec un badge « ×N » (ordre de 1ʳᵉ apparition), au lieu d'empiler N
       // copies côte à côte (ex. Oscilio : plusieurs « Seismic Surge »).
@@ -1216,6 +1243,51 @@
       container.__brHoverBound = true;
       container.addEventListener('mouseover', e => { const t = e.target.closest('[data-card]'); if (t) showPreview(t); });
       container.addEventListener('mouseout', e => { const t = e.target.closest('[data-card]'); if (t) { const pv = container.querySelector('.br-preview'); if (pv) pv.classList.remove('show'); } });
+    }
+
+    // ---- Clic sur une zone (Cimetière / Banni / Pitch / Arsenal) : overlay qui
+    // liste TOUTES les cartes de la zone à l'étape courante (les emplacements ne
+    // montrent que la carte du dessus + « ×N »). L'overlay vit DANS le conteneur
+    // (comme l'aperçu) pour survivre au plein écran natif. Les écouteurs sont
+    // posés une seule fois et passent par container.__brZoom, réaffecté à chaque
+    // montage, pour ne jamais lire un `steps`/`i` périmé d'un montage précédent.
+    container.querySelectorAll('.br-zoom').forEach(e => e.remove());
+    const zoom = document.createElement('div');
+    zoom.className = 'br-zoom';
+    zoom.hidden = true;
+    container.appendChild(zoom);
+    const ZONE_LABEL = { grave: 'Cimetière', banish: 'Banni', pitch: 'Pitch', arsenal: 'Arsenal' };
+    // zone+side → tableau d'état de l'étape courante (meGrave, oppBanish, mePitch…).
+    const zoneCards = (zone, side) => {
+      const stt = steps[i].state;
+      const arr = stt[side + zone.charAt(0).toUpperCase() + zone.slice(1)] || [];
+      return arr.map(c => (c && typeof c === 'object') ? { nm: c.nm, cp: c.cp } : { nm: c });
+    };
+    function openZoom(zone, side) {
+      const cards = zoneCards(zone, side);
+      if (!cards.length) { zoom.hidden = true; return; }
+      const who = side === 'me' ? data.hero.me : data.hero.opp;
+      const grave = (zone === 'grave' || zone === 'banish');
+      // Doublons regroupés en « ×N » (ordre de 1re apparition), comme les jetons.
+      const order = [], grp = {};
+      cards.forEach(c => { const k = norm(c.nm) + '#' + (c.cp || ''); if (grp[k] == null) { grp[k] = order.length; order.push({ nm: c.nm, cp: c.cp, n: 0 }); } order[grp[k]].n++; });
+      const tiles = order.map(o => '<div class="br-zcard br-' + side + (grave ? ' br-grave' : '') + '" data-card="' + esc(o.nm) + '"><div class="br-art" data-card="' + esc(o.nm) + '"' + ((o.cp === 1 || o.cp === 2 || o.cp === 3) ? ' data-pitch="' + o.cp + '"' : '') + '></div><div class="br-nm">' + esc(o.nm) + '</div>' + (o.n > 1 ? '<span class="br-badge">×' + o.n + '</span>' : '') + '</div>').join('');
+      zoom.innerHTML = '<div class="br-zoom-panel"><div class="br-zoom-head"><span class="br-zoom-title">' + esc(ZONE_LABEL[zone] || zone) + ' · ' + esc(who) + ' · ' + cards.length + ' carte' + (cards.length > 1 ? 's' : '') + '</span><button class="br-zoom-close" type="button" aria-label="Fermer">✕</button></div><div class="br-zoom-grid">' + tiles + '</div></div>';
+      zoom.hidden = false;
+      paintArt(container);
+    }
+    function closeZoom() { zoom.hidden = true; zoom.innerHTML = ''; }
+    container.__brZoom = { open: openZoom, close: closeZoom, el: zoom };
+    if (!container.__brZoomBound) {
+      container.__brZoomBound = true;
+      container.addEventListener('click', e => {
+        const z = container.__brZoom; if (!z) return;
+        const slot = e.target.closest('.br-slot.br-clickable');
+        if (slot && container.contains(slot)) { z.open(slot.getAttribute('data-zone'), slot.getAttribute('data-side')); return; }
+        // Clic sur la croix ou hors de la grille (fond) → fermeture.
+        if (e.target.closest('.br-zoom-close') || (e.target.classList && e.target.classList.contains('br-zoom'))) z.close();
+      });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') { const z = container.__brZoom; if (z) z.close(); } });
     }
 
     // ---- Hauteur du stage figée : sinon la « carte d'action » change de taille

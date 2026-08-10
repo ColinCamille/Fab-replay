@@ -628,6 +628,10 @@
       // Couleur exacte par occurrence : on dépile la file FIFO du nom concerné
       // (même ordre que le journal brut). played/pitched/activated = 1 carte ;
       // blocked = plusieurs. Absent → carte mono-couleur ou vieille partie.
+      // NB : PAS les `discarded` — buildColorQueues n'indexe que les lignes
+      // d'ACTION (played/pitched/activated/blocked), pas « X was discarded » ;
+      // dépiler pour une défausse volerait la couleur d'un vrai jeu du même nom
+      // et désynchroniserait la file (défausse affichée en texte seul, cf. Table).
       if (evt.type === 'played' || evt.type === 'pitched' || evt.type === 'activated') {
         const c = takeColor(colorQueues, evt.card);
         if (c) { evt.cardId = c.cardId; if (c.pitch) evt.pitch = c.pitch; }
