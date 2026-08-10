@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.22.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). Export texte / téléchargement + localStorage.
+// @version      1.23.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.22.0';
+  const VERSION = '1.23.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -402,6 +402,21 @@
   // on laisse passer ; le parseur reste le 2e filet). Un envoi bloqué n'empêche
   // PAS le téléchargement manuel du .txt (⬇ Log brut) : la partie reste
   // récupérable pour déboguer, seul l'upload au compte est coupé.
+  // Libellés GÉNÉRIQUES que Talishar affiche quand le vrai pseudo n'est pas
+  // exposé (adversaire anonyme, aucune ligne de jet de dé nommant les joueurs).
+  // Ce ne sont PAS des pseudos : on ne les stocke jamais (cf. maybeFillMeta) et
+  // ils ne doivent JAMAIS bloquer l'envoi — la capture peut être parfaitement
+  // complète par ailleurs (cas réel : partie 1946448, « opponent: your opponent »).
+  function isPlaceholderName(name) {
+    return /^(you|your opponent|opponent)$/i.test(String(name || '').trim());
+  }
+  // Texte d'UI Talishar scrapé PAR ERREUR comme pseudo, signe d'une capture
+  // vraiment DÉGRADÉE (écran replay/résumé où l'état de partie n'est plus
+  // lisible : « Unknown's Turn », « PRIORITY »…) → là, on bloque l'envoi.
+  function isUiGarbageName(name) {
+    return /^(unknown'?s turn|priority)$/i.test(String(name || '').trim());
+  }
+
   function captureQuality() {
     const issues = [];
     const actionLines = captured.filter(l => /\b(?:played|activated|pitched|blocked with)\b|took \d+ damage/.test(l)).length;
@@ -411,12 +426,12 @@
       issues.push('Aucun tour détecté malgré ' + actionLines + ' actions.');
     else if (turnish >= 2 && turnHeaders <= 1)
       issues.push('Marqueurs de tour non reconnus (' + turnish + ' repérés, ' + turnHeaders + ' traduit(s)).');
-    // Texte d'UI Talishar scrapé par erreur comme pseudo (vu sur un écran
-    // replay/résumé dégradé : « Unknown's Turn », « PRIORITY »…).
-    const badName = /^(unknown'?s turn|priority|you|your opponent)$/i;
+    // On ne bloque que sur du VRAI texte d'UI dégradé (isUiGarbageName), pas sur
+    // les libellés génériques « you »/« your opponent » : un pseudo adverse
+    // inconnu est légitime et ne doit pas empêcher l'envoi.
     const myN = String(meta.myName || '').trim(), oppN = String(meta.oppName || '').trim();
-    if (badName.test(myN)) issues.push('Pseudo « ' + myN + ' » suspect (texte d’UI, pas un joueur).');
-    if (badName.test(oppN)) issues.push('Pseudo « ' + oppN + ' » suspect (texte d’UI, pas un joueur).');
+    if (isUiGarbageName(myN)) issues.push('Pseudo « ' + myN + ' » suspect (texte d’UI, pas un joueur).');
+    if (isUiGarbageName(oppN)) issues.push('Pseudo « ' + oppN + ' » suspect (texte d’UI, pas un joueur).');
     return issues;
   }
 
@@ -780,6 +795,12 @@
         if (!meta.myName && texts[1] !== meta.oppName) meta.myName = texts[1];
       }
     }
+
+    // Un libellé générique de Talishar (« you », « your opponent »…) n'est PAS
+    // un pseudo : on le remet à null plutôt que de stocker une fausse valeur
+    // (cf. règle « pas de théâtre d'erreur »). META affichera « (non capté) ».
+    if (isPlaceholderName(meta.myName)) meta.myName = null;
+    if (isPlaceholderName(meta.oppName)) meta.oppName = null;
   }
 
   // ============================================================

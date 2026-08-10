@@ -1407,6 +1407,39 @@ console.log('Grabber merge —');
   const g2 = chatLogToLines(rawChat, 'Oscilio', 'Briar');
   eq(run([g1, g2, g2, g1, g2]).join('\n'), g2.join('\n'),
     'chatLog+merge: journaux complets répétés → une seule copie');
+
+  // ── Pseudos : « adversaire non nommé » (your opponent) ne bloque plus l'envoi.
+  // On extrait les 2 helpers PURS du userscript (slice+eval, comme mergeLines).
+  const evalFn = name => {
+    const s0 = src.indexOf('function ' + name);
+    const sbs = src.indexOf('{', s0);
+    let d = 0, s1 = sbs;
+    for (; s1 < src.length; s1++) { const c = src[s1]; if (c === '{') d++; else if (c === '}' && --d === 0) { s1++; break; } }
+    return eval('(' + src.slice(s0, s1) + ')');
+  };
+  const isPlaceholderName = evalFn('isPlaceholderName');
+  const isUiGarbageName = evalFn('isUiGarbageName');
+
+  // Placeholder = libellé générique quand le pseudo n'est pas exposé (à nuller).
+  eq(isPlaceholderName('your opponent'), true, 'placeholder: « your opponent »');
+  eq(isPlaceholderName('You'), true, 'placeholder: « You » (insensible casse)');
+  eq(isPlaceholderName(' opponent '), true, 'placeholder: espaces tolérés');
+  eq(isPlaceholderName('Waouh'), false, 'placeholder: vrai pseudo « Waouh » non touché');
+  eq(isPlaceholderName('SpicyNoodles'), false, 'placeholder: vrai pseudo « SpicyNoodles » non touché');
+  eq(isPlaceholderName(null), false, 'placeholder: null → false');
+
+  // UI garbage = vrai signe de capture dégradée (à bloquer). « your opponent »
+  // n'en fait PLUS partie → ne bloque plus.
+  eq(isUiGarbageName('your opponent'), false, 'ui-garbage: « your opponent » ne bloque plus');
+  eq(isUiGarbageName('you'), false, 'ui-garbage: « you » ne bloque plus');
+  eq(isUiGarbageName('PRIORITY'), true, 'ui-garbage: « PRIORITY » bloque toujours');
+  eq(isUiGarbageName("Unknown's Turn"), true, 'ui-garbage: « Unknown’s Turn » bloque toujours');
+  eq(isUiGarbageName('Betsy'), false, 'ui-garbage: vrai pseudo non bloqué');
+
+  // Intention (le bug corrigé) : une partie complète dont l'adversaire est
+  // « your opponent » ne doit produire AUCUN issue de pseudo.
+  const nameIssues = ['your opponent', 'SpicyNoodles'].filter(n => isUiGarbageName(n));
+  eq(nameIssues.length, 0, 'régression 1946448: « your opponent » n’ajoute plus d’issue → envoi débloqué');
 })();
 
 // ---------- 3. Clé DB ----------
