@@ -121,6 +121,55 @@
   }
 
   // ----------------------------------------------------------
+  // Repli héros : déduire les héros du CORPS du log quand le bloc META ne les
+  // donne pas (capture dégradée en repli DOM : « you / your opponent », aucun
+  // héros résolu depuis le store). Signal FIABLE : le héros est ce qui se fait
+  // CIBLER (les attaques visent le héros par défaut) — les armes/équipements sont
+  // des SOURCES de dégâts, pas des cibles. On compte les ciblages par camp :
+  //   · « your opponent's <X> was targeted »  → propriétaire nommé ⇒ camp SÛR.
+  //   · « 🎯<X> was chosen as the target. »    → sans propriétaire ⇒ rattaché au
+  //       camp ADVERSE de l'acteur courant (celui qui vient de jouer/activer).
+  // Garde-fou (pas de théâtre d'erreur) : on ne renvoie un héros que s'il est
+  // ciblé ≥ 3 fois ET nettement en tête (≥ 2× le 2e) ; sinon null (« inconnu »).
+  // PUR (testable en Node). L'activation n'est PAS un signal de héros (les armes
+  // s'activent tout autant) — elle sert seulement à savoir qui est l'acteur.
+  function deriveHeroesFromLog(logLines) {
+    const sideOf = p => {
+      p = String(p || '').trim().toLowerCase();
+      if (p === 'you') return 'me';
+      if (p === 'your opponent') return 'opp';
+      return null;
+    };
+    const tgt = { me: {}, opp: {} };
+    const bump = (side, card) => {
+      if (!side || !card) return;
+      const k = String(card).trim();
+      if (k) tgt[side][k] = (tgt[side][k] || 0) + 1;
+    };
+    let lastActor = null;
+    (logLines || []).forEach(l => {
+      const e = classifyLine(l);
+      if (!e) return;
+      if (e.type === 'played' || e.type === 'pitched' || e.type === 'activated' || e.type === 'blocked') {
+        const s = sideOf(e.player); if (s) lastActor = s;
+      }
+      if (e.type === 'targetedSecondary') bump(sideOf(e.owner), e.card);
+      else if (e.type === 'targeted' && lastActor) bump(lastActor === 'me' ? 'opp' : 'me', e.target);
+    });
+    const pick = side => {
+      const m = tgt[side];
+      let best = null, bestN = 0, second = 0;
+      for (const k in m) {
+        const v = m[k];
+        if (v > bestN) { second = bestN; bestN = v; best = k; }
+        else if (v > second) second = v;
+      }
+      return (best && bestN >= 3 && bestN >= 2 * second) ? best : null;
+    };
+    return { me: pick('me'), opp: pick('opp') };
+  }
+
+  // ----------------------------------------------------------
   // Extraction d'un bloc de snapshot [LABEL] valeur -> { key: raw }
   // renvoie aussi le texte débarrassé du bloc.
   // ----------------------------------------------------------
@@ -555,7 +604,23 @@
       if (!l) continue;
       if (/^=== Talishar game/.test(l)) continue;
       if (/^═+$/.test(l)) continue;
+      // Résumé de chaîne condensé « CHAIN LINK N <joueur> played … took N … » :
+      // re-rendu collé d'une chaîne repliée (capture DOM dégradée). Multi-actions
+      // sur une ligne → illisible et polluant (faux « joueur » = « CHAIN LINK N
+      // your opponent »). Le grabber le filtre déjà à la capture ; on le refait
+      // ici au cas où un raw ancien déjà stocké serait ré-importé.
+      if (/^chain link \d+/i.test(l)) continue;
       logLines.push(l);
+    }
+
+    // 2 bis) Repli héros : capture dégradée (DOM) sans bloc META → déduire les
+    // héros du corps du log (le plus ciblé par camp). Rétroactif au re-parse :
+    // récupère le matchup des parties captées « you / your opponent ». On ne
+    // renseigne QUE ce qui manque (META fait autorité quand elle est présente).
+    if (!meta.myHero || !meta.oppHero) {
+      const dh = deriveHeroesFromLog(logLines);
+      if (!meta.myHero && dh.me) { meta.myHero = dh.me; meta.myHeroId = null; }
+      if (!meta.oppHero && dh.opp) { meta.oppHero = dh.opp; meta.oppHeroId = null; }
     }
 
     // 3) Découpage en tours
@@ -568,7 +633,9 @@
     //       affichées en réaction. Les deux formats ne coexistent jamais dans un
     //       même log, donc les reconnaître tous les deux ne crée pas de doublon.
     const turnHeaderRe = /^(.+?)'s turn (\d+) has begun\.$/;
-    const turnDividerRe = /^Turn (\d+)\s*(\S.*)$/;
+    // Insensible à la casse : l'UI Talishar rend parfois le séparateur EN
+    // MAJUSCULES (« TURN 1 your opponent », via text-transform CSS → innerText).
+    const turnDividerRe = /^turn (\d+)\s*(\S.*)$/i;
     function matchTurnHeader(l) {
       let m = l.match(turnHeaderRe);
       if (m) return { player: m[1].trim(), turnNumber: parseInt(m[2], 10) };
@@ -1105,7 +1172,7 @@
       const realTurns = turns.filter(t => t.turnNumber > 0).length;   // hors Ouverture
       const actionLines = logLines.filter(l => /\b(?:played|activated|pitched|blocked with)\b|took \d+ damage/.test(l)).length;
       // Lignes RESSEMBLANT à un début de tour (tous formats connus + à venir).
-      const turnish = logLines.filter(l => /'s turn \d+ has begun|^Turn \d+\S|\[\[TURN_START/.test(l)).length;
+      const turnish = logLines.filter(l => /'s turn \d+ has begun|^turn \d+\s*\S|\[\[TURN_START/i.test(l)).length;
       // A. Beaucoup d'actions mais aucun tour découpé → format de tour non reconnu.
       if (actionLines >= 25 && realTurns === 0)
         flagHealth('Aucun tour détecté malgré ' + actionLines + ' actions — le format de début de tour n\'est peut-être plus reconnu.');
@@ -1124,6 +1191,16 @@
       if (worst >= 6) flagHealth('Duplication probable du journal : « ' + worstCard + ' » joué ' + worst + ' fois.');
       // E. Joueurs non résolus.
       if (!myName || !oppName) flagHealth('Joueurs non résolus (toi = ' + (myName || '?') + ', adversaire = ' + (oppName || '?') + ').');
+      // F. Nom de joueur = TEXTE D'UI parasite (« Unknown's Turn », « PRIORITY »)
+      //    scrapé par erreur : signature d'une capture prise sur l'écran replay/
+      //    résumé Talishar, où l'état n'est plus lisible (game fantôme #1750820).
+      //    À NE PAS confondre avec « (non capté) »/« you »/« your opponent », qui
+      //    sont légitimes (adversaire anonyme, repli DOM d'une VRAIE partie —
+      //    game 1977204). Miroir du garde-fou `isUiGarbageName` du grabber.
+      const isUiGarbageName = n => /^(?:unknown'?s turn|priority)$/i.test(String(n == null ? '' : n).trim());
+      [meta.myName, meta.oppName, myName, oppName].forEach(n => {
+        if (isUiGarbageName(n)) flagHealth('Nom de joueur suspect « ' + String(n).trim() + ' » (texte d’UI) — capture probablement prise sur l’écran replay/résumé.');
+      });
     }
 
     // 12) Assemblage du record normalisé

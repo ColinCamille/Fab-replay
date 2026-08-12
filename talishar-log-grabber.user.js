@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.23.0
+// @version      1.24.0
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.23.0';
+  const VERSION = '1.24.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -257,7 +257,7 @@
   // played …🎯…took N damage… » (sans séparateur). C'est un RE-RENDU de lignes
   // déjà captées en détaillé → illisible pour le parseur ET source de doublons.
   // On l'ignore à la lecture (les vraies parties n'en contiennent jamais).
-  const CONDENSED_CHAIN_RE = /^Chain Link \d+/;
+  const CONDENSED_CHAIN_RE = /^chain link \d+/i;
   function readVisibleLines(box) {
     return Array.from(box.children)
       .map(c => (c.innerText || '').replace(/\s+/g, ' ').trim())
@@ -382,7 +382,7 @@
     // instantanés couvrent la partie et le parseur reconstruit ces tours).
     if (Array.isArray(captured) && captured.length) {
       let ft = null;
-      for (const l of captured) { const m = String(l).match(/'s turn (\d+) has begun\.$/) || String(l).match(/^Turn (\d+)\s*\S/); if (m) { ft = +m[1]; break; } }
+      for (const l of captured) { const m = String(l).match(/'s turn (\d+) has begun\.$/) || String(l).match(/^turn (\d+)\s*\S/i); if (m) { ft = +m[1]; break; } }
       if (ft != null && ft > 1) issues.push('journal tronqué en tête (démarre au tour ' + ft + ' — 1ers tours hors tampon Talishar)');
     }
     canaryIssues = issues;
@@ -420,12 +420,16 @@
   function captureQuality() {
     const issues = [];
     const actionLines = captured.filter(l => /\b(?:played|activated|pitched|blocked with)\b|took \d+ damage/.test(l)).length;
-    const turnHeaders = captured.filter(l => /'s turn \d+ has begun\.$/.test(l)).length;
-    const turnish = captured.filter(l => /'s turn \d+ has begun\.$|^Turn \d+\S|\[\[TURN_START/.test(l)).length;
-    if (actionLines >= 25 && turnHeaders === 0)
+    // Tours RECONNUS : format canonique « X's turn N has begun. » OU séparateur
+    // DOM « TURN N <joueur> ». INSENSIBLE À LA CASSE + espace optionnel : l'UI
+    // Talishar rend parfois le séparateur EN MAJUSCULES avec un espace (« TURN 1
+    // your opponent », via text-transform CSS → innerText). Une capture DOM
+    // complète n'a JAMAIS de « has begun » ; ses séparateurs « TURN N … »
+    // suffisent à la valider. On ne bloque donc plus une telle partie (avant :
+    // turnHeaders===0 → envoi bloqué à tort, cf. game 1977204).
+    const recognizedTurns = captured.filter(l => /'s turn \d+ has begun\.$|^turn \d+\s*\S|\[\[TURN_START/i.test(l)).length;
+    if (actionLines >= 25 && recognizedTurns === 0)
       issues.push('Aucun tour détecté malgré ' + actionLines + ' actions.');
-    else if (turnish >= 2 && turnHeaders <= 1)
-      issues.push('Marqueurs de tour non reconnus (' + turnish + ' repérés, ' + turnHeaders + ' traduit(s)).');
     // On ne bloque que sur du VRAI texte d'UI dégradé (isUiGarbageName), pas sur
     // les libellés génériques « you »/« your opponent » : un pseudo adverse
     // inconnu est légitime et ne doit pas empêcher l'envoi.
@@ -504,7 +508,7 @@
     const turnNoOf = line => {
       const s = String(line);
       let m = s.match(/'s turn (\d+) has begun/); if (m) return +m[1];
-      m = s.match(/^Turn (\d+)\s*\S/); if (m) return +m[1];
+      m = s.match(/^turn (\d+)\s*\S/i); if (m) return +m[1];
       m = s.match(/\[\[TURN_START:(\d+):\d+\]\]/); if (m) return +m[1];
       return null;
     };
