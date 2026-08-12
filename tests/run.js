@@ -70,6 +70,40 @@ assert(divRec.turns.some(t => t.player === 'nissy') && divRec.turns.some(t => t.
 const hbRec = Parser.parse('=== Talishar game 43 — test ===\n\nnissy\'s turn 1 has begun.\nnissy played X\nEhecalt\'s turn 1 has begun.\nEhecalt played Y\n');
 assert(hbRec.turns.length >= 3, 'format « has begun » toujours segmenté (régression)');
 
+// Séparateur DOM EN MAJUSCULES + espace (« TURN 1 your opponent ») : l'UI
+// Talishar rend le libellé de tour en capitales (text-transform → innerText) sur
+// une capture en repli DOM. Sans reconnaissance, l'envoi était bloqué et le log
+// tombait « sans tour » (cf. game 1977204). Doit se segmenter comme les autres.
+const upLog = '=== Talishar game 46 — test ===\n\n'
+  + 'you played Aethersling\n'   // ouverture : le joueur local agit d'abord (comme les vrais logs)
+  + 'TURN 1 your opponent\nyour opponent played Unsheathed\nyou took 0 damage\n'
+  + 'TURN 1 you\nyou played Sink Below\nyour opponent took 4 damage\n'
+  + 'TURN 2 your opponent\nyour opponent played Slice and Dice\nyou took 2 damage\n';
+const upRec = Parser.parse(upLog);
+assert(upRec.turns.length >= 3, 'format MAJUSCULE « TURN N joueur » : tours segmentés (>=3, pas 1)');
+assert(upRec.turns.some(t => t.player === 'you') && upRec.turns.some(t => t.player === 'your opponent'), 'joueurs déduits des séparateurs MAJUSCULE');
+assert(upRec.health.ok === true, 'santé : format MAJUSCULE reconnu → ok (partie gardée)');
+
+// Repli héros : capture dégradée SANS bloc META (« you / your opponent »). Les
+// héros se déduisent du corps du log = la carte la plus CIBLÉE par camp
+// (possessif « your opponent's X was targeted » pour l'adversaire ; 🎯 rattaché
+// à l'acteur adverse pour moi). Rétablit le matchup au dashboard.
+let heroLog = '=== Talishar game 47 — test ===\n\n';
+for (let k = 0; k < 4; k++) {
+  heroLog += 'your opponent activated Cintari Saber\n';                         // acteur = adversaire
+  heroLog += '🎯Oscilio, Constella Intelligence was chosen as the target.\n';    // → cible = MON héros
+  heroLog += 'you activated Oscilio, Constella Intelligence\n';                 // acteur = moi
+  heroLog += "your opponent's Kassai of the Golden Sand was targeted\n";        // possessif → héros ADVERSE
+}
+const heroRec = Parser.parse(heroLog);
+eq(heroRec.players.me.hero, 'Oscilio, Constella Intelligence', 'déduction héros : mon héros (le plus 🎯 ciblé)');
+eq(heroRec.players.opp.hero, 'Kassai of the Golden Sand', 'déduction héros : héros adverse (possessif « was targeted »)');
+assert(heroRec.matchup && /Oscilio.*vs.*Kassai/.test(heroRec.matchup), 'déduction héros : matchup reconstruit');
+// Garde-fou : preuve insuffisante (1 seul ciblage) → héros reste inconnu (null),
+// pas de faux héros posé « au cas où » (règle « pas de théâtre d'erreur »).
+const weakRec = Parser.parse('=== Talishar game 48 — test ===\n\nyou played Aethersling\nyour opponent\'s Kassai of the Golden Sand was targeted\n\n=== META ===\nme: (non capté)\nopponent: Somebody\n');
+eq(weakRec.players.opp.hero, null, 'déduction héros : sous le seuil (1 ciblage) → reste inconnu');
+
 // Diagnostic de santé (garde-fou anti-format-cassé) :
 assert(rec.health && rec.health.ok === true, 'santé : fixture normale → ok');
 assert(divRec.health.ok === true, 'santé : format « Turn N joueur » reconnu → ok');
@@ -1575,13 +1609,12 @@ console.log('Garde-fou nom/id héros —');
 // ---------- Régression : capture fantôme réelle (ZUP, game #1750820) ----------
 // Une même partie (Arakni, Marionette vs Valda) capturée 2 FOIS côté grabber :
 // #1750692 saine, puis #1750820 22 min plus tard depuis un état Talishar
-// dégradé (probablement l'écran replay/résumé) — noms non résolus (« you »/
-// « your opponent »), séparateurs « TURN N <joueur> » en MAJUSCULES (jamais
-// traduits : ne matchent ni « has begun » ni « Turn N<joueur> »), méta polluée
-// par du texte d'UI (« Unknown's Turn », « PRIORITY »). Extrait AUTHENTIQUE du
-// vrai log (padding avec des lignes du même gabarit pour dépasser le seuil de
-// 25 actions du test de santé A — le vrai log en comptait ~70). Doit rester
-// détecté par health (test A, déjà existant) ET exclu du dashboard.
+// dégradé (probablement l'écran replay/résumé) — méta polluée par du TEXTE D'UI
+// (« Unknown's Turn », « PRIORITY ») scrapé comme pseudos. C'est CE signal (et
+// non le format de tour) qui distingue un fantôme d'une vraie capture en repli
+// DOM : les séparateurs MAJUSCULES « TURN N <joueur> » sont désormais reconnus
+// (game 1977204, légitime), donc le rejet passe par le nom d'UI parasite (santé,
+// test F). Extrait AUTHENTIQUE du vrai log. Doit rester exclu du dashboard.
 console.log('Capture fantôme (ZUP #1750820) —');
 (function () {
   const ghostBody = [
@@ -1608,8 +1641,8 @@ console.log('Capture fantôme (ZUP #1750820) —');
     + '\n\n=== META ===\nme: Unknown\'s Turn\nopponent: PRIORITY\n'
     + 'my_hero: Arakni, Marionette (arakni_marionette)\nopp_hero: Arakni, Marionette (valda_seismic_impact)\n';
   const ghost = Parser.parse(ghostRaw);
-  assert(ghost.health.ok === false, 'fantôme ZUP : health.ok=false (0 tour reconnu malgré 30+ actions)');
-  assert(ghost.health.issues.some(i => /tour/i.test(i)), 'fantôme ZUP : le message mentionne les tours');
+  assert(ghost.health.ok === false, 'fantôme ZUP : health.ok=false (nom d’UI parasite en méta)');
+  assert(ghost.health.issues.some(i => /suspect|UI|replay/i.test(i)), 'fantôme ZUP : le message pointe le nom d’UI parasite');
 
   const ghostEntries = [
     { gameId: '1750692', record: mkRec({ iWon: true, myHero: 'Arakni, Marionette', oppHero: 'Valda, Seismic Impact', date: '2026-07-22T22:28:31Z' }) },
