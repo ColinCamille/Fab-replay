@@ -23,7 +23,7 @@
   'use strict';
 
   const SCHEMA_VERSION = 1;
-  const PARSER_VERSION = '2.0.0';
+  const PARSER_VERSION = '2.1.0';
 
   const EQ_SLOTS = ['head', 'chest', 'arms', 'legs', 'weaponL', 'weaponR'];
 
@@ -569,7 +569,12 @@
     if (rawChatRes.body) { try { rawChatLog = JSON.parse(rawChatRes.body.trim().split('\n')[0]); } catch (e) { /* garde null */ } }
     // Files couleur par nom (rouge/jaune/bleu…), extraites du chatLog brut. Vides
     // pour les vieilles parties (DOM, sans RAW CHATLOG) → repli sans couleur.
-    const colorQueues = buildColorQueues(rawChatLog);
+    // `colorCoverage.fromTurn` = 1er tour réellement présent dans le chatLog brut
+    // (0 = complet). Sur une longue partie le chatLog est tronqué en tête : on ne
+    // colore qu'à partir de ce tour (cf. rawChatCoverage) pour ne pas coller de
+    // fausses couleurs sur les premiers tours.
+    const colorCoverage = rawChatCoverage(rawChatLog);
+    const colorQueues = buildColorQueues(rawChatLog, colorCoverage.startIndex);
 
     const meta = metaRes.meta;
     const lineTs = tsRes.lineTs;                 // index brut -> epoch (ou null)
@@ -699,10 +704,14 @@
       // d'ACTION (played/pitched/activated/blocked), pas « X was discarded » ;
       // dépiler pour une défausse volerait la couleur d'un vrai jeu du même nom
       // et désynchroniserait la file (défausse affichée en texte seul, cf. Table).
-      if (evt.type === 'played' || evt.type === 'pitched' || evt.type === 'activated') {
+      // Garde-fou TRONCATURE : n'attribuer une couleur QUE si le tour courant est
+      // couvert par le chatLog brut. Avant `colorCoverage.fromTurn`, la file
+      // décrirait des occurrences d'autres tours (décalage FIFO) → on s'abstient.
+      const colorCovered = current.turnNumber >= colorCoverage.fromTurn;
+      if (colorCovered && (evt.type === 'played' || evt.type === 'pitched' || evt.type === 'activated')) {
         const c = takeColor(colorQueues, evt.card);
         if (c) { evt.cardId = c.cardId; if (c.pitch) evt.pitch = c.pitch; }
-      } else if (evt.type === 'blocked' && Array.isArray(evt.cards)) {
+      } else if (colorCovered && evt.type === 'blocked' && Array.isArray(evt.cards)) {
         evt.cardIds = evt.cards.map(nm => { const c = takeColor(colorQueues, nm); return c ? c.cardId : null; });
         evt.pitches = evt.cards.map((nm, i) => { const id = evt.cardIds[i]; return id ? pitchFromCardId(id) : null; });
       }
@@ -1247,6 +1256,7 @@
       warnings,
       health,
       rawChatLog,
+      colorCoverageFromTurn: colorCoverage.fromTurn,   // 0 = complet ; >0 = couleurs indisponibles avant ce tour (chatLog tronqué)
       chain: chainRes.chain
     };
   }
@@ -1305,10 +1315,41 @@
   // jouée en deux couleurs différentes dans la même partie).
   const SHOWDETAIL_RE = /ShowDetail\([^)]*?\/([a-z0-9_]+)\.webp[^)]*\)[^>]*>([^<]+)</gi;
   const ACTION_VERB_RE = /\b(?:played|pitched|activated|blocked with)\b/;
-  function buildColorQueues(rawChatLog) {
+  const RAW_TURN_START_RE = /\[\[TURN_START:(\d+):\d+\]\]/;
+
+  // Le `chatLog` de Talishar (state.game) est un TAMPON BORNÉ : sur une longue
+  // partie il ne conserve que les DERNIERS tours — les premiers ont défilé. Le
+  // journal TEXTE, lui, est recousu par le grabber (stitch, cf. user-script) et
+  // reste complet. Résultat : la file couleur (bâtie sur le chatLog brut) ne
+  // couvre QUE les tours encore présents, alors que les événements couvrent TOUTE
+  // la partie → un simple FIFO colle les couleurs des tours tardifs sur les tours
+  // du début (Meteoric Impact rouge affiché en bleu, etc.). On situe donc la
+  // FENÊTRE couverte par le chatLog brut : `fromTurn` = 1er tour réellement
+  // présent ; `startIndex` = 1re entrée à ce tour (on ignore un éventuel fragment
+  // de tour partiel en tête). Les événements AVANT `fromTurn` n'ont pas de couleur
+  // fiable → on ne colore pas (mieux vaut aucune couleur qu'une fausse).
+  function rawChatCoverage(rawChatLog) {
+    if (!Array.isArray(rawChatLog) || !rawChatLog.length) return { fromTurn: 0, startIndex: 0 };
+    let firstIdx = -1, firstTurn = null;
+    for (let i = 0; i < rawChatLog.length; i++) {
+      const m = String(rawChatLog[i] == null ? '' : rawChatLog[i]).match(RAW_TURN_START_RE);
+      if (m) { firstIdx = i; firstTurn = +m[1]; break; }
+    }
+    // Aucun marqueur repérable, ou fenêtre COMPLÈTE (démarre au tour 1 / à
+    // l'ouverture) → on colore partout, file bâtie sur tout le chatLog.
+    if (firstTurn == null || firstTurn <= 1) return { fromTurn: 0, startIndex: 0 };
+    // Fenêtre TRONQUÉE : on ne colore qu'à partir de `firstTurn`, et la file
+    // démarre au 1er marqueur (le fragment de tour partiel éventuel avant lui est
+    // ignoré pour rester aligné 1:1 avec les événements des tours couverts).
+    return { fromTurn: firstTurn, startIndex: firstIdx };
+  }
+
+  function buildColorQueues(rawChatLog, startIndex) {
     const queues = new Map();
     if (!Array.isArray(rawChatLog)) return queues;
-    for (const entry of rawChatLog) {
+    const from = startIndex > 0 ? startIndex : 0;
+    for (let i = from; i < rawChatLog.length; i++) {
+      const entry = rawChatLog[i];
       const raw = String(entry == null ? '' : entry);
       const plain = raw.replace(/<[^>]+>/g, '');
       if (!ACTION_VERB_RE.test(plain)) continue;   // seulement les vraies actions

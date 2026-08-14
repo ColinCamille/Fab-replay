@@ -184,6 +184,30 @@ assert(evPlaySink && evPlaySink.pitch === 2, 'couleur : Sink Below JOUÉ ensuite
 const evBlock = colEvs.find(e => e.type === 'blocked');
 assert(evBlock && Array.isArray(evBlock.pitches) && evBlock.pitches[0] === 1 && evBlock.pitches[1] === 1, 'couleur : blocs (défense) colorés par carte (Unmovable rouge, Sink Below rouge)');
 assert(Parser.pitchFromCardId('x_yellow') === 2 && Parser.pitchFromCardId('wrenchtastic') === null, 'couleur : pitchFromCardId (suffixe → pitch, mono-impression → null)');
+assert(colRec.colorCoverageFromTurn === 0, 'couleur : chatLog complet → couverture couleur dès le début (fromTurn 0)');
+
+// Garde-fou TRONCATURE couleur (game 2007166) : sur une longue partie le chatLog
+// brut de Talishar est un tampon borné qui NE contient que les derniers tours,
+// alors que le journal texte (recousu par le grabber) couvre toute la partie. Un
+// simple FIFO collerait les couleurs des tours tardifs sur les premiers tours
+// (Meteoric Impact rouge affiché en bleu). On ne colore donc QUE les tours
+// réellement présents dans le chatLog brut ; avant, aucune couleur (pas de fausse).
+const truncColorRaw = [
+  '[[TURN_START:3:1]]',
+  'Player 1 played ' + sd('meteoric_impact_blue', 'Meteoric Impact')   // tour 3 : bleu (le seul couvert)
+];
+const truncColor = '=== Talishar game 51 — test ===\n\n' +
+  "Ehecalt's turn 1 has begun.\nEhecalt played Meteoric Impact\n" +          // tour 1 : rouge en vrai, MAIS hors fenêtre chatLog
+  "Ehecalt's turn 2 has begun.\nEhecalt passed\n" +
+  "Ehecalt's turn 3 has begun.\nEhecalt played Meteoric Impact\n" +          // tour 3 : couvert → bleu
+  '\n=== RAW CHATLOG (state.game.chatLog, verbatim) ===\n' + JSON.stringify(truncColorRaw) + '\n';
+const truncColRec = Parser.parse(truncColor);
+assert(truncColRec.colorCoverageFromTurn === 3, 'couleur tronquée : couverture repérée au tour 3 (chatLog démarre à [[TURN_START:3]])');
+const tcEvs = [];
+truncColRec.turns.forEach(t => (t.events || []).forEach(e => { if (e.type === 'played' && e.card === 'Meteoric Impact') tcEvs.push({ turn: t.turnNumber, id: e.cardId }); }));
+const tcT1 = tcEvs.find(e => e.turn === 1), tcT3 = tcEvs.find(e => e.turn === 3);
+assert(tcT1 && tcT1.id == null, 'couleur tronquée : le tour 1 (hors fenêtre) N\'est PAS coloré (pas de fausse couleur bleue)');
+assert(tcT3 && tcT3.id === 'meteoric_impact_blue', 'couleur tronquée : le tour 3 (couvert) est coloré correctement (bleu)');
 
 // ── Journal TRONQUÉ (tampon roulant Talishar, longue partie) ─────────────────
 // Le corps du log DÉMARRE au tour 3 (les tours 1-2 ont défilé hors du tampon)
