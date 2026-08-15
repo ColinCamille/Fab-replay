@@ -209,6 +209,28 @@ const tcT1 = tcEvs.find(e => e.turn === 1), tcT3 = tcEvs.find(e => e.turn === 3)
 assert(tcT1 && tcT1.id == null, 'couleur tronquée : le tour 1 (hors fenêtre) N\'est PAS coloré (pas de fausse couleur bleue)');
 assert(tcT3 && tcT3.id === 'meteoric_impact_blue', 'couleur tronquée : le tour 3 (couvert) est coloré correctement (bleu)');
 
+// Contre-épreuve (ce que produit le grabber v1.25 recousu) : un chatLog brut
+// COMPLET démarrant au tour 1 → couverture pleine (fromTurn 0), la carte du tour 1
+// est bien coloriée malgré la même carte rejouée en une autre couleur au tour 3.
+const fullColorRaw = [
+  '[[TURN_START:1:1]]',
+  'Player 1 played ' + sd('meteoric_impact_red', 'Meteoric Impact'),        // tour 1 : rouge
+  '[[TURN_START:3:1]]',
+  'Player 1 played ' + sd('meteoric_impact_blue', 'Meteoric Impact')         // tour 3 : bleu
+];
+const fullColor = '=== Talishar game 52 — test ===\n\n' +
+  "Ehecalt's turn 1 has begun.\nEhecalt played Meteoric Impact\n" +
+  "Ehecalt's turn 2 has begun.\nEhecalt passed\n" +
+  "Ehecalt's turn 3 has begun.\nEhecalt played Meteoric Impact\n" +
+  '\n=== RAW CHATLOG (state.game.chatLog, verbatim) ===\n' + JSON.stringify(fullColorRaw) + '\n';
+const fullColRec = Parser.parse(fullColor);
+assert(fullColRec.colorCoverageFromTurn === 0, 'couleur complète : chatLog brut depuis le tour 1 → couverture pleine (fromTurn 0)');
+const fcEvs = [];
+fullColRec.turns.forEach(t => (t.events || []).forEach(e => { if (e.type === 'played' && e.card === 'Meteoric Impact') fcEvs.push({ turn: t.turnNumber, id: e.cardId }); }));
+const fcT1 = fcEvs.find(e => e.turn === 1), fcT3 = fcEvs.find(e => e.turn === 3);
+assert(fcT1 && fcT1.id === 'meteoric_impact_red', 'couleur complète : le tour 1 est colorié (rouge) car le brut le couvre');
+assert(fcT3 && fcT3.id === 'meteoric_impact_blue', 'couleur complète : le tour 3 conserve sa couleur par occurrence (bleu)');
+
 // ── Journal TRONQUÉ (tampon roulant Talishar, longue partie) ─────────────────
 // Le corps du log DÉMARRE au tour 3 (les tours 1-2 ont défilé hors du tampon)
 // avec une fin de tour orpheline en tête, MAIS les instantanés (main/vie/formes)
@@ -1450,6 +1472,17 @@ console.log('Grabber merge —');
     'merge: re-rendus complets répétés → aucun doublon (journal = 1 seule copie)');
   // Re-rendu identique répété : longueur stable.
   eq(run([full2, full2, full2]).length, full2.length, 'merge: re-rendu identique → longueur stable');
+
+  // RECOUSE du chatLog BRUT (v1.25) : le grabber accumule la fenêtre chatLog
+  // verbatim tick-par-tick avec CETTE MÊME fonction. Le tampon roulant borné de
+  // Talishar fait glisser la fenêtre (tours anciens qui sortent) ; l'accumulation
+  // doit reconstituer le chatLog COMPLET (sinon couleurs des 1ers tours perdues).
+  const w1 = ['[[TURN_START:1:1]]', 'P1 played Foo', 'P1 pitched Bar'];
+  const w2 = ['P1 pitched Bar', '[[TURN_START:2:1]]', 'P2 played Baz'];        // glisse d'1 cran
+  const w3 = ['[[TURN_START:2:1]]', 'P2 played Baz', '[[TURN_START:3:1]]'];    // glisse encore
+  eq(run([w1, w1, w2, w3]).join('|'),
+    '[[TURN_START:1:1]]|P1 played Foo|P1 pitched Bar|[[TURN_START:2:1]]|P2 played Baz|[[TURN_START:3:1]]',
+    'raw: fenêtres chatLog glissantes recousues → chatLog complet (tous tours)');
 
   // ── stitchAdopt : adoption du chatLog sans perdre les 1ers tours (anti-troncature).
   const sa0 = src.indexOf('function stitchAdopt');
