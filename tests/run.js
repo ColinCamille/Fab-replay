@@ -332,6 +332,10 @@ const invA = Parser.parse([
 ].join('\n'));
 eq(invA.myName, 'Alpha', 'HERO FORMS prime : myName = Alpha (pas names[0]=Beta)');
 eq(invA.oppName, 'Beta', 'HERO FORMS prime : oppName = Beta');
+// META « me: » = pseudo Talishar (pas un nom de héros) → PAS d'avertissement
+// « grabber mal identifié » (faux positif écarté).
+assert(!invA.warnings.some(w => /mal identifié les joueurs/.test(w)),
+  'pas de faux avertissement quand META « me: » est un pseudo, pas un nom de joueur');
 const invAturn = invA.turns.find(t => t.player === 'Alpha' && t.turnNumber === 1);
 eq(invAturn && invAturn.side, 'me', 'HERO FORMS prime : le tour d\'Alpha est bien « me »');
 

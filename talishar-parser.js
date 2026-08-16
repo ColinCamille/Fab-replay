@@ -807,8 +807,13 @@
       if (other) oppName = other;
     }
 
-    // Avertir si les noms de META étaient faux et ont dû être corrigés
-    if (myName && metaMy && metaMy !== myName) {
+    // Avertir si les noms de META étaient faux et ont dû être corrigés.
+    // On ne compare QUE des VRAIS noms de joueurs (metaMyReal, présent dans le
+    // journal) : le champ META « me: » vaut souvent le PSEUDO Talishar
+    // (« Epitrochasme ») alors que myName est le nom du HÉROS (« Oscilio… ») —
+    // deux référentiels distincts qui ne coïncident jamais, ce n'est PAS une
+    // mauvaise identification (faux positif écarté).
+    if (myName && metaMyReal && metaMyReal !== myName) {
       warnings.push('Le grabber avait mal identifié les joueurs (« ' + metaMy + ' » / « ' + (metaOpp || '?') + ' ») — identité reconstruite depuis le log : toi = ' + myName + ', adversaire = ' + (oppName || '?') + '.');
     }
     if (!myName) warnings.push('Pseudo du joueur non résolu — le viewer devra demander.');
