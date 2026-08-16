@@ -744,6 +744,12 @@
     {
       const myEq = new Set(Object.values(meta.myEquipment || {}).map(e => e && e.name).filter(Boolean).map(normName));
       const opEq = new Set(Object.values(meta.oppEquipment || {}).map(e => e && e.name).filter(Boolean).map(normName));
+      // Écarter l'équipement PARTAGÉ (les deux camps jouent la même pièce, ex.
+      // Fyendal's Spring Tunic, quasi universel) : ambigu, il ferait passer le
+      // joueur local pour l'adversaire — c'est CE bug qui inversait les tours de
+      // game 2018099 (Fyendal's activé par Oscilio → « opp » car présent aussi
+      // côté adverse). On ne garde que les pièces PROPRES à un camp.
+      for (const c of Array.from(myEq)) { if (opEq.has(c)) { myEq.delete(c); opEq.delete(c); } }
       if (myEq.size || opEq.size) {
         for (const l of logLines) {
           const m = l.match(/^(.+?) (?:activated|blocked with) (.+)$/);
@@ -761,10 +767,29 @@
     const metaMyReal = (metaMy && names.indexOf(metaMy) >= 0) ? metaMy : null;
     const metaOppReal = (metaOpp && names.indexOf(metaOpp) >= 0) ? metaOpp : null;
 
+    // 0) HERO FORMS — signal le plus direct : le grabber ne capte QUE la
+    //    perspective LOCALE (« me » = joueur local, main/arsenal jamais ceux de
+    //    l'adversaire). Plus fiable que l'heuristique d'équipement (qui peut se
+    //    tromper sur une pièce partagée — cf. game 2018099). On lit l'ouverture
+    //    (forme de base du héros, alignée sur les noms du journal ; les
+    //    transformations viennent après) et on n'assigne QUE si me/opp sont
+    //    distincts et correspondent à de vrais noms — un miroir (formes
+    //    identiques) laisse les autres signaux trancher.
     let myName = null, oppName = null;
-    if (oppFromRoll && names.indexOf(oppFromRoll) >= 0) oppName = oppFromRoll;   // 1
-    if (!oppName && oppFromEquip) oppName = oppFromEquip;                        // 2a
-    if (!oppName && meFromEquip) myName = meFromEquip;                          // 2b
+    {
+      const snaps = heroFormSnapshots || {};
+      const keys = Object.keys(snaps);
+      const openKey = keys.indexOf('__opening__') >= 0 ? '__opening__' : keys[0];
+      const hf = openKey ? snaps[openKey] : null;
+      if (hf) {
+        const meMatch = hf.me && names.find(n => normName(n) === normName(hf.me));
+        const oppMatch = hf.opp && names.find(n => normName(n) === normName(hf.opp));
+        if (meMatch && oppMatch && meMatch !== oppMatch) { myName = meMatch; oppName = oppMatch; }
+      }
+    }
+    if (!oppName && !myName && oppFromRoll && names.indexOf(oppFromRoll) >= 0) oppName = oppFromRoll;  // 1
+    if (!oppName && !myName && oppFromEquip) oppName = oppFromEquip;             // 2a
+    if (!oppName && !myName && meFromEquip) myName = meFromEquip;               // 2b
     if (!oppName && !myName) {                                                  // 3
       if (metaOppReal && metaOppReal !== metaMyReal) oppName = metaOppReal;
       else if (metaMyReal && metaMyReal !== metaOppReal) myName = metaMyReal;

@@ -304,6 +304,56 @@ assert(t1 && Array.isArray(t1.hand) && t1.hand.indexOf('Bloodrush Bellow') >= 0,
 // Arsenal d'ouverture forcé vide (règle FaB).
 eq(rec.turns[0].arsenal.length, 0, 'arsenal ouverture vide');
 
+// ── Identité me/opp : tours PAS inversés (game 2018099) ──────────────────────
+// Deux régressions du même symptôme (« les tours sont inversés ») quand
+// l'ADVERSAIRE agit en premier dans le journal (names[0] = adversaire) :
+//   A. Aucun jet de dé, pas d'équipement exploitable → HERO FORMS (capture DOM
+//      locale : « me » = joueur local) doit primer sur le repli names[0].
+//   B. Équipement PARTAGÉ (Fyendal's Spring Tunic, joué par les DEUX camps) :
+//      il ne doit plus faire passer le joueur local pour l'adversaire ; seule une
+//      pièce PROPRE à un camp (Storm Striders) tranche.
+console.log('Identité tours (game 2018099) —');
+const invA = Parser.parse([
+  '=== Talishar game 2018099A — 1/1/2026 ===', '',
+  'Beta played Aggro Attack',                         // l'adversaire agit en 1er
+  'Alpha blocked with Guard',
+  'Beta passed priority. Attempting to end turn.',
+  "Alpha's turn 1 has begun.",
+  'Alpha played Meteor',
+  'Alpha passed priority. Attempting to end turn.',
+  "Beta's turn 1 has begun.",
+  'Beta played Coalescence',
+  'Beta passed priority. Attempting to end turn.', '',
+  '=== HERO FORMS (forme du héros par tour : toi | adversaire) ===',
+  '[OUVERTURE] me: Alpha | opp: Beta',
+  '[Alpha #1] me: Alpha | opp: Beta',
+  '[Beta #1] me: Alpha | opp: Beta', '',
+  '=== META ===', 'me: LocalUser', 'opponent: RemoteUser', ''
+].join('\n'));
+eq(invA.myName, 'Alpha', 'HERO FORMS prime : myName = Alpha (pas names[0]=Beta)');
+eq(invA.oppName, 'Beta', 'HERO FORMS prime : oppName = Beta');
+const invAturn = invA.turns.find(t => t.player === 'Alpha' && t.turnNumber === 1);
+eq(invAturn && invAturn.side, 'me', 'HERO FORMS prime : le tour d\'Alpha est bien « me »');
+
+const invB = Parser.parse([
+  '=== Talishar game 2018099B — 1/1/2026 ===', '',
+  'Beta played Aggro Attack',                         // l'adversaire agit en 1er
+  'Alpha blocked with Guard',
+  'Beta passed priority. Attempting to end turn.',
+  "Alpha's turn 1 has begun.",
+  "Alpha activated Fyendal's Spring Tunic",           // équipement PARTAGÉ → ignoré
+  'Alpha activated Storm Striders',                    // équipement PROPRE → tranche
+  'Alpha passed priority. Attempting to end turn.',
+  "Beta's turn 1 has begun.",
+  'Beta activated Reality Refractor',
+  'Beta passed priority. Attempting to end turn.', '',
+  '=== META ===', 'me: LocalUser', 'opponent: RemoteUser',
+  'my_equipment: chest=Fyendals Spring Tunic (fyendals_spring_tunic) | legs=Storm Striders (storm_striders)',
+  'opp_equipment: chest=Fyendals Spring Tunic (fyendals_spring_tunic) | weaponL=Reality Refractor (reality_refractor)', ''
+].join('\n'));
+eq(invB.myName, 'Alpha', 'équipement partagé ignoré : myName = Alpha (via Storm Striders)');
+eq(invB.oppName, 'Beta', 'équipement partagé ignoré : oppName = Beta');
+
 // ---------- 2. Agrégation dashboard ----------
 const Dashboard = require('../js/dashboard.js');
 console.log('Dashboard —');
