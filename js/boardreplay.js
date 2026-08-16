@@ -166,6 +166,51 @@
     const addPitch = (side, c, cp) => (side === 'me' ? st.mePitch : st.oppPitch).push({ nm: c, cp: (cp === 1 || cp === 2 || cp === 3) ? cp : null });
     const toGrave = (side, c) => (side === 'me' ? st.meGrave : st.oppGrave).push(c);
 
+    // Reconstruction de MA main pour les tours SANS instantané (t.hand null — arrive
+    // quand le grabber est démarré/rechargé EN COURS de partie : les instantanés DOM
+    // par tour ne couvrent alors que les derniers tours). La HAND TIMELINE, elle, garde
+    // tout l'historique de la main, MAIS ses positions peuvent être inexploitables
+    // (agglutinées sur une même valeur quand le grabber « adopte » d'un coup le chatLog
+    // déjà présent) → impossible de corréler par position (la surcharge par pos, plus
+    // bas, saute ces étapes). On retrouve donc la main de DÉBUT de tour par CONTENU : la
+    // 1re entrée timeline (curseur qui avance de tour en tour) qui CONTIENT toutes les
+    // cartes que je joue/pitche DEPUIS LA MAIN ce tour-ci. À défaut : ces seules cartes
+    // (main partielle mais honnête — jamais « main vide »). Les cartes jouées depuis
+    // l'arsenal sont retirées (le log fait autorité : elles vivent en zone arsenal).
+    const HTsrc = Array.isArray(GAME.handTimeline) ? GAME.handTimeline : [];
+    let htCursor = 0;
+    const reconstructMyHand = t => {
+      const need = {}, arsK = {};
+      (t.events || []).forEach(e => {
+        if (e.player !== MY || !e.card) return;
+        if (e.type === 'played' && e.fromArsenal) { const k = norm(e.card); arsK[k] = (arsK[k] || 0) + 1; return; }
+        if (e.type === 'played' || e.type === 'pitched') { const k = norm(e.card); (need[k] = need[k] || { nm: e.card, n: 0 }).n++; }
+      });
+      // Retire les cartes d'arsenal (évite qu'une carte apparaisse en main ET en arsenal).
+      const stripArs = (cards, pitches) => {
+        const oc = [], op = [], seen = {};
+        (cards || []).forEach((c, i) => {
+          const k = norm(c);
+          if ((arsK[k] || 0) > (seen[k] || 0)) { seen[k] = (seen[k] || 0) + 1; return; }
+          oc.push(c); op.push(pitches && pitches[i] != null ? pitches[i] : null);
+        });
+        return { cards: oc, pitches: op };
+      };
+      const needKeys = Object.keys(need);
+      if (needKeys.length) {
+        for (let h = htCursor; h < HTsrc.length; h++) {
+          const cards = HTsrc[h].cards || [];
+          if (!cards.length) continue;
+          const cnt = {};
+          cards.forEach(c => { const k = norm(c); cnt[k] = (cnt[k] || 0) + 1; });
+          if (needKeys.every(k => (cnt[k] || 0) >= need[k].n)) { htCursor = h + 1; return stripArs(cards, HTsrc[h].pitches); }
+        }
+      }
+      const flat = [];
+      needKeys.forEach(k => { for (let m = 0; m < need[k].n; m++) flat.push(need[k].nm); });
+      return { cards: flat, pitches: [] };
+    };
+
     (GAME.turns || []).forEach((t, idx) => {
       const attacker = t.player;
       // Position de log du début de tour (1er événement) : les bannières/transfos de
@@ -180,6 +225,17 @@
       // que soit le tour. Mon arsenal est donc toujours à jour — y compris une
       // carte mise en arsenal en fin de mon tour, visible dès le tour suivant.
       st.meArsenal = (t.arsenal || []).slice();
+      // Arsenal SANS instantané (t.arsenal null — grabber démarré en cours de partie) :
+      // on infère son contenu depuis les cartes que JE joue « depuis l'arsenal » ce
+      // tour-ci — une carte jouée from arsenal y était forcément au début du tour (le
+      // log fait autorité, cf. §7). Rend visible la carte arsenalée (ex. Comet Storm)
+      // au lieu d'un arsenal vide. Jamais inventé : seulement ce que le log prouve.
+      if (t.arsenal == null) {
+        (t.events || []).forEach(e => {
+          if (e.type === 'played' && e.fromArsenal && e.player === MY && e.card
+            && !st.meArsenal.some(c => norm(c) === norm(e.card))) st.meArsenal.push(e.card);
+        });
+      }
       // Tokens/permanents en jeu : UNIQUEMENT les données réelles du terrain
       // captées par le grabber. On n'invente plus de tokens « par héros » : ça
       // affichait des auras (Embodiments de Briar…) dès le tour 0 alors qu'elles
@@ -316,7 +372,12 @@
         // repioché en fin du sien) — mais PAS au début du tour adverse : il
         // garde ce qu'il lui reste après ses blocs, et ne repioche qu'à la fin.
         // L'arsenal adverse n'est pas connu de façon fiable → on ne l'invente pas.
-        if (actor === MY) { st.meFaceUp = true; st.meHandCards = (t.hand || []).slice(); st.meHandPitches = padPitches(st.meHandCards, t.handPitches); st.oppHandCount = 4; }
+        if (actor === MY) {
+          st.meFaceUp = true;
+          if (t.hand) { st.meHandCards = t.hand.slice(); st.meHandPitches = padPitches(st.meHandCards, t.handPitches); }
+          else { const r = reconstructMyHand(t); st.meHandCards = r.cards; st.meHandPitches = padPitches(r.cards, r.pitches); }
+          st.oppHandCount = 4;
+        }
         else {
           // Tour adverse : MA main m'est connue (instantané capté au début de
           // son tour) → je l'affiche face visible plutôt que des dos de cartes.

@@ -955,6 +955,46 @@ const t1Ban = bannerTl.steps.find(s => s.stage.type === 'banner' && /Ton tour/.t
 eq(t1Ban && t1Ban.state.meHandCards.length, 3, 'game 1906591 : bannière tour 1 à 3 cartes (non tronquée à 2)');
 assert(t1Ban && t1Ban.state.meHandCards.some(c => /constella uplift/i.test(c)), 'game 1906591 : Constella Uplift présente en main au début du tour 1');
 
+// Tours SANS instantané par tour (grabber démarré/rechargé EN COURS de partie →
+// t.hand/t.arsenal null) + HAND TIMELINE aux positions AGGLUTINÉES (le grabber a
+// « adopté » d'un coup le chatLog déjà présent → toutes les positions early écrasées
+// sur une même grande valeur, ici 90). Reproduction game 2017659 : mes tours
+// affichaient « main vide » et la carte arsenalée (Comet Storm) n'apparaissait pas.
+// La main doit être reconstruite par CONTENU depuis la timeline, l'arsenal inféré des
+// jeux « from arsenal », sans jamais afficher une même carte en main ET en arsenal.
+const noSnapTl = BR.buildTimeline({
+  myName: 'Oscilio', oppName: 'Gravy',
+  players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Gravy', equipment: {} } },
+  lifeSeries: { me: [36, 36, 36], opp: [40, 40, 40] },
+  handTimeline: [
+    { pos: 90, cards: ['Kindle', 'Comet Collision', 'Sigil Of Solace', 'Comet Storm  Shock'] }, // ouverture
+    { pos: 90, cards: ['Comet Storm  Shock', 'Mental Block', 'Comet Collision', 'Aethersling'] }, // début tour 1 (moi)
+    { pos: 90, cards: ['Comet Storm  Shock', 'Comet Collision', 'Aethersling'] },
+    { pos: 90, cards: ['Comet Storm  Shock'] }
+  ],
+  turns: [
+    { player: null, label: 'Ouverture', turnNumber: 0,
+      hand: ['Kindle', 'Comet Collision', 'Sigil Of Solace', 'Comet Storm  Shock'], arsenal: [],
+      events: [{ type: 'played', player: 'Oscilio', card: 'Sigil Of Solace', _idx: 1 }] },
+    { player: 'Gravy', label: 'Gravy — Tour 1', turnNumber: 1, hand: null, arsenal: null,
+      events: [{ type: 'played', player: 'Gravy', card: 'Riggermortis', _idx: 20 }] },
+    { player: 'Oscilio', label: 'Oscilio — Tour 1', turnNumber: 1, hand: null, arsenal: null,
+      events: [
+        { type: 'played', player: 'Oscilio', card: 'Comet Storm // Shock', fromArsenal: true, _idx: 25 },
+        { type: 'pitched', player: 'Oscilio', card: 'Mental Block', _idx: 27 },
+        { type: 'played', player: 'Oscilio', card: 'Aethersling', _idx: 29 },
+        { type: 'played', player: 'Oscilio', card: 'Comet Collision', _idx: 31 }
+      ] }
+  ]
+});
+const noSnapBan = noSnapTl.steps.find(s => s.stage.type === 'banner' && /Ton tour/.test(s.stage.big || ''));
+assert(noSnapBan, 'no-snap : bannière de mon tour présente');
+assert(noSnapBan.state.meHandCards.length > 0, 'no-snap : main de mon tour reconstruite (plus « main vide »)');
+assert(noSnapBan.state.meArsenal.some(c => /comet storm/i.test(c)), 'no-snap : carte jouée depuis l\'arsenal (Comet Storm) visible en zone arsenal');
+assert(!noSnapBan.state.meHandCards.some(c => /comet storm/i.test(c)), 'no-snap : la carte d\'arsenal n\'apparaît PAS aussi en main (pas de double zone)');
+['Mental Block', 'Comet Collision', 'Aethersling'].forEach(nm =>
+  assert(noSnapBan.state.meHandCards.some(c => Parser.normName(c) === Parser.normName(nm)), 'no-snap : ' + nm + ' présent en main au début du tour'));
+
 // ── Vue DÉROULÉ : reconcileCertain ne gonfle plus la main de début de MON tour ──
 // (game 1906591 : Oscilio pioche en cours de tour → une carte piochée puis jouée
 // ne doit PAS compter dans la main de DÉBUT de tour). L'instantané fiable fait foi.
