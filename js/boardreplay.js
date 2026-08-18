@@ -136,7 +136,8 @@
       meHandCards: [], meHandPitches: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
       mePitch: [], oppPitch: [], meArsenal: [], oppArsenalCount: 0,
       meGrave: [], oppGrave: [], meBanish: [], oppBanish: [], meTokens: [], oppTokens: [],
-      meEquipGone: [], oppEquipGone: [], meEquipUsed: [], oppEquipUsed: [], meBorn: [], oppBorn: [], life: { me: 0, opp: 0 }
+      meEquipGone: [], oppEquipGone: [], meEquipUsed: [], oppEquipUsed: [], meBorn: [], oppBorn: [],
+      meEquipCounters: {}, oppEquipCounters: {}, life: { me: 0, opp: 0 }
     };
     const steps = [];
     // Position de log de l'étape courante (index de ligne de l'événement en cours) :
@@ -149,7 +150,9 @@
       meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(),
       meEquipGone: st.meEquipGone.slice(), oppEquipGone: st.oppEquipGone.slice(),
       meEquipUsed: st.meEquipUsed.slice(), oppEquipUsed: st.oppEquipUsed.slice(),
-      meBorn: st.meBorn.slice(), oppBorn: st.oppBorn.slice(), life: { me: st.life.me, opp: st.life.opp }
+      meBorn: st.meBorn.slice(), oppBorn: st.oppBorn.slice(),
+      meEquipCounters: Object.assign({}, st.meEquipCounters), oppEquipCounters: Object.assign({}, st.oppEquipCounters),
+      life: { me: st.life.me, opp: st.life.opp }
     });
     const push = (turn, actor, stage, hit) => steps.push({ turn, actor, stage, hit: hit || null, _idx: curIdx, form: { me: curForm.me, opp: curForm.opp }, state: snap() });
     const rm = (a, n) => { const k = a.findIndex(x => norm(x) === norm(n)); if (k >= 0) { a.splice(k, 1); return true; } return false; };
@@ -220,6 +223,13 @@
       if (ls.opp[idx] != null) st.life.opp = ls.opp[idx];
       st.mePitch = []; st.oppPitch = [];   // le pitch part au deck en fin de tour
       st.meEquipUsed = []; st.oppEquipUsed = [];   // « équipement utilisé » se réarme à chaque tour
+      // Compteurs d'équipement (Tunic 1/2/3, -1 counters…) : instantané par tour
+      // capté par le grabber. Absent (t.equipCounters null : vieux log / aucun
+      // compteur ce tour) → vidé (pas de badge). { slot: entier signé }.
+      if (t.equipCounters) {
+        st.meEquipCounters = Object.assign({}, t.equipCounters.me || {});
+        st.oppEquipCounters = Object.assign({}, t.equipCounters.opp || {});
+      } else { st.meEquipCounters = {}; st.oppEquipCounters = {}; }
 
       // t.hand / t.arsenal sont TOUJOURS les instantanés du joueur (moi), quel
       // que soit le tour. Mon arsenal est donc toujours à jour — y compris une
@@ -1000,9 +1010,14 @@
   function gcard(side, slot, name, hero) {
     // data-equip = clé normalisée d'une pièce d'équipement (armure) : permet à
     // render() de la masquer quand elle est détruite. Le héros n'en porte pas.
-    const eqAttr = (!hero && name && name !== '—') ? ' data-equip="' + esc(norm(name)) + '"' : '';
-    return '<div class="br-gcard br-' + side + ' p-' + slot + (hero ? ' br-hero' : '') + '"' + eqAttr + '>' +
+    // data-slot = emplacement (head/chest/arms/legs) : render() y pose le badge
+    // de compteur (Tunic 1/2/3, -1 counters…) capté par tour.
+    const equipped = !hero && name && name !== '—';
+    const eqAttr = equipped ? ' data-equip="' + esc(norm(name)) + '"' : '';
+    const slotAttr = equipped ? ' data-slot="' + esc(slot) + '"' : '';
+    return '<div class="br-gcard br-' + side + ' p-' + slot + (hero ? ' br-hero' : '') + '"' + eqAttr + slotAttr + '>' +
       '<div class="br-art" data-card="' + esc(name) + '"' + (hero ? ' data-hero' : '') + '></div>' +
+      (equipped ? '<span class="br-counter" aria-hidden="true"></span>' : '') +
       '<div class="br-lab">' + esc(name) + '</div></div>';
   }
   // Champ d'un joueur (tapis miroir) : rail cimetière·deck·pitch | héros entouré
@@ -1028,8 +1043,8 @@
     // dual-wield compris) : identifie la copie exacte, pas juste le nom affiché
     // — sinon deux dagues identiques (ex. deux « Hunter's Klaive ») partagent la
     // même clé et une seule destruction en masquerait deux (ou aucune).
-    const wpnTile = it => (it && it.name)
-      ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(rawKey(it)) + '"><div class="br-art" data-card="' + esc(it.name) + '"></div><div class="br-lab">' + esc(it.name) + '</div></div>'
+    const wpnTile = (it, slot) => (it && it.name)
+      ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(rawKey(it)) + '" data-slot="' + esc(slot) + '"><div class="br-art" data-card="' + esc(it.name) + '"></div><span class="br-counter" aria-hidden="true"></span><div class="br-lab">' + esc(it.name) + '</div></div>'
       : '';
     // Armes CRÉÉES en jeu (ex. Graphene Chelicera par le pouvoir d'Arakni,
     // Orb-Weaver) : absentes de l'équipement de départ, ajoutées par
@@ -1044,7 +1059,7 @@
     // (cluster centré de largeur variable) → les deux camps ne s'alignaient pas.
     const cluster = '<div class="br-cluster">' + equip +
       gcard(side, 'hero', pl.hero || '?', true) +
-      '<div class="br-wpns">' + wpnTile(e.weaponL) + wpnTile(e.weaponR) + createdWpns + '</div>' +
+      '<div class="br-wpns">' + wpnTile(e.weaponL, 'weaponL') + wpnTile(e.weaponR, 'weaponR') + createdWpns + '</div>' +
       '</div>';
     const rightRail = '<div class="br-rail br-right">' +
       '<div class="br-zpair"><span class="br-zlbl">Arsenal</span>' +
@@ -1189,6 +1204,26 @@
         el.classList.toggle('br-used', !broken && used.indexOf(k) >= 0); // activé ce tour → grisé
       });
     }
+    // Compteurs d'équipement (Tunic 1/2/3, -1 counters…) : badge chiffré par
+    // slot, capté par tour. Positif → nombre nu (charges de Tunic) ; négatif →
+    // « -N » (counters). 0/absent → pas de badge (théâtre d'erreur : pas de
+    // fausse valeur). Réversible en scrubbant, comme applyEquipState().
+    function applyEquipCounters(zoneSel, ctrMap) {
+      const zone = $(zoneSel); if (!zone) return;
+      const m = ctrMap || {};
+      zone.querySelectorAll('[data-slot]').forEach(el => {
+        const badge = el.querySelector('.br-counter'); if (!badge) return;
+        const v = m[el.getAttribute('data-slot')];
+        if (v == null || v === 0) {
+          badge.textContent = '';
+          badge.classList.remove('br-counter--on', 'br-counter--neg');
+        } else {
+          badge.textContent = String(v);              // « 3 » (Tunic) ou « -1 » (counter)
+          badge.classList.add('br-counter--on');
+          badge.classList.toggle('br-counter--neg', v < 0);
+        }
+      });
+    }
     // Armes CRÉÉES en jeu (ex. Graphene Chelicera) : masquées (br-unborn) tant
     // qu'elles ne sont pas encore apparues à l'étape courante ; réversible en
     // scrubbant la timeline en arrière, comme applyEquipState().
@@ -1253,6 +1288,8 @@
       applyEquipState('#br-fOpp', stt.oppEquipGone, stt.oppEquipUsed);
       applyBornState('#br-fMe', stt.meBorn);
       applyBornState('#br-fOpp', stt.oppBorn);
+      applyEquipCounters('#br-fMe', stt.meEquipCounters);
+      applyEquipCounters('#br-fOpp', stt.oppEquipCounters);
       $('#br-fMe').classList.toggle('br-active', s.actor === 'me');
       $('#br-fOpp').classList.toggle('br-active', s.actor === 'opp');
       slider.value = i; slider.style.setProperty('--pct', (steps.length > 1 ? i / (steps.length - 1) * 100 : 0) + '%');

@@ -587,6 +587,51 @@ const wpnTl = BR.buildTimeline({
 });
 assert(wpnTl.steps.every(s => (s.state.meEquipUsed || []).indexOf('anothos') < 0), 'arme activée NON grisée');
 
+// ── Compteurs d'ÉQUIPEMENT par tour (Tunic 1/2/3, -1 counters) ────────────────
+// A. Parser : le bloc EQUIP COUNTERS est extrait, exposé et rattaché par tour.
+const ctrRaw = [
+  '=== Talishar game 900 — test ===', '',
+  "Me's turn 1 has begun.", 'Me played Card A',
+  "Opp's turn 2 has begun.", 'Opp played Card B',
+  "Me's turn 3 has begun.", 'Me played Card C', '',
+  '=== EQUIP COUNTERS (compteurs d\'équipement par tour : toi | adversaire) ===',
+  '[Me #1] me: chest=1 | opp: (aucun)',
+  '[Opp #2] me: chest=2 | opp: arms=-1',
+  '[Me #3] me: chest=3, weaponR=-2 | opp: arms=-1', '',
+  '=== META ===', 'me: Me', 'opp: Opp', ''
+].join('\n');
+const ctrRec = Parser.parse(ctrRaw);
+assert(ctrRec.snapshots && ctrRec.snapshots.equipCounters, 'EQUIP COUNTERS : bloc exposé dans record.snapshots');
+assert(ctrRec.health.ok === true, 'EQUIP COUNTERS : le bloc ne casse pas l\'analyse (santé ok)');
+const ctrT3 = ctrRec.turns.find(t => t.turnNumber === 3 && t.player === 'Me');
+assert(ctrT3 && ctrT3.equipCounters && ctrT3.equipCounters.me.chest === 3, 'EQUIP COUNTERS : Tunic (chest) captée à 3 au tour 3');
+eq(ctrT3.equipCounters.me.weaponR, -2, 'EQUIP COUNTERS : arme à -2 (counter négatif) au tour 3');
+eq(ctrT3.equipCounters.opp.arms, -1, 'EQUIP COUNTERS : équipement adverse à -1');
+
+// B. buildTimeline : la valeur du compteur remonte dans l'état de chaque étape.
+const ctrTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: {
+    me: { hero: 'Oscilio', equipment: { chest: { name: 'Fyendal\'s Spring Tunic' } } },
+    opp: { hero: 'Bravo', equipment: { arms: { name: 'Ironrot Legs' } } }
+  },
+  lifeSeries: { me: [40, 40, 40], opp: [40, 40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], equipCounters: { me: { chest: 1 }, opp: {} }, events: [ { type: 'played', player: 'Me', card: 'Card A' } ] },
+    { player: 'Opp', label: 'Opp — Tour 2', hand: [], arsenal: [], equipCounters: { me: { chest: 2 }, opp: { arms: -1 } }, events: [ { type: 'played', player: 'Opp', card: 'Card B' }, { type: 'combatResult', hit: false } ] },
+    { player: 'Me', label: 'Me — Tour 3', hand: [], arsenal: [], equipCounters: { me: { chest: 3 }, opp: { arms: -1 } }, events: [ { type: 'played', player: 'Me', card: 'Card C' } ] }
+  ]
+});
+eq(ctrTl.steps[0].state.meEquipCounters.chest, 1, 'compteur : Tunic (chest) à 1 dès la 1re étape');
+const ctrLast = ctrTl.steps[ctrTl.steps.length - 1];
+eq(ctrLast.state.meEquipCounters.chest, 3, 'compteur : Tunic (chest) à 3 à la dernière étape');
+eq(ctrLast.state.oppEquipCounters.arms, -1, 'compteur : équipement adverse à -1 suivi par étape');
+
+// C. Rétro-compat : une partie SANS bloc (vieux log) → aucun compteur, pas d'erreur.
+assert(eqTl.steps.every(s => s.state.meEquipCounters && Object.keys(s.state.meEquipCounters).length === 0
+  && s.state.oppEquipCounters && Object.keys(s.state.oppEquipCounters).length === 0),
+  'compteur : bloc absent (vieux log) → maps vides, aucune erreur');
+
 // Détection AUTO d'un équipement détruit via le cimetière (sans liste de cartes) :
 // une pièce qui apparaît au cimetière est retirée du plateau (ex. Crown de bloc).
 const crownTl = BR.buildTimeline({

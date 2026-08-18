@@ -392,6 +392,34 @@
     return { rest, snapshots: out };
   }
 
+  // Compteurs d'ÉQUIPEMENT par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…),
+  // DEUX camps. Valeur = map slot -> entier signé (slots : head/chest/arms/legs/
+  // weaponL/weaponR). Format d'une ligne : [LABEL] me: weaponR=2, chest=1 | opp: legs=3
+  // Bloc absent (vieux logs) → {} → aucun compteur (rétro-compat, pas d'erreur).
+  function parseEquipCounterBlock(text, marker) {
+    const out = {};
+    const { rest, body } = sliceBlock(text, marker);
+    if (body == null) return { rest: text, snapshots: out };
+    const lineRe = /^\[(.+?)\]\s*(.*)$/gm;
+    const parseMap = s => {
+      const m = {};
+      if (!s || /^\(aucun\)$/i.test(s.trim())) return m;
+      s.split(',').map(x => x.trim()).filter(Boolean).forEach(tok => {
+        const mm = tok.match(/^(\w+)\s*=\s*(-?\d+)$/);
+        if (mm) { const v = parseInt(mm[2], 10); if (isFinite(v)) m[mm[1]] = v; }
+      });
+      return m;
+    };
+    let hm;
+    while ((hm = lineRe.exec(body))) {
+      const key = labelToKey(hm[1].trim());
+      if (!key) continue;
+      const mm = hm[2].match(/me:\s*(.*?)\s*\|\s*opp:\s*(.*)$/i);
+      out[key] = mm ? { me: parseMap(mm[1]), opp: parseMap(mm[2]) } : { me: {}, opp: {} };
+    }
+    return { rest, snapshots: out };
+  }
+
   // Bloc de COMPTES par tour (ex. arsenal adverse : un entier par tour).
   function parseCountSnapshotBlock(text, marker) {
     const out = {};
@@ -559,6 +587,7 @@
     const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
     const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
     const heroFormRes = parseHeroFormBlock(text, '=== HERO FORMS'); text = heroFormRes.rest;
+    const eqCtrRes = parseEquipCounterBlock(text, '=== EQUIP COUNTERS'); text = eqCtrRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
     const chainRes = parseChainBlock(text); text = chainRes.rest;
     // Journal structuré brut conservé par le grabber : on le RETIRE du corps (sinon
@@ -588,6 +617,7 @@
     const graveSnapshots = graveRes.snapshots;
     const banishSnapshots = banishRes.snapshots;
     const heroFormSnapshots = heroFormRes.snapshots;
+    const equipCounterSnapshots = eqCtrRes.snapshots;
     const lifeSnapshots = lifeRes.snapshots;
 
     // 2) Corps du log : header + lignes d'événements.
@@ -1009,6 +1039,9 @@
       t.banish = resolveSnap(banishSnapshots, t, i, null);
       // Forme du héros à ce tour (Arakni se transforme) : { me, opp } ou null.
       t.heroForm = resolveSnap(heroFormSnapshots, t, i, null);
+      // Compteurs d'équipement à ce tour (Tunic 1/2/3, -1 counters…) :
+      // { me:{slot:val}, opp:{slot:val} } ou null (vieux logs sans le bloc).
+      t.equipCounters = resolveSnap(equipCounterSnapshots, t, i, null);
       t.life = resolveSnap(lifeSnapshots, t, i, null);
       t.side = t.player === myName ? 'me' : (t.player === oppName ? 'opp' : null);
       // Stats officielles de CE tour (mon côté) — endStats.turns est numéroté comme
@@ -1277,7 +1310,7 @@
       lifeHistory,
       lifeSeries,
       life: finalLife,
-      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, grave: graveSnapshots, banish: banishSnapshots, heroForm: heroFormSnapshots, life: lifeSnapshots },
+      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, grave: graveSnapshots, banish: banishSnapshots, heroForm: heroFormSnapshots, equipCounters: equipCounterSnapshots, life: lifeSnapshots },
       timeline: { startTs, endTs, durationSec, lineTs: lineTs || null },
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,
