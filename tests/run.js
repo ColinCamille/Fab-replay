@@ -1733,6 +1733,55 @@ console.log('Grabber merge —');
   // « your opponent » ne doit produire AUCUN issue de pseudo.
   const nameIssues = ['your opponent', 'SpicyNoodles'].filter(n => isUiGarbageName(n));
   eq(nameIssues.length, 0, 'régression 1946448: « your opponent » n’ajoute plus d’issue → envoi débloqué');
+
+  // ── Purge LRU du localStorage (v1.27) : borne l'empreinte pour ne pas saturer
+  // le quota partagé avec l'app Talishar (« exceeded the quota »). On extrait les
+  // 3 fonctions du userscript (slice+eval) dans une clôture avec un faux
+  // localStorage et les constantes/variables qu'elles référencent.
+  const LS_META_PREFIX = 'taliMeta_';
+  const LS_ALL_PREFIXES = ['taliLog_', 'taliHand_', 'taliHandTl_', 'taliArsenal_', 'taliOppArs_',
+    'taliField_', 'taliFieldTl_', 'taliGrave_', 'taliBanish_', 'taliLife_', 'taliMeta_',
+    'taliTs_', 'taliEnd_', 'taliChain_', 'taliHeroForm_', 'taliEqCtr_', 'taliRawChat_'];
+  let gameName = 'g_current';
+  const store = {};
+  const localStorage = {
+    get length() { return Object.keys(store).length; },
+    key(i) { return Object.keys(store)[i] ?? null; },
+    getItem(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+    setItem(k, v) { store[k] = String(v); },
+    removeItem(k) { delete store[k]; },
+  };
+  const storedGameNames = evalFn('storedGameNames');
+  const removeGame = evalFn('removeGame');
+  const purgeOldGames = evalFn('purgeOldGames');
+
+  // Fabrique une partie stockée : toutes les clés de préfixes + méta horodatée.
+  const seedGame = (gn, iso) => {
+    for (const p of LS_ALL_PREFIXES) store[p + gn] = '[]';
+    store[LS_META_PREFIX + gn] = JSON.stringify({ capturedAt: iso });
+  };
+  // 12 parties d'âges croissants + la courante (la plus récente).
+  for (let i = 1; i <= 12; i++) seedGame('g' + i, '2026-01-' + String(i).padStart(2, '0') + 'T00:00:00Z');
+  seedGame('g_current', '2026-02-01T00:00:00Z');
+
+  eq(storedGameNames().sort().length, 13, 'purge: 13 parties stockées au départ');
+
+  // Purge en gardant 8 récentes (+ la courante) → 12 anciennes - 8 gardées = 4 purgées.
+  const purged = purgeOldGames(8);
+  eq(purged, 4, 'purge: 4 parties les plus anciennes retirées');
+  const remaining = storedGameNames();
+  eq(remaining.length, 9, 'purge: 8 récentes + la courante restent');
+  eq(remaining.includes('g_current'), true, 'purge: la partie courante est TOUJOURS conservée');
+  eq(remaining.includes('g1'), false, 'purge: la plus ancienne (g1) est retirée');
+  eq(remaining.includes('g4'), false, 'purge: g4 (au-delà du top 8) est retirée');
+  eq(remaining.includes('g5'), true, 'purge: g5 (dans le top 8 récent) est conservée');
+  // removeGame retire TOUTES les clés de la partie (pas de fuite d'un préfixe).
+  const leaked = LS_ALL_PREFIXES.filter(p => Object.prototype.hasOwnProperty.call(store, p + 'g1'));
+  eq(leaked.length, 0, 'purge: removeGame efface tous les préfixes (aucune clé orpheline)');
+
+  // Purge agressive (keep 0) : ne garde QUE la partie courante.
+  purgeOldGames(0);
+  eq(storedGameNames().join(','), 'g_current', 'purge agressive (0): seule la partie courante subsiste');
 })();
 
 // ---------- 3. Clé DB ----------

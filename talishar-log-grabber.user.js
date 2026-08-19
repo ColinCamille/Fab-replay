@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.26.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. Export texte / téléchargement + localStorage.
+// @version      1.27.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.26.0';
+  const VERSION = '1.27.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -38,6 +38,20 @@
   const LS_EQCTR_PREFIX = 'taliEqCtr_';
   const LS_RAWCHAT_PREFIX = 'taliRawChat_';
   const FORCE_SELECTOR = '';
+  // TOUS les préfixes par partie (pour purger une partie en bloc). L'ordre n'a
+  // pas d'importance ; LS_META_PREFIX sert de clé « d'index » (une partie stockée
+  // = une clé taliMeta_ présente) et porte l'horodatage capturedAt (tri LRU).
+  const LS_ALL_PREFIXES = [
+    LS_PREFIX, LS_HAND_PREFIX, LS_HANDTL_PREFIX, LS_ARSENAL_PREFIX, LS_OPPARS_PREFIX,
+    LS_FIELD_PREFIX, LS_FIELDTL_PREFIX, LS_GRAVE_PREFIX, LS_BANISH_PREFIX, LS_LIFE_PREFIX,
+    LS_META_PREFIX, LS_TS_PREFIX, LS_ENDSTATS_PREFIX, LS_CHAIN_PREFIX, LS_HEROFORM_PREFIX,
+    LS_EQCTR_PREFIX, LS_RAWCHAT_PREFIX
+  ];
+  // Nb de parties récentes conservées en localStorage. Au-delà, les plus
+  // anciennes sont purgées (leur source de vérité est déjà le compte Supabase).
+  // Borne l'empreinte localStorage pour ne PAS saturer le quota (~5 Mo) partagé
+  // avec l'app Talishar elle-même (sinon : « exceeded the quota » côté Talishar).
+  const KEEP_RECENT_GAMES = 8;
 
   let captured = [];
   let lastVisibleSig = '';
@@ -532,7 +546,52 @@
   // ============================================================
   // PERSISTANCE
   // ============================================================
+  // Noms de toutes les parties stockées (une clé taliMeta_<nom> = une partie).
+  function storedGameNames() {
+    const names = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.indexOf(LS_META_PREFIX) === 0) names.push(k.slice(LS_META_PREFIX.length));
+      }
+    } catch (e) {}
+    return names;
+  }
+  // Supprime TOUTES les clés d'une partie (log + snapshots + méta).
+  function removeGame(gn) {
+    if (!gn) return;
+    for (const p of LS_ALL_PREFIXES) { try { localStorage.removeItem(p + gn); } catch (e) {} }
+  }
+  // Purge les parties les plus anciennes au-delà de KEEP_RECENT_GAMES, en
+  // conservant toujours la partie courante. Tri LRU par meta.capturedAt (ISO).
+  // Renvoie le nb de parties purgées.
+  function purgeOldGames(keep) {
+    const names = storedGameNames().filter(n => n && n !== gameName);
+    if (names.length <= 0) return 0;
+    const tsOf = gn => {
+      try { const m = JSON.parse(localStorage.getItem(LS_META_PREFIX + gn) || '{}'); return Date.parse(m.capturedAt) || 0; }
+      catch (e) { return 0; }
+    };
+    names.sort((a, b) => tsOf(b) - tsOf(a));       // plus récentes d'abord
+    // On garde `keep` parties en plus de la courante ; le reste part.
+    const doomed = names.slice(Math.max(0, keep));
+    doomed.forEach(removeGame);
+    return doomed.length;
+  }
+
   function save() {
+    // 1re tentative ; si le quota localStorage est saturé (partagé avec l'app
+    // Talishar), on purge les vieilles parties et on réessaie une fois.
+    if (writeAll()) return;
+    purgeOldGames(KEEP_RECENT_GAMES);
+    if (writeAll()) return;
+    // Toujours saturé : purge agressive (ne garder que la partie courante) et
+    // dernier essai. En cas d'échec, on abandonne silencieusement (jamais de
+    // crash de la page Talishar).
+    purgeOldGames(0);
+    writeAll();
+  }
+  function writeAll() {
     try {
       localStorage.setItem(LS_PREFIX + gameName, JSON.stringify(captured));
       localStorage.setItem(LS_HAND_PREFIX + gameName, JSON.stringify(handSnapshots));
@@ -551,7 +610,8 @@
       localStorage.setItem(LS_CHAIN_PREFIX + gameName, JSON.stringify(chainLinks));
       localStorage.setItem(LS_RAWCHAT_PREFIX + gameName, JSON.stringify(capturedRaw));
       if (endStats) localStorage.setItem(LS_ENDSTATS_PREFIX + gameName, JSON.stringify(endStats));
-    } catch (e) {}
+      return true;
+    } catch (e) { return false; }
   }
   function loadExisting() {
     const read = (key, fallback) => {
@@ -994,7 +1054,12 @@
       if (gn !== gameName) {
         gameName = gn; lastVisibleSig = ''; lastTurnKey = null; openingSnapped = false; openingPreAction = false; chatLogAdopted = false; frozenPlayers = null;
         meta = {}; endStats = null; endStatsLogged = false; autoPushedFor = null; autoPushedCount = 0; captureIssues = [];
-        loadExisting(); updateUI();
+        loadExisting();
+        // Nouvelle partie : on borne l'empreinte localStorage en purgeant les
+        // parties anciennes (déjà sauvegardées côté compte) → évite de saturer
+        // le quota partagé avec l'app Talishar.
+        purgeOldGames(KEEP_RECENT_GAMES);
+        updateUI();
       }
       // SPECTATEUR (playerID 3) : on ne capture ni n'envoie RIEN — sinon la partie
       // regardée atterrit dans l'historique comme si elle était à nous. On purge
