@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=180">
+<link rel="stylesheet" href="css/style.css?v=181">
 </head>
 <body>
 
@@ -138,18 +138,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=180"></script>
-<script src="js/images.js?v=180"></script>
-<script src="js/db.js?v=180"></script>
-<script src="js/sync.js?v=180"></script>
-<script src="js/replay.js?v=180"></script>
-<script src="js/boardreplay.js?v=180"></script>
-<script src="js/dashboard.js?v=180"></script>
+<script src="talishar-parser.js?v=181"></script>
+<script src="js/images.js?v=181"></script>
+<script src="js/db.js?v=181"></script>
+<script src="js/sync.js?v=181"></script>
+<script src="js/replay.js?v=181"></script>
+<script src="js/boardreplay.js?v=181"></script>
+<script src="js/dashboard.js?v=181"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=180"></script>
-<script src="js/cloud.js?v=180"></script>
+<script src="js/cloud-config.js?v=181"></script>
+<script src="js/cloud.js?v=181"></script>
 
 <script>
 // ============================================================
@@ -606,7 +606,12 @@
     const cloudIds = new Set(rows.map(r => String(r.game_id)));
     const local = await window.FabDB.getAllEntries();
     const have = new Set(local.map(e => String(e.gameId)));
-    let added = 0, removed = 0, metaChanged = 0;
+    // Version de schéma stockée par partie : sert à re-parser une partie déjà en
+    // cache quand le parseur a évolué (ex. ajout des compteurs d'équipement) — sinon
+    // le record périmé (sans les nouveaux champs) resterait affiché à jamais.
+    const haveVer = new Map(local.map(e => [String(e.gameId), e.schemaVersion || 0]));
+    const curSchema = (window.TalisharParser && window.TalisharParser.SCHEMA_VERSION) || 0;
+    let added = 0, removed = 0, metaChanged = 0, reparsed = 0;
     // Ajouts + application des tags/favoris (colonne meta), dernier-écrit-gagne.
     for (const row of rows) {
       if (!row || !row.raw) continue;
@@ -623,8 +628,12 @@
       }
       const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
       if (!gid) continue;
-      if (!have.has(gid) && !window.FabDB.isDeleted(gid)) {
-        try { await window.FabDB.putGame(rec, row.raw); have.add(gid); added++; } catch (e) { console.error(e); }
+      // Nouvelle partie OU partie connue dont le record stocké est d'un schéma
+      // périmé → (re)parser et (re)stocker. putGame préserve les tags/favoris.
+      const known = have.has(gid);
+      const stale = known && ((haveVer.get(gid) || 0) < curSchema);
+      if ((!known || stale) && !window.FabDB.isDeleted(gid)) {
+        try { await window.FabDB.putGame(rec, row.raw); have.add(gid); haveVer.set(gid, curSchema); if (known) reparsed++; else added++; } catch (e) { console.error(e); }
       }
       if (row.meta && have.has(gid)) {
         try { if (await window.FabDB.applyCloudMeta(gid, row.meta)) metaChanged++; } catch (e) { console.error(e); }
@@ -639,7 +648,7 @@
         try { await window.FabDB.dropGame(gid); removed++; } catch (err) { console.error(err); }
       }
     }
-    return { added, removed, metaChanged };
+    return { added, removed, metaChanged, reparsed };
   }
 
   if (cloudBtn) cloudBtn.addEventListener('click', async () => {

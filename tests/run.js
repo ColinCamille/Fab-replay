@@ -603,6 +603,10 @@ const ctrRaw = [
 const ctrRec = Parser.parse(ctrRaw);
 assert(ctrRec.snapshots && ctrRec.snapshots.equipCounters, 'EQUIP COUNTERS : bloc exposé dans record.snapshots');
 assert(ctrRec.health.ok === true, 'EQUIP COUNTERS : le bloc ne casse pas l\'analyse (santé ok)');
+// Version de schéma bumpée (≥2) → déclenche le re-parse des parties déjà en cache
+// (mergeCloudGames) pour propager les compteurs aux parties captées avant la MAJ.
+assert(Parser.SCHEMA_VERSION >= 2, 'schéma : SCHEMA_VERSION bumpée (≥2) pour l\'ajout des compteurs');
+eq(ctrRec.schemaVersion, Parser.SCHEMA_VERSION, 'schéma : le record porte la version courante');
 const ctrT3 = ctrRec.turns.find(t => t.turnNumber === 3 && t.player === 'Me');
 assert(ctrT3 && ctrT3.equipCounters && ctrT3.equipCounters.me.chest === 3, 'EQUIP COUNTERS : Tunic (chest) captée à 3 au tour 3');
 eq(ctrT3.equipCounters.me.weaponR, -2, 'EQUIP COUNTERS : arme à -2 (counter négatif) au tour 3');

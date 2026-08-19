@@ -22,8 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 1;
-  const PARSER_VERSION = '2.1.0';
+  const SCHEMA_VERSION = 2;   // v2 : ajout de turns[].equipCounters + snapshots.equipCounters
+  const PARSER_VERSION = '2.2.0';
 
   const EQ_SLOTS = ['head', 'chest', 'arms', 'legs', 'weaponL', 'weaponR'];
 
