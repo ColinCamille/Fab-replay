@@ -368,6 +368,8 @@ function mkRec(o) {
     vsAI: !!o.ai,
     format: o.format || 'blitz',
     players: { me: { hero: o.myHero || 'Briar' }, opp: { hero: o.oppHero } },
+    myName: o.myName || null,
+    turns: o.turns || [],
     source: { capturedAt: o.date },
     endStats: o.first == null ? null : {
       me: {
@@ -423,6 +425,51 @@ const cardBugEntries = [
 const qs = Dashboard.aggregate(cardBugEntries, {}).cardPerf.find(c => c.name === 'Quick Succession');
 eq(qs && qs.played, 3, 'perf cartes : played sommé numériquement (pas de concaténation)');
 eq(qs && qs.games, 2, 'perf cartes : games = parties distinctes (pas entrées de cartes)');
+
+// Instants « cyclés » via le pouvoir de héros d'Oscilio (défausse d'un instant
+// pour piocher) : activation de MA carte-héros suivie de « Card chosen: X ».
+// Motif réel du log : « <moi> activated Oscilio… » / « Card chosen: <instant> »
+// / « Resolving activated ability of Oscilio. ». On compte l'instant DÉFAUSSÉ.
+const heroTurn = (events) => ({ player: 'Oscilio', events });
+const oscEntries = [
+  // G1 : Flash Bolt cyclée 2×, + jouée 1× (endStats). Activation nommée en entier.
+  { gameId: 'o1', record: mkRec({ iWon: true, myHero: 'Oscilio, Constella Intelligence', myName: 'Oscilio', oppHero: 'Briar', first: true, date: '2026-07-01T10:00:00Z',
+      cards: [ { name: 'Flash Bolt', played: 1 }, { name: 'Aether Flare', played: 2 } ],
+      turns: [ heroTurn([
+        { type: 'activated', player: 'Oscilio', card: 'Oscilio, Constella Intelligence' },
+        { type: 'cardChosen', card: 'Flash Bolt' },
+        { type: 'resolving', card: 'Oscilio, Constella Intelligence' },
+        { type: 'played', player: 'Oscilio', card: 'Aether Flare' },
+        // 2e cyclage, activation nommée « Oscilio » (forme courte) → matching préfixe.
+        { type: 'activated', player: 'Oscilio', card: 'Oscilio' },
+        { type: 'cardChosen', card: 'Flash Bolt' }
+      ]) ] }) },
+  // G2 : Flash Bolt cyclée 1×.
+  { gameId: 'o2', record: mkRec({ iWon: false, myHero: 'Oscilio, Constella Intelligence', myName: 'Oscilio', oppHero: 'Briar', first: false, date: '2026-07-02T10:00:00Z',
+      cards: [ { name: 'Aether Flare', played: 3 } ],
+      turns: [ heroTurn([
+        { type: 'activated', player: 'Oscilio', card: 'Oscilio, Constella Intelligence' },
+        { type: 'cardChosen', card: 'Flash Bolt' }
+      ]) ] }) }
+];
+const oscAgg = Dashboard.aggregate(oscEntries, { myHero: 'Oscilio, Constella Intelligence' });
+const flash = oscAgg.cardPerf.find(c => c.name === 'Flash Bolt');
+eq(flash && flash.cycled, 3, 'Oscilio : Flash Bolt cyclée 3× (2 parties)');
+eq(flash && flash.played, 1, 'Oscilio : Flash Bolt jouée 1× (endStats)');
+eq(flash && flash.games, 2, 'Oscilio : Flash Bolt vue sur 2 parties');
+// L'activation d'une carte non-héros ne doit pas compter comme cyclage.
+const oscNoise = Dashboard.aggregate([
+  { gameId: 'o3', record: mkRec({ iWon: true, myHero: 'Oscilio, Constella Intelligence', myName: 'Oscilio', oppHero: 'Briar', first: true, date: '2026-07-03T10:00:00Z',
+      turns: [ heroTurn([
+        { type: 'activated', player: 'Oscilio', card: 'Codex of Bounty' }, // capacité de carte, pas le héros
+        { type: 'cardChosen', card: 'Flash Bolt' }
+      ]) ] }) }
+], {});
+const noise = oscNoise.cardPerf.find(c => c.name === 'Flash Bolt');
+assert(!noise || !noise.cycled, 'cyclage : activation d\'une carte non-héros ne compte pas');
+// Un héros sans ce pouvoir → aucun compteur cycled (colonne masquée).
+const briCyc = Dashboard.aggregate(entries, {}).cardPerf.find(c => c.name === 'Brutal Assault');
+assert(briCyc && !briCyc.cycled, 'cyclage : héros sans pouvoir de défausse → cycled 0/absent');
 
 // Filtre héros adverse.
 eq(Dashboard.aggregate(entries, { oppHero: 'Briar' }).global.games, 2, 'filtre héros adverse');

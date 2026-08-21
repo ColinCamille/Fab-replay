@@ -41,6 +41,51 @@
     return null;
   }
 
+  // Instants « cyclés » par un pouvoir de héros de défausse (Oscilio, Constella
+  // Intelligence : défausser un instant de la main pour piocher). Sur MES tours,
+  // une activation de MA carte-héros (« <moi> activated Oscilio[, Constella…] »)
+  // suivie d'un « Card chosen: <instant> » = l'instant DÉFAUSSÉ pour piocher.
+  // Détection PURE depuis le log parsé (source de vérité), même motif que celui
+  // déjà exploité par la vue Table (js/boardreplay.js). Renvoie
+  // { normNom: { name, cycled } }. Générique : un héros sans ce pouvoir ne
+  // produit jamais ce motif → {} (donc colonne masquée hors Oscilio).
+  // Matching carte↔héros tolérant au préfixe : couvre Oscilio blitz (« Oscilio »)
+  // et Constellation adulte (« Oscilio, Constella Intelligence »), dont le
+  // CardName loggé peut différer du libellé de héros selon la version jouée.
+  function heroCardMatch(cardName, heroName) {
+    // Virgule traitée comme une frontière de mot : « Oscilio » (forme blitz)
+    // doit préfixer « Oscilio, Constella Intelligence » (forme adulte).
+    const clean = s => norm(s).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    const a = clean(cardName), b = clean(heroName);
+    if (!a || !b) return false;
+    return a === b || (b + ' ').indexOf(a + ' ') === 0 || (a + ' ').indexOf(b + ' ') === 0;
+  }
+  function countHeroPowerCycles(rec) {
+    const out = {};
+    const myName = rec.myName, myHero = myHeroOf(rec);
+    if (!myName || !myHero || !Array.isArray(rec.turns)) return out;
+    rec.turns.forEach(t => {
+      const evs = t.events || [];
+      for (let i = 0; i < evs.length; i++) {
+        const e = evs[i];
+        if (e.type !== 'activated' || e.player !== myName || !heroCardMatch(e.card, myHero)) continue;
+        // La carte choisie (défaussée) suit l'activation, avant toute prochaine
+        // ACTION (played/activated/pitched/blocked). Cf. boardreplay ligne ~716.
+        for (let j = i + 1; j < evs.length; j++) {
+          const f = evs[j];
+          if (f.type === 'played' || f.type === 'activated' || f.type === 'pitched' || f.type === 'blocked') break;
+          if (f.type === 'cardChosen' && f.card) {
+            const key = norm(f.card);
+            const agg = out[key] || (out[key] = { name: f.card, cycled: 0 });
+            agg.cycled++;
+            break;
+          }
+        }
+      }
+    });
+    return out;
+  }
+
   // Clé de comparaison d'un tag (insensible à la casse/espaces).
   const tagKey = t => String(t == null ? '' : t).trim().toLowerCase();
   function entryTags(e) { return Array.isArray(e && e.tags) ? e.tags : []; }
@@ -182,9 +227,23 @@
       const seenThisGame = new Set();  // une carte ne compte qu'une fois par partie
       cards.forEach(c => {
         const key = norm(c.name);
-        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, games: 0, gamesWon: 0, gamesLost: 0 });
+        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, cycled: 0, games: 0, gamesWon: 0, gamesLost: 0 });
         agg.played += num(c.played); agg.blocked += num(c.blocked); agg.pitched += num(c.pitched);
         agg.discarded += num(c.discarded); agg.timesHit += num(c.timesHit);
+        if (!seenThisGame.has(key)) {
+          agg.games++;
+          if (o === true) agg.gamesWon++; else if (o === false) agg.gamesLost++;
+          seenThisGame.add(key);
+        }
+      });
+      // Instants cyclés par le pouvoir de héros (Oscilio). Un instant TOUJOURS
+      // cyclé peut être absent de endStats.me.cards (jamais joué) → on crée
+      // l'entrée au besoin pour ne pas perdre le compteur.
+      const cyc = countHeroPowerCycles(e.record);
+      Object.keys(cyc).forEach(key => {
+        const c = cyc[key];
+        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, cycled: 0, games: 0, gamesWon: 0, gamesLost: 0 });
+        agg.cycled += c.cycled;
         if (!seenThisGame.has(key)) {
           agg.games++;
           if (o === true) agg.gamesWon++; else if (o === false) agg.gamesLost++;
@@ -256,6 +315,7 @@
     { key: 'played', label: 'Jouée' },
     { key: 'blocked', label: 'Défense', tip: 'Fois utilisée pour bloquer' },
     { key: 'pitched', label: 'Pitch' },
+    { key: 'cycled', label: 'Cyclée', tip: 'Instant défaussé via le pouvoir de héros (Oscilio) pour piocher' },
     { key: 'timesHit', label: 'Coups', hit: true, tip: 'Coups portés (attaque non bloquée)' }
   ];
   const MUTED = '<span class="muted">·</span>';
@@ -563,11 +623,19 @@
     if (col.count || state.cardMode === 'total') return raw ? String(raw) : MUTED;
     if (state.cardMode === 'pergame') { const tg = _A.global.games || 0, v = tg ? raw / tg : 0; return v ? String(Math.round(v * 100) / 100) : MUTED; }
     if (col.key === 'timesHit') { const p = c.played || 0; return (p && raw) ? pct1(raw / p * 100) : MUTED; }
+    // Taux de cyclage : part de l'instant défaussée via le pouvoir plutôt que
+    // gardée/jouée → « toujours cyclé » (proche 100 %) vs « gardé » (proche 0 %).
+    if (col.key === 'cycled') { const denom = (c.cycled || 0) + (c.played || 0); return denom ? pct1(raw / denom * 100) : MUTED; }
     const usage = (c.played || 0) + (c.blocked || 0) + (c.pitched || 0);
     return (usage && raw) ? pct1(raw / usage * 100) : MUTED;
   }
   function renderCardPerf() {
-    const total = (_A.cardPerf || []).filter(c => c.played || c.blocked || c.timesHit);
+    // Colonne « Cyclée » (pouvoir d'Oscilio) : seulement quand un héros est
+    // sélectionné ET qu'il y a réellement des cyclages (donc, en pratique,
+    // Oscilio) — jamais affichée pour les autres héros (pas de colonne à zéro).
+    const showCycled = !!state.hero && (_A.cardPerf || []).some(c => c.cycled > 0);
+    const cols = CARD_COLS.filter(col => col.key !== 'cycled' || showCycled);
+    const total = (_A.cardPerf || []).filter(c => c.played || c.blocked || c.timesHit || c.cycled);
     const qn = norm(state.cardQ);
     const filtered = qn ? total.filter(c => norm(c.name).indexOf(qn) >= 0) : total;
     const sorted = filtered.slice().sort((a, b) => state.cardSort.key === 'name' ? String(a.name).localeCompare(String(b.name)) : (a[state.cardSort.key] || 0) - (b[state.cardSort.key] || 0));
@@ -578,12 +646,13 @@
     const host = D.getElementById('hxCardTbl');
     if (!total.length) { host.innerHTML = '<div class="empty">Aucune stat de carte agrégée (nécessite les stats officielles Talishar).</div>'; return; }
     if (!shown.length) { host.innerHTML = '<div class="empty">Aucune carte ne correspond.</div>'; return; }
-    const head = CARD_COLS.map(col => {
+    const head = cols.map(col => {
       const arrow = state.cardSort.key === col.key ? (state.cardSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
       return '<th class="sortable" data-key="' + col.key + '"' + (col.tip ? ' title="' + esc2(col.tip) + '"' : '') + '>' + esc2(col.label) + arrow + '</th>';
     }).join('');
-    const body = shown.map(c => '<tr>' + CARD_COLS.map(col => col.key === 'name' ? '<td data-card="' + esc2(c.name) + '">' + esc2(c.name) + '</td>' : '<td' + (col.hit && c.timesHit ? ' class="hit"' : '') + '>' + fmtCell(col, c) + '</td>').join('') + '</tr>').join('');
-    const note = state.cardMode === 'pct' ? '<div class="note">Par ligne : <b>Jouée + Défense + Pitch ≈ 100 %</b> (à quoi sert la carte). <b>Coups</b> = taux de coups portés (touché ÷ jouée).</div>' : '';
+    const body = shown.map(c => '<tr>' + cols.map(col => col.key === 'name' ? '<td data-card="' + esc2(c.name) + '">' + esc2(c.name) + '</td>' : '<td' + (col.hit && c.timesHit ? ' class="hit"' : '') + '>' + fmtCell(col, c) + '</td>').join('') + '</tr>').join('');
+    const cycNote = showCycled ? ' <b>Cyclée</b> = part défaussée via le pouvoir (cyclée ÷ (cyclée + jouée)) : proche de 100 % = instant que tu cycles toujours, proche de 0 % = que tu gardes.' : '';
+    const note = state.cardMode === 'pct' ? '<div class="note">Par ligne : <b>Jouée + Défense + Pitch ≈ 100 %</b> (à quoi sert la carte). <b>Coups</b> = taux de coups portés (touché ÷ jouée).' + cycNote + '</div>' : '';
     host.innerHTML = '<table class="tbl"><tr>' + head + '</tr>' + body + '</table>' + note;
   }
 
