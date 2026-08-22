@@ -1244,10 +1244,27 @@
     };
   }
 
+  // Tuiles de stats « maison » (dérivées du log parsé) communes aux deux rendus
+  // (stats officielles ou repli) : attaques à l'arme + activations du pouvoir.
+  // Masquées quand la valeur n'a pas de sens (aucune arme / aucun pouvoir vu).
+  function customStatCards() {
+    const gs = root.TalisharParser.computeGameStats(GAME);
+    const cards = [];
+    if (gs.weaponNames.length) {
+      const label = gs.weaponNames.length === 1 ? 'Attaques — ' + gs.weaponNames[0] : 'Attaques à l’arme';
+      cards.push([gs.weaponAttacks, label, 'gold', 'Nombre d’attaques faites avec ton arme équipée sur toute la partie.']);
+    }
+    if (gs.heroPowerActivations > 0) {
+      cards.push([gs.heroPowerActivations, 'Pouvoir de héros utilisé', 'violet', 'Nombre de fois où tu as activé le pouvoir de ton héros.']);
+    }
+    return cards;
+  }
+
   function renderStats() {
     const grid = $('#statGrid');
     const wrap = $('#statsWrap');
     const off = GAME.endStats && GAME.endStats.me;
+    const customCards = customStatCards();
 
     const extra = wrap.querySelector('#offExtra');
     if (extra) extra.remove();
@@ -1283,7 +1300,7 @@
         [num(off.averages.value), 'Valeur / tour', '', 'Indice composite de Talishar (menace + défense + tempo…).'],
         [num(off.averages.combatPerTurn), 'Valeur combat / tour', '', 'Indice de combat composite de Talishar.'],
         [num(off.averages.resourcesPerTurn), 'Ressources / tour', '', 'Pitch moyen utilisé par tour.'],
-      ];
+      ].concat(customCards);
       grid.innerHTML = cards.map(([v, k, c, t]) => `<div class="stat-card"${t ? ` title="${escapeHtml(t)}"` : ''}><div class="v mono ${c}">${v}</div><div class="k">${k}</div></div>`).join('');
 
       const box = document.createElement('div');
@@ -1369,8 +1386,8 @@
       [s.pitches, 'Cartes pitchées'],
       [s.myTurns, 'Tes tours'],
       [s.distinctCards, 'Cartes distinctes vues'],
-    ];
-    grid.innerHTML = cards.map(([v, k]) => `<div class="stat-card"><div class="v mono">${v}</div><div class="k">${k}</div></div>`).join('');
+    ].concat(customCards);
+    grid.innerHTML = cards.map(([v, k, c, t]) => `<div class="stat-card"${t ? ` title="${escapeHtml(t)}"` : ''}><div class="v mono ${c || ''}">${v}</div><div class="k">${k}</div></div>`).join('');
   }
 
   root.Replay = { show, reset, getGame: () => GAME };

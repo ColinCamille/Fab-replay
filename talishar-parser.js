@@ -1324,6 +1324,65 @@
     };
   }
 
+  // Rapproche le nom d'une carte-héros du libellé de héros (tolérant au préfixe
+  // et à la virgule) : couvre les formes blitz/adulte (« Oscilio » ⊂ « Oscilio,
+  // Constella Intelligence »). Même logique que côté dashboard (Oscilio).
+  function heroCardMatch(cardName, heroName) {
+    const clean = s => normName(s).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    const a = clean(cardName), b = clean(heroName);
+    if (!a || !b) return false;
+    return a === b || (b + ' ').indexOf(a + ' ') === 0 || (a + ' ').indexOf(b + ' ') === 0;
+  }
+
+  // STATS PAR PARTIE (pures, testables) dérivées du record normalisé.
+  // Renvoie :
+  //  - weaponAttacks : nb d'attaques faites avec TON arme équipée (weaponL/weaponR)
+  //    = nb de liens de chaîne, sur TES tours, dont l'attaquant est ton arme.
+  //    Générique tous héros ; pour Dash I/O c'est le nb de tirs de Symbiosis Shot.
+  //  - perWeapon : détail { nom d'arme -> nb } (utile si double arme).
+  //  - heroPowerActivations : nb de fois où TU as activé ton pouvoir de héros
+  //    (event « activated » dont la carte = ta carte-héros, quel que soit le tour).
+  // Source de vérité = log parsé ; un héros sans arme/pouvoir → 0 (pas d'erreur).
+  function computeGameStats(rec) {
+    const out = { weaponAttacks: 0, perWeapon: {}, weaponNames: [], heroPowerActivations: 0 };
+    if (!rec) return out;
+    const myName = rec.myName || null;
+    const me = (rec.players && rec.players.me) || {};
+    const myHero = me.hero && me.hero.name;
+    // Noms d'armes équipées (weaponL/weaponR), normalisés → libellé d'affichage.
+    const eq = me.equipment || {};
+    const weapons = new Map();   // normName -> nom affiché
+    ['weaponL', 'weaponR'].forEach(slot => {
+      const nm = eq[slot] && eq[slot].name;
+      if (nm) weapons.set(normName(nm), nm);
+    });
+    out.weaponNames = Array.from(weapons.values());
+    const turns = Array.isArray(rec.turns) ? rec.turns : [];
+    turns.forEach(t => {
+      // Attaques à l'arme : seulement sur TES tours (l'adversaire attaque avec
+      // SES cartes ; en miroir, le filtre par tour attribue correctement).
+      if (weapons.size && (!myName || t.player === myName)) {
+        (t.chain || []).forEach(link => {
+          const key = normName(link && link.card || '');
+          if (weapons.has(key)) {
+            out.weaponAttacks++;
+            out.perWeapon[key] = (out.perWeapon[key] || 0) + 1;
+          }
+        });
+      }
+      // Pouvoir de héros : toute activation de TA carte-héros (n'importe quel tour,
+      // certains pouvoirs se jouent en défense).
+      if (myHero) {
+        (t.events || []).forEach(e => {
+          if (e.type === 'activated' && (!myName || e.player === myName) && heroCardMatch(e.card, myHero)) {
+            out.heroPowerActivations++;
+          }
+        });
+      }
+    });
+    return out;
+  }
+
   // Utilitaire d'affichage : "3 min 42 s"
   function formatDuration(sec) {
     if (sec == null) return null;
@@ -1434,5 +1493,5 @@
     return (q && q.length) ? q.shift() : null;
   }
 
-  return { SCHEMA_VERSION, PARSER_VERSION, parse, classifyLine, formatDuration, EQ_SLOTS, normName, pitchFromCardId };
+  return { SCHEMA_VERSION, PARSER_VERSION, parse, classifyLine, formatDuration, EQ_SLOTS, normName, pitchFromCardId, computeGameStats, heroCardMatch };
 });

@@ -2193,6 +2193,45 @@ console.log('Field timeline —');
   assert(ftNone.steps.length > 0, 'FIELD TIMELINE absente : repli sans erreur');
 })();
 
+// ---------- Stats par partie (computeGameStats) ----------
+console.log('Stats par partie —');
+(function () {
+  // Record forgé : héros Dash I/O, arme « Symbiosis Shot » (weaponR), 2 tirs sur
+  // mon tour + 1 tir adverse (ignoré) + 2 activations du pouvoir de héros.
+  const gsRec = {
+    myName: 'Me', oppName: 'Opp',
+    players: {
+      me: { hero: { name: 'Dash I/O' }, equipment: { weaponR: { name: 'Symbiosis Shot' } } },
+      opp: { hero: { name: 'Briar' }, equipment: {} }
+    },
+    turns: [
+      { player: 'Me', events: [
+        { type: 'activated', player: 'Me', card: 'Dash I/O' },
+        { type: 'played', player: 'Me', card: 'Zap' }
+      ], chain: [{ card: 'Symbiosis Shot' }, { card: 'Zap' }, { card: 'Symbiosis Shot' }] },
+      { player: 'Opp', events: [], chain: [{ card: 'Symbiosis Shot' }] },
+      { player: 'Me', events: [
+        { type: 'activated', player: 'Me', card: 'Dash I/O' },
+        { type: 'activated', player: 'Opp', card: 'Briar' }
+      ], chain: [] }
+    ]
+  };
+  const gs = Parser.computeGameStats(gsRec);
+  eq(gs.weaponAttacks, 2, 'computeGameStats: 2 tirs de l\'arme (tour adverse exclu)');
+  eq(gs.weaponNames.join(','), 'Symbiosis Shot', 'computeGameStats: nom de l\'arme');
+  eq(gs.heroPowerActivations, 2, 'computeGameStats: 2 activations du pouvoir (activation adverse exclue)');
+
+  // Héros sans arme ni pouvoir loggé → 0 partout, pas d'erreur.
+  const empty = Parser.computeGameStats({ myName: 'Me', players: { me: { hero: { name: 'Briar' }, equipment: {} } }, turns: [] });
+  eq(empty.weaponAttacks, 0, 'computeGameStats: 0 attaque sans arme');
+  eq(empty.weaponNames.length, 0, 'computeGameStats: aucune arme listée');
+  eq(empty.heroPowerActivations, 0, 'computeGameStats: 0 activation sans pouvoir');
+
+  // heroCardMatch : forme blitz préfixe la forme adulte (Oscilio), insensible virgule.
+  assert(Parser.heroCardMatch('Oscilio', 'Oscilio, Constella Intelligence'), 'heroCardMatch: préfixe blitz/adulte');
+  assert(!Parser.heroCardMatch('Zap', 'Dash I/O'), 'heroCardMatch: carte ≠ héros → false');
+})();
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);
