@@ -17,7 +17,9 @@
  *   getUser()              → user courant (ou null)
  *   signIn(email)          → envoie le lien magique
  *   signOut()              → déconnecte
- *   fetchGames()           → [{game_id, raw, my_hero, opp_hero, format, captured_at}]
+ *   fetchGames()           → [{game_id, raw, my_hero, opp_hero, format, captured_at}] (index + raw par lots)
+ *   fetchGamesIndex(uid?)  → idem SANS `raw` (léger, pas de timeout)
+ *   fetchGamesRaw(uid,ids) → `raw` des ids donnés, par lots (≤ RAW_BATCH/requête)
  *   createPairing(label)   → { token } (appairage 1-clic du grabber, phase 2)
  * ============================================================ */
 (function (root) {
@@ -79,20 +81,59 @@
     notify();
   }
 
-  // Lecture des parties de l'utilisateur connecté. On filtre EXPLICITEMENT sur
-  // son user_id : depuis la feature amis, la RLS (policy games_select_friends)
-  // autorise aussi la lecture des parties d'un ami — sans ce filtre, elles
-  // seraient fusionnées à tort dans MA bibliothèque (les parties d'un ami se
-  // consultent uniquement via fetchFriendGames, en mémoire).
-  async function fetchGames() {
-    if (!client || !currentUser) return [];
+  // Le `raw` (log brut) pèse lourd (~350 Ko/partie). Tout ramener d'un coup DÉPASSE
+  // le statement_timeout Postgres (8 s pour `authenticated`, 3 s pour `anon`) dès
+  // qu'on a beaucoup de parties → « canceling statement due to statement timeout »
+  // et plus rien ne s'affiche. On récupère donc le `raw` PAR LOTS, et seulement
+  // pour les parties qui en ont besoin (l'app connaît déjà les autres en cache).
+  const RAW_BATCH = 12;
+
+  // Index LÉGER des parties d'un utilisateur (SANS `raw`) : ne peut pas expirer
+  // (colonnes courtes), sert à savoir quelles parties existent (ids, meta) avant de
+  // décider lesquelles télécharger. `userId` optionnel (défaut : utilisateur courant).
+  // On filtre EXPLICITEMENT sur user_id : depuis la feature amis, la RLS (policy
+  // games_select_friends) autorise aussi la lecture des parties d'un ami — sans ce
+  // filtre, elles seraient fusionnées à tort dans MA bibliothèque.
+  async function fetchGamesIndex(userId) {
+    const uid = userId || (currentUser && currentUser.id);
+    if (!client || !uid) return [];
     const { data, error } = await client
       .from('games')
-      .select('game_id, raw, my_hero, opp_hero, format, captured_at, meta')
-      .eq('user_id', currentUser.id)
+      .select('game_id, my_hero, opp_hero, format, captured_at, meta')
+      .eq('user_id', uid)
       .order('captured_at', { ascending: true });
     if (error) throw error;
     return data || [];
+  }
+
+  // Récupère le `raw` (log brut) d'une liste d'ids, PAR LOTS (cf. RAW_BATCH) pour
+  // rester sous le statement_timeout. Renvoie les lignes complètes.
+  async function fetchGamesRaw(userId, ids) {
+    const uid = userId || (currentUser && currentUser.id);
+    if (!client || !uid || !ids || !ids.length) return [];
+    const list = ids.map(String);
+    const out = [];
+    for (let i = 0; i < list.length; i += RAW_BATCH) {
+      const batch = list.slice(i, i + RAW_BATCH);
+      const { data, error } = await client
+        .from('games')
+        .select('game_id, raw, my_hero, opp_hero, format, captured_at, meta')
+        .eq('user_id', uid)
+        .in('game_id', batch);
+      if (error) throw error;
+      for (const r of (data || [])) out.push(r);
+    }
+    return out;
+  }
+
+  // Lecture COMPLÈTE (index + raw par lots) des parties de l'utilisateur connecté.
+  // Conservée pour compatibilité ; le chemin de synchro (mergeCloudGames) préfère
+  // fetchGamesIndex + fetchGamesRaw pour ne télécharger que le nouveau.
+  async function fetchGames() {
+    if (!client || !currentUser) return [];
+    const idx = await fetchGamesIndex(currentUser.id);
+    if (!idx.length) return [];
+    return await fetchGamesRaw(currentUser.id, idx.map(r => r.game_id));
   }
 
   // Met à jour les métadonnées utilisateur (tags/favori) d'une partie du compte.
@@ -228,16 +269,19 @@
   }
 
   // Parties partagées d'un ami (lecture seule — la RLS garantit qu'on n'y a
-  // accès que si l'amitié est acceptée). Même forme que fetchGames.
+  // accès que si l'amitié est acceptée). Même forme que fetchGames. Les parties
+  // d'ami ne sont pas mises en cache (consultation en mémoire) → il faut tout le
+  // raw, mais PAR LOTS : la policy games_select_friends appelle are_friends() par
+  // ligne, donc un SELECT global explose d'autant plus vite le statement_timeout.
   async function fetchFriendGames(friendId) {
-    if (!client || !currentUser) return [];
-    const { data, error } = await client
-      .from('games')
-      .select('game_id, raw, my_hero, opp_hero, format, captured_at, meta')
-      .eq('user_id', friendId)
-      .order('captured_at', { ascending: true });
-    if (error) throw error;
-    return data || [];
+    if (!client || !currentUser || !friendId) return [];
+    const idx = await fetchGamesIndex(friendId);
+    if (!idx.length) return [];
+    const rows = await fetchGamesRaw(friendId, idx.map(r => r.game_id));
+    // Réordonne selon l'index (captured_at croissant), au cas où les lots reviennent
+    // dans un autre ordre.
+    const byId = new Map(rows.map(r => [String(r.game_id), r]));
+    return idx.map(r => byId.get(String(r.game_id))).filter(Boolean);
   }
 
   function randomToken() {
@@ -247,7 +291,7 @@
   }
 
   root.Cloud = {
-    available, init, onChange, getUser, signIn, signOut, fetchGames, updateMeta, createPairing, uploadGames, deleteGame, deleteAccount,
+    available, init, onChange, getUser, signIn, signOut, fetchGames, fetchGamesIndex, fetchGamesRaw, updateMeta, createPairing, uploadGames, deleteGame, deleteAccount,
     // Amis
     myProfile, setDisplayName, sendFriendRequest, respondRequest, removeFriend, listFriends, pendingRequests, fetchFriendGames
   };
