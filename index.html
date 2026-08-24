@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=189">
+<link rel="stylesheet" href="css/style.css?v=190">
 </head>
 <body>
 
@@ -138,18 +138,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=189"></script>
-<script src="js/images.js?v=189"></script>
-<script src="js/db.js?v=189"></script>
-<script src="js/sync.js?v=189"></script>
-<script src="js/replay.js?v=189"></script>
-<script src="js/boardreplay.js?v=189"></script>
-<script src="js/dashboard.js?v=189"></script>
+<script src="talishar-parser.js?v=190"></script>
+<script src="js/images.js?v=190"></script>
+<script src="js/db.js?v=190"></script>
+<script src="js/sync.js?v=190"></script>
+<script src="js/replay.js?v=190"></script>
+<script src="js/boardreplay.js?v=190"></script>
+<script src="js/dashboard.js?v=190"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=189"></script>
-<script src="js/cloud.js?v=189"></script>
+<script src="js/cloud-config.js?v=190"></script>
+<script src="js/cloud.js?v=190"></script>
 
 <script>
 // ============================================================
@@ -716,13 +716,16 @@
       if (!user) { closeFriendMenu(); if (_friendCtx) backToMine(); }
       if (user) {
         if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
-        const { added, removed, metaChanged } = await mergeCloudGames();
-        if (added || removed || metaChanged) {
+        const { added, removed, metaChanged, reparsed } = await mergeCloudGames();
+        if (added || removed || metaChanged || reparsed) {
           const parts = [];
           if (added) parts.push(added + ' récupérée(s)');
           if (removed) parts.push(removed + ' supprimée(s) ailleurs');
           if (metaChanged) parts.push(metaChanged + ' tag(s)/favori(s) synchronisés');
-          libHint.textContent = 'Compte : ' + parts.join(', ') + '.';
+          // reparsed (re-analyse suite à un bump de schéma) n'a pas de message
+          // dédié mais doit rafraîchir le dashboard (ex. une partie qui n'est
+          // plus masquée par un faux positif de santé).
+          if (parts.length) libHint.textContent = 'Compte : ' + parts.join(', ') + '.';
           await reloadDashboard();
         }
       }
