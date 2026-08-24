@@ -2196,63 +2196,68 @@ console.log('Field timeline —');
 // ---------- Stats par partie (computeGameStats) ----------
 console.log('Stats par partie —');
 (function () {
-  // Record forgé : héros Dash I/O, arme « Symbiosis Shot » (weaponR), 2 tirs sur
-  // mon tour + 1 tir adverse (ignoré) + 2 activations du pouvoir de héros.
+  const wOf = (gs, side, name) => { const w = gs.weapons.find(x => x.side === side && x.name === name); return w ? w.count : null; };
+  const dOf = (gs, side) => { const d = gs.dynamo.find(x => x.side === side); return d ? d.resets : null; };
+
+  // Record forgé : je joue Oscilio ; l'ADVERSAIRE joue Dash I/O + Symbiosis Shot.
+  // Note : le héros est une CHAÎNE sur le record (pas un objet), comme le vrai parseur.
+  // 3 tirs adverses de Symbiosis Shot (tours adverses) + 1 tir sur mon tour (ignoré,
+  // ce n'est pas mon arme) ; 2 activations de MON pouvoir (Oscilio) + 1 adverse (Dash, ignoré).
   const gsRec = {
     myName: 'Me', oppName: 'Opp',
     players: {
-      me: { hero: { name: 'Dash I/O' }, equipment: { weaponR: { name: 'Symbiosis Shot' } } },
-      opp: { hero: { name: 'Briar' }, equipment: {} }
+      me: { hero: 'Oscilio, Constella Intelligence', equipment: { weaponL: { name: 'Volzar Meteor Storm' } } },
+      opp: { hero: 'Dash I/O', equipment: { weaponL: { name: 'Symbiosis Shot' } } }
     },
     turns: [
-      { player: 'Me', events: [
-        { type: 'activated', player: 'Me', card: 'Dash I/O' },
-        { type: 'played', player: 'Me', card: 'Zap' }
-      ], chain: [{ card: 'Symbiosis Shot' }, { card: 'Zap' }, { card: 'Symbiosis Shot' }] },
-      { player: 'Opp', events: [], chain: [{ card: 'Symbiosis Shot' }] },
-      { player: 'Me', events: [
-        { type: 'activated', player: 'Me', card: 'Dash I/O' },
-        { type: 'activated', player: 'Opp', card: 'Briar' }
-      ], chain: [] }
+      { player: 'Me', events: [{ type: 'activated', player: 'Me', card: 'Oscilio, Constella Intelligence' }],
+        chain: [{ card: 'Symbiosis Shot' }] },   // apparaît sur mon tour → PAS mon arme → ignoré
+      { player: 'Opp', events: [{ type: 'activated', player: 'Opp', card: 'Dash I/O' }],
+        chain: [{ card: 'Symbiosis Shot' }, { card: 'Zap' }, { card: 'Symbiosis Shot' }] },
+      { player: 'Me', events: [{ type: 'activated', player: 'Me', card: 'Oscilio' }], chain: [] },
+      { player: 'Opp', events: [], chain: [{ card: 'Symbiosis Shot' }] }
     ]
   };
   const gs = Parser.computeGameStats(gsRec);
-  eq(gs.weaponAttacks, 2, 'computeGameStats: 2 tirs de l\'arme (tour adverse exclu)');
-  eq(gs.weaponNames.join(','), 'Symbiosis Shot', 'computeGameStats: nom de l\'arme');
-  eq(gs.heroPowerActivations, 2, 'computeGameStats: 2 activations du pouvoir (activation adverse exclue)');
+  eq(wOf(gs, 'opp', 'Symbiosis Shot'), 3, 'computeGameStats: 3 tirs adverses de Symbiosis Shot');
+  eq(wOf(gs, 'me', 'Volzar Meteor Storm'), null, 'computeGameStats: mon arme non swinguée → absente');
+  eq(gs.heroPowerActivations, 2, 'computeGameStats: 2 activations de MON pouvoir (adverse exclue)');
 
-  // Héros sans arme ni pouvoir loggé → 0 partout, pas d'erreur.
-  const empty = Parser.computeGameStats({ myName: 'Me', players: { me: { hero: { name: 'Briar' }, equipment: {} } }, turns: [] });
-  eq(empty.weaponAttacks, 0, 'computeGameStats: 0 attaque sans arme');
-  eq(empty.weaponNames.length, 0, 'computeGameStats: aucune arme listée');
+  // Sans arme ni pouvoir → listes vides, pas d'erreur.
+  const empty = Parser.computeGameStats({ myName: 'Me', players: { me: { hero: 'Briar', equipment: {} } }, turns: [] });
+  eq(empty.weapons.length, 0, 'computeGameStats: aucune attaque d\'arme');
   eq(empty.heroPowerActivations, 0, 'computeGameStats: 0 activation sans pouvoir');
+  eq(empty.dynamo.length, 0, 'computeGameStats: pas de Dynamo → liste vide');
 
   // heroCardMatch : forme blitz préfixe la forme adulte (Oscilio), insensible virgule.
   assert(Parser.heroCardMatch('Oscilio', 'Oscilio, Constella Intelligence'), 'heroCardMatch: préfixe blitz/adulte');
   assert(!Parser.heroCardMatch('Zap', 'Dash I/O'), 'heroCardMatch: carte ≠ héros → false');
 
-  // Resets de Valiant Dynamo : compteur (chest) qui remonte vers 0 = reset.
-  // Séquence : 0 → -1 (bloque) → 0 (reset) → -1 (bloque) → -2 (rebloque) → -1 (reset).
-  // 2 diminutions de magnitude (-1→0 et -2→-1) = 2 resets.
+  // Resets Valiant Dynamo (ADVERSAIRE, legs). Compteur qui remonte vers 0 = reset.
+  // 0 → -1 (bloque) → 0 (reset) → -1 → -2 (rebloque) → -1 (reset) : 2 resets.
   const dynRec = {
-    myName: 'Me',
-    players: { me: { hero: { name: 'Fai' }, equipment: { chest: { name: 'Valiant Dynamo' } } } },
+    myName: 'Me', oppName: 'Opp',
+    players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Kassai', equipment: { legs: { name: 'Valiant Dynamo' } } } },
     turns: [
-      { equipCounters: { me: { chest: 0 } } },
-      { equipCounters: { me: { chest: -1 } } },
-      { equipCounters: { me: { chest: 0 } } },
-      { equipCounters: { me: { chest: -1 } } },
-      { equipCounters: { me: { chest: -2 } } },
-      { equipCounters: { me: { chest: -1 } } }
+      { equipCounters: { me: {}, opp: { legs: 0 } } },
+      { equipCounters: { me: {}, opp: { legs: -1 } } },
+      { equipCounters: { me: {}, opp: { legs: 0 } } },
+      { equipCounters: { me: {}, opp: { legs: -1 } } },
+      { equipCounters: { me: {}, opp: { legs: -2 } } },
+      { equipCounters: { me: {}, opp: { legs: -1 } } }
     ]
   };
-  eq(Parser.computeGameStats(dynRec).dynamoResets, 2, 'computeGameStats: 2 resets de Valiant Dynamo');
-  // Convention de signe positive (1 marqueur) : même résultat (insensible au signe).
-  const dynPos = { myName: 'Me', players: { me: { hero: { name: 'Fai' }, equipment: { chest: { name: 'Valiant Dynamo' } } } },
-    turns: [{ equipCounters: { me: { chest: 1 } } }, { equipCounters: { me: { chest: 0 } } }] };
-  eq(Parser.computeGameStats(dynPos).dynamoResets, 1, 'computeGameStats: signe positif → 1 reset');
-  // Pas de Valiant Dynamo équipé → null (tuile masquée).
-  eq(Parser.computeGameStats(gsRec).dynamoResets, null, 'computeGameStats: pas de Dynamo → null');
+  eq(dOf(Parser.computeGameStats(dynRec), 'opp'), 2, 'computeGameStats: 2 resets Dynamo adverse');
+  // Convention positive (1 marqueur) : même résultat (insensible au signe).
+  const dynPos = { myName: 'Me', oppName: 'Opp',
+    players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Kassai', equipment: { legs: { name: 'Valiant Dynamo' } } } },
+    turns: [{ equipCounters: { opp: { legs: 1 } } }, { equipCounters: { opp: { legs: 0 } } }] };
+  eq(dOf(Parser.computeGameStats(dynPos), 'opp'), 1, 'computeGameStats: signe positif → 1 reset');
+  // Dynamo équipé mais AUCUN compteur dans le log → tuile masquée (pas de faux 0).
+  const dynNoCtr = { myName: 'Me', oppName: 'Opp',
+    players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Kassai', equipment: { legs: { name: 'Valiant Dynamo' } } } },
+    turns: [{ player: 'Opp', chain: [], events: [] }] };
+  eq(Parser.computeGameStats(dynNoCtr).dynamo.length, 0, 'computeGameStats: Dynamo sans compteurs → masqué');
 })();
 
 // ---------- Bilan ----------

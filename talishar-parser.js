@@ -1334,74 +1334,84 @@
     return a === b || (b + ' ').indexOf(a + ' ') === 0 || (a + ' ').indexOf(b + ' ') === 0;
   }
 
-  // STATS PAR PARTIE (pures, testables) dérivées du record normalisé.
-  // Renvoie :
-  //  - weaponAttacks : nb d'attaques faites avec TON arme équipée (weaponL/weaponR)
-  //    = nb de liens de chaîne, sur TES tours, dont l'attaquant est ton arme.
-  //    Générique tous héros ; pour Dash I/O c'est le nb de tirs de Symbiosis Shot.
-  //  - perWeapon : détail { nom d'arme -> nb } (utile si double arme).
-  //  - heroPowerActivations : nb de fois où TU as activé ton pouvoir de héros
+  // STATS PAR PARTIE (pures, testables) dérivées du record normalisé. Conscientes
+  // du CAMP : une même carte (Symbiosis Shot, Valiant Dynamo) peut être jouée par
+  // TOI ou par l'ADVERSAIRE — on la détecte des deux côtés. Renvoie :
+  //  - weapons : [{ side:'me'|'opp', name, count }] — attaques faites avec une arme
+  //    équipée (weaponL/weaponR), = liens de chaîne sur les tours de ce camp dont
+  //    l'attaquant est cette arme. Générique tous héros ; pour Dash I/O = tirs de
+  //    Symbiosis Shot. Seules les armes ayant ≥1 attaque figurent.
+  //  - heroPowerActivations : nb de fois où TOI tu as activé ton pouvoir de héros
   //    (event « activated » dont la carte = ta carte-héros, quel que soit le tour).
-  // Source de vérité = log parsé ; un héros sans arme/pouvoir → 0 (pas d'erreur).
+  //  - dynamo : [{ side, resets }] — resets de Valiant Dynamo par camp qui l'équipe,
+  //    UNIQUEMENT si le log porte des compteurs d'équipement (bloc EQUIP COUNTERS) ;
+  //    sinon absent (aucune source fiable → on n'invente pas de 0).
+  // Source de vérité = log parsé ; rien d'applicable → listes vides (pas d'erreur).
   function computeGameStats(rec) {
-    const out = { weaponAttacks: 0, perWeapon: {}, weaponNames: [], heroPowerActivations: 0, dynamoResets: null };
+    const out = { weapons: [], heroPowerActivations: 0, dynamo: [] };
     if (!rec) return out;
-    const myName = rec.myName || null;
-    const me = (rec.players && rec.players.me) || {};
-    const myHero = me.hero && me.hero.name;
-    // Noms d'armes équipées (weaponL/weaponR), normalisés → libellé d'affichage.
-    const eq = me.equipment || {};
-    const weapons = new Map();   // normName -> nom affiché
-    ['weaponL', 'weaponR'].forEach(slot => {
-      const nm = eq[slot] && eq[slot].name;
-      if (nm) weapons.set(normName(nm), nm);
-    });
-    out.weaponNames = Array.from(weapons.values());
-    // Slot où est équipé Valiant Dynamo (n'importe quel emplacement), si présent.
-    let dynamoSlot = null;
-    Object.keys(eq).forEach(slot => {
-      const nm = eq[slot] && eq[slot].name;
-      if (nm && normName(nm) === 'valiant dynamo') dynamoSlot = slot;
-    });
+    const players = rec.players || {};
+    const sides = [
+      { key: 'me', name: rec.myName || null, hero: players.me && players.me.hero, eq: (players.me && players.me.equipment) || {} },
+      { key: 'opp', name: rec.oppName || null, hero: players.opp && players.opp.hero, eq: (players.opp && players.opp.equipment) || {} }
+    ];
     const turns = Array.isArray(rec.turns) ? rec.turns : [];
+    // Y a-t-il des compteurs d'équipement dans ce log ? (sinon Dynamo indétectable :
+    // le blocage avec n'est pas journalisé, seul le compteur Talishar en témoigne.)
+    const hasCounters = turns.some(t => t.equipCounters && (t.equipCounters.me || t.equipCounters.opp));
 
-    // RESETS DE VALIANT DYNAMO — lus depuis le compteur réel maintenu par Talishar
-    // (bloc EQUIP COUNTERS). Valiant Dynamo bloque 1 et prend un marqueur -1 quand
-    // il bloque ; attaquer 2 fois à l'arme dans ton tour en retire UN seul → le
-    // compteur remonte vers 0. On compte donc chaque diminution de MAGNITUDE du
-    // compteur (insensible à la convention de signe : -1→0 ou 1→0 = un reset).
-    // Un marqueur retiré = un reset. Tuile masquée si Dynamo pas équipé (null).
-    if (dynamoSlot) {
-      let resets = 0, prevMag = 0;
-      turns.forEach(t => {
-        const ec = t.equipCounters && t.equipCounters.me;
-        const raw = ec && ec[dynamoSlot];
-        const mag = Math.abs(typeof raw === 'number' ? raw : 0);
-        if (mag < prevMag) resets += (prevMag - mag);   // le compteur remonte = marqueur(s) retiré(s)
-        prevMag = mag;
+    sides.forEach(side => {
+      // Armes équipées (weaponL/weaponR) de ce camp : normName -> nom affiché.
+      const weapons = new Map();
+      ['weaponL', 'weaponR'].forEach(slot => {
+        const nm = side.eq[slot] && side.eq[slot].name;
+        if (nm) weapons.set(normName(nm), nm);
       });
-      out.dynamoResets = resets;
-    }
-    turns.forEach(t => {
-      // Attaques à l'arme : seulement sur TES tours (l'adversaire attaque avec
-      // SES cartes ; en miroir, le filtre par tour attribue correctement).
-      if (weapons.size && (!myName || t.player === myName)) {
-        (t.chain || []).forEach(link => {
-          const key = normName(link && link.card || '');
-          if (weapons.has(key)) {
-            out.weaponAttacks++;
-            out.perWeapon[key] = (out.perWeapon[key] || 0) + 1;
-          }
+      const wCount = {};   // normName -> nb d'attaques
+      // Slot où ce camp équipe Valiant Dynamo (n'importe quel emplacement).
+      let dynamoSlot = null;
+      Object.keys(side.eq).forEach(slot => {
+        const nm = side.eq[slot] && side.eq[slot].name;
+        if (nm && normName(nm) === 'valiant dynamo') dynamoSlot = slot;
+      });
+
+      turns.forEach(t => {
+        // Attaques à l'arme : liens de chaîne sur les tours de CE camp.
+        if (weapons.size && side.name && t.player === side.name) {
+          (t.chain || []).forEach(link => {
+            const key = normName(link && link.card || '');
+            if (weapons.has(key)) wCount[key] = (wCount[key] || 0) + 1;
+          });
+        }
+        // Pouvoir de héros : seulement pour MON camp (« à chaque fois que TU l'actives »).
+        if (side.key === 'me' && side.hero) {
+          (t.events || []).forEach(e => {
+            if (e.type === 'activated' && (!side.name || e.player === side.name) && heroCardMatch(e.card, side.hero)) {
+              out.heroPowerActivations++;
+            }
+          });
+        }
+      });
+
+      weapons.forEach((name, key) => {
+        if (wCount[key]) out.weapons.push({ side: side.key, name, count: wCount[key] });
+      });
+
+      // RESETS DE VALIANT DYNAMO — depuis le compteur réel Talishar. Il bloque 1 et
+      // prend un marqueur -1 en bloquant ; attaquer 2 fois à l'arme dans ton tour en
+      // retire UN seul → le compteur remonte vers 0. On compte chaque diminution de
+      // MAGNITUDE (insensible au signe : -1→0 ou 1→0 = un reset). Nécessite le bloc
+      // EQUIP COUNTERS ; absent → on n'affiche rien (pas de faux 0).
+      if (dynamoSlot && hasCounters) {
+        let resets = 0, prevMag = 0;
+        turns.forEach(t => {
+          const ec = t.equipCounters && t.equipCounters[side.key];
+          const raw = ec && ec[dynamoSlot];
+          const mag = Math.abs(typeof raw === 'number' ? raw : 0);
+          if (mag < prevMag) resets += (prevMag - mag);
+          prevMag = mag;
         });
-      }
-      // Pouvoir de héros : toute activation de TA carte-héros (n'importe quel tour,
-      // certains pouvoirs se jouent en défense).
-      if (myHero) {
-        (t.events || []).forEach(e => {
-          if (e.type === 'activated' && (!myName || e.player === myName) && heroCardMatch(e.card, myHero)) {
-            out.heroPowerActivations++;
-          }
-        });
+        out.dynamo.push({ side: side.key, resets });
       }
     });
     return out;

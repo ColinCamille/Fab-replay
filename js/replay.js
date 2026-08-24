@@ -1250,16 +1250,23 @@
   function customStatCards() {
     const gs = root.TalisharParser.computeGameStats(GAME);
     const cards = [];
-    if (gs.weaponNames.length) {
-      const label = gs.weaponNames.length === 1 ? 'Attaques — ' + gs.weaponNames[0] : 'Attaques à l’arme';
-      cards.push([gs.weaponAttacks, label, 'gold', 'Nombre d’attaques faites avec ton arme équipée sur toute la partie.']);
-    }
+    // Attaques à l'arme, par camp (moi + adversaire) : ex. tirs de Symbiosis Shot.
+    gs.weapons.forEach(w => {
+      const label = (w.side === 'me' ? 'Attaques — ' : 'Attaques adv. — ') + w.name;
+      const tip = w.side === 'me'
+        ? 'Nombre d’attaques faites avec ton arme sur toute la partie.'
+        : 'Nombre d’attaques faites par l’adversaire avec ' + w.name + '.';
+      cards.push([w.count, label, 'gold', tip]);
+    });
     if (gs.heroPowerActivations > 0) {
       cards.push([gs.heroPowerActivations, 'Pouvoir de héros utilisé', 'violet', 'Nombre de fois où tu as activé le pouvoir de ton héros.']);
     }
-    if (gs.dynamoResets != null) {
-      cards.push([gs.dynamoResets, 'Resets de Valiant Dynamo', 'green', 'Nombre de fois où tu as retiré un marqueur -1 de Valiant Dynamo (2 attaques d’arme dans le tour).']);
-    }
+    // Resets de Valiant Dynamo, par camp qui l'équipe (nécessite les compteurs
+    // d'équipement, captés à partir du grabber v1.26).
+    gs.dynamo.forEach(d => {
+      const label = 'Resets Valiant Dynamo' + (d.side === 'me' ? '' : ' (adv.)');
+      cards.push([d.resets, label, 'green', 'Marqueurs -1 retirés de Valiant Dynamo (2 attaques d’arme dans le tour).']);
+    });
     return cards;
   }
 
