@@ -1257,6 +1257,9 @@
     if (gs.heroPowerActivations > 0) {
       cards.push([gs.heroPowerActivations, 'Pouvoir de héros utilisé', 'violet', 'Nombre de fois où tu as activé le pouvoir de ton héros.']);
     }
+    if (gs.dynamoResets != null) {
+      cards.push([gs.dynamoResets, 'Resets de Valiant Dynamo', 'green', 'Nombre de fois où tu as retiré un marqueur -1 de Valiant Dynamo (2 attaques d’arme dans le tour).']);
+    }
     return cards;
   }
 

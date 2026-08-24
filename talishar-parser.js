@@ -1344,7 +1344,7 @@
   //    (event « activated » dont la carte = ta carte-héros, quel que soit le tour).
   // Source de vérité = log parsé ; un héros sans arme/pouvoir → 0 (pas d'erreur).
   function computeGameStats(rec) {
-    const out = { weaponAttacks: 0, perWeapon: {}, weaponNames: [], heroPowerActivations: 0 };
+    const out = { weaponAttacks: 0, perWeapon: {}, weaponNames: [], heroPowerActivations: 0, dynamoResets: null };
     if (!rec) return out;
     const myName = rec.myName || null;
     const me = (rec.players && rec.players.me) || {};
@@ -1357,7 +1357,31 @@
       if (nm) weapons.set(normName(nm), nm);
     });
     out.weaponNames = Array.from(weapons.values());
+    // Slot où est équipé Valiant Dynamo (n'importe quel emplacement), si présent.
+    let dynamoSlot = null;
+    Object.keys(eq).forEach(slot => {
+      const nm = eq[slot] && eq[slot].name;
+      if (nm && normName(nm) === 'valiant dynamo') dynamoSlot = slot;
+    });
     const turns = Array.isArray(rec.turns) ? rec.turns : [];
+
+    // RESETS DE VALIANT DYNAMO — lus depuis le compteur réel maintenu par Talishar
+    // (bloc EQUIP COUNTERS). Valiant Dynamo bloque 1 et prend un marqueur -1 quand
+    // il bloque ; attaquer 2 fois à l'arme dans ton tour en retire UN seul → le
+    // compteur remonte vers 0. On compte donc chaque diminution de MAGNITUDE du
+    // compteur (insensible à la convention de signe : -1→0 ou 1→0 = un reset).
+    // Un marqueur retiré = un reset. Tuile masquée si Dynamo pas équipé (null).
+    if (dynamoSlot) {
+      let resets = 0, prevMag = 0;
+      turns.forEach(t => {
+        const ec = t.equipCounters && t.equipCounters.me;
+        const raw = ec && ec[dynamoSlot];
+        const mag = Math.abs(typeof raw === 'number' ? raw : 0);
+        if (mag < prevMag) resets += (prevMag - mag);   // le compteur remonte = marqueur(s) retiré(s)
+        prevMag = mag;
+      });
+      out.dynamoResets = resets;
+    }
     turns.forEach(t => {
       // Attaques à l'arme : seulement sur TES tours (l'adversaire attaque avec
       // SES cartes ; en miroir, le filtre par tour attribue correctement).

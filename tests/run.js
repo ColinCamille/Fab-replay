@@ -2230,6 +2230,29 @@ console.log('Stats par partie —');
   // heroCardMatch : forme blitz préfixe la forme adulte (Oscilio), insensible virgule.
   assert(Parser.heroCardMatch('Oscilio', 'Oscilio, Constella Intelligence'), 'heroCardMatch: préfixe blitz/adulte');
   assert(!Parser.heroCardMatch('Zap', 'Dash I/O'), 'heroCardMatch: carte ≠ héros → false');
+
+  // Resets de Valiant Dynamo : compteur (chest) qui remonte vers 0 = reset.
+  // Séquence : 0 → -1 (bloque) → 0 (reset) → -1 (bloque) → -2 (rebloque) → -1 (reset).
+  // 2 diminutions de magnitude (-1→0 et -2→-1) = 2 resets.
+  const dynRec = {
+    myName: 'Me',
+    players: { me: { hero: { name: 'Fai' }, equipment: { chest: { name: 'Valiant Dynamo' } } } },
+    turns: [
+      { equipCounters: { me: { chest: 0 } } },
+      { equipCounters: { me: { chest: -1 } } },
+      { equipCounters: { me: { chest: 0 } } },
+      { equipCounters: { me: { chest: -1 } } },
+      { equipCounters: { me: { chest: -2 } } },
+      { equipCounters: { me: { chest: -1 } } }
+    ]
+  };
+  eq(Parser.computeGameStats(dynRec).dynamoResets, 2, 'computeGameStats: 2 resets de Valiant Dynamo');
+  // Convention de signe positive (1 marqueur) : même résultat (insensible au signe).
+  const dynPos = { myName: 'Me', players: { me: { hero: { name: 'Fai' }, equipment: { chest: { name: 'Valiant Dynamo' } } } },
+    turns: [{ equipCounters: { me: { chest: 1 } } }, { equipCounters: { me: { chest: 0 } } }] };
+  eq(Parser.computeGameStats(dynPos).dynamoResets, 1, 'computeGameStats: signe positif → 1 reset');
+  // Pas de Valiant Dynamo équipé → null (tuile masquée).
+  eq(Parser.computeGameStats(gsRec).dynamoResets, null, 'computeGameStats: pas de Dynamo → null');
 })();
 
 // ---------- Bilan ----------
