@@ -114,11 +114,21 @@ broken += 'ROUND 1 :: nissy\nnissy played Late\n';   // en-tête d'un format non
 const brokenRec = Parser.parse(broken);
 assert(brokenRec.health.ok === false, 'santé : format de tour inconnu + 25+ actions → signalé');
 assert(brokenRec.health.issues.some(i => /tour/i.test(i)), 'santé : le message mentionne les tours');
-// Duplication du journal → signalée (une carte jouée un nombre improbable de fois).
+// Duplication du journal (bug « logs géants » : journal ré-empilé) → signalée
+// par la LARGEUR : plusieurs cartes distinctes jouées un nombre improbable de fois.
 let dup = '=== Talishar game 45 — test ===\n\nnissy\'s turn 1 has begun.\n';
-for (let k = 0; k < 8; k++) dup += 'nissy played Harness Lightning\n';
+for (let k = 0; k < 8; k++) dup += 'nissy played Harness Lightning\nnissy played Lightning Press\nnissy played Voltic Bolt\n';
 dup += 'Ehecalt\'s turn 1 has begun.\nEhecalt played Y\n';
-assert(Parser.parse(dup).health.issues.some(i => /[Dd]uplication/.test(i)), 'santé : duplication du journal signalée');
+assert(Parser.parse(dup).health.issues.some(i => /[Dd]uplication/.test(i)), 'santé : journal ré-empilé (plusieurs cartes 6+) signalé');
+
+// Faux positif à NE PAS commettre : une SEULE carte qui récurre légitimement
+// (instant rejoué des deux côtés d'un miroir arcane — ex. « Gone in a Flash » ×8
+// dans le vrai game 2112693) ne doit PAS être vue comme une duplication, sinon
+// la partie est exclue du dashboard (health.ok=false).
+let recur = '=== Talishar game 46 — test ===\n\nnissy\'s turn 1 has begun.\n';
+for (let k = 0; k < 8; k++) recur += 'nissy played Gone in a Flash\n';
+recur += 'nissy played Kindle\nEhecalt\'s turn 1 has begun.\nEhecalt played Ravenous Rabble\n';
+assert(!Parser.parse(recur).health.issues.some(i => /[Dd]uplication/.test(i)), 'santé : une carte récurrente seule (×8) ne déclenche PAS le faux positif duplication');
 
 // MIROIR (mêmes héros) : la ligne « X won! » est ambiguë (les 2 = « Aurora ») →
 // on doit se fier aux stats officielles (numéro de joueur). Ici myPlayerID=1 et

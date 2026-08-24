@@ -1254,13 +1254,19 @@
       // C. Un tour attribué à un joueur inconnu.
       const known = new Set([myName, oppName].filter(Boolean));
       if (known.size === 2) turns.forEach(t => { if (t.player && !known.has(t.player)) flagHealth('Tour attribué à un joueur inattendu : « ' + t.player + ' ».'); });
-      // D. Duplication probable du journal : une carte « jouée » un nombre
-      //    improbable de fois (un playset = 3 max ; 6+ = journal dupliqué).
+      // D. Duplication probable du journal : le grabber a pu RÉ-EMPILER tout le
+      //    journal (bug historique « logs géants » où chaque poll ré-append tout).
+      //    Signature = de la LARGEUR : BEAUCOUP de cartes distinctes jouées un
+      //    nombre improbable de fois. On exige ≥3 cartes à 6+ plays. Une SEULE
+      //    carte qui pique (ex. « Gone in a Flash », un instant rejoué des deux
+      //    côtés d'un miroir arcane — game 2112693) est LÉGITIME : le compte est
+      //    tous joueurs confondus et certaines cartes récurrent → ne PAS exclure
+      //    la partie du dashboard pour ça.
       const played = {};
       logLines.forEach(l => { const m = l.match(/ played (.{4,60})$/); if (m) { const k = normName(m[1]); played[k] = (played[k] || 0) + 1; } });
-      let worst = 0, worstCard = '';
-      for (const k in played) if (played[k] > worst) { worst = played[k]; worstCard = k; }
-      if (worst >= 6) flagHealth('Duplication probable du journal : « ' + worstCard + ' » joué ' + worst + ' fois.');
+      const heavy = Object.keys(played).filter(k => played[k] >= 6).sort((a, b) => played[b] - played[a]);
+      if (heavy.length >= 3)
+        flagHealth('Duplication probable du journal : ' + heavy.length + ' cartes jouées 6+ fois (ex. « ' + heavy[0] + ' » ×' + played[heavy[0]] + ').');
       // E. Joueurs non résolus.
       if (!myName || !oppName) flagHealth('Joueurs non résolus (toi = ' + (myName || '?') + ', adversaire = ' + (oppName || '?') + ').');
       // F. Nom de joueur = TEXTE D'UI parasite (« Unknown's Turn », « PRIORITY »)
