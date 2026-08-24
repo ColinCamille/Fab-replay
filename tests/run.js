@@ -2233,31 +2233,38 @@ console.log('Stats par partie —');
   assert(Parser.heroCardMatch('Oscilio', 'Oscilio, Constella Intelligence'), 'heroCardMatch: préfixe blitz/adulte');
   assert(!Parser.heroCardMatch('Zap', 'Dash I/O'), 'heroCardMatch: carte ≠ héros → false');
 
-  // Resets Valiant Dynamo (ADVERSAIRE, legs). Compteur qui remonte vers 0 = reset.
-  // 0 → -1 (bloque) → 0 (reset) → -1 → -2 (rebloque) → -1 (reset) : 2 resets.
+  // Resets Valiant Dynamo (ADVERSAIRE, legs) reconstruits depuis le journal :
+  // « X blocked with Valiant Dynamo » pose un marqueur ; un tour du porteur avec
+  // ≥2 attaques à l'arme (Zenith Blade) en retire un. Scénario :
+  //  - mon tour : opp bloque avec Dynamo (marqueur=1)
+  //  - tour opp : 2 attaques Zenith Blade → reset (marqueur=0)
+  //  - mon tour : opp bloque (marqueur=1)
+  //  - tour opp : 1 seule attaque → PAS de reset (marqueur reste 1)
+  //  - tour opp : 2 attaques mais marqueur=1 → reset (marqueur=0). Total : 2 resets.
+  const dynEq = { legs: { name: 'Valiant Dynamo' }, weaponL: { name: 'Zenith Blade' } };
   const dynRec = {
     myName: 'Me', oppName: 'Opp',
-    players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Kassai', equipment: { legs: { name: 'Valiant Dynamo' } } } },
+    players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Hala', equipment: dynEq } },
     turns: [
-      { equipCounters: { me: {}, opp: { legs: 0 } } },
-      { equipCounters: { me: {}, opp: { legs: -1 } } },
-      { equipCounters: { me: {}, opp: { legs: 0 } } },
-      { equipCounters: { me: {}, opp: { legs: -1 } } },
-      { equipCounters: { me: {}, opp: { legs: -2 } } },
-      { equipCounters: { me: {}, opp: { legs: -1 } } }
+      { player: 'Me', events: [{ type: 'blocked', player: 'Opp', cards: ['Valiant Dynamo'] }], chain: [] },
+      { player: 'Opp', events: [], chain: [{ card: 'Zenith Blade' }, { card: 'Zenith Blade' }] },
+      { player: 'Me', events: [{ type: 'blocked', player: 'Opp', cards: ['Valiant Dynamo', 'Provoke'] }], chain: [] },
+      { player: 'Opp', events: [], chain: [{ card: 'Zenith Blade' }] },
+      { player: 'Opp', events: [], chain: [{ card: 'Zenith Blade' }, { card: 'Zenith Blade' }] }
     ]
   };
-  eq(dOf(Parser.computeGameStats(dynRec), 'opp'), 2, 'computeGameStats: 2 resets Dynamo adverse');
-  // Convention positive (1 marqueur) : même résultat (insensible au signe).
-  const dynPos = { myName: 'Me', oppName: 'Opp',
-    players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Kassai', equipment: { legs: { name: 'Valiant Dynamo' } } } },
-    turns: [{ equipCounters: { opp: { legs: 1 } } }, { equipCounters: { opp: { legs: 0 } } }] };
-  eq(dOf(Parser.computeGameStats(dynPos), 'opp'), 1, 'computeGameStats: signe positif → 1 reset');
-  // Dynamo équipé mais AUCUN compteur dans le log → tuile masquée (pas de faux 0).
-  const dynNoCtr = { myName: 'Me', oppName: 'Opp',
-    players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Kassai', equipment: { legs: { name: 'Valiant Dynamo' } } } },
-    turns: [{ player: 'Opp', chain: [], events: [] }] };
-  eq(Parser.computeGameStats(dynNoCtr).dynamo.length, 0, 'computeGameStats: Dynamo sans compteurs → masqué');
+  eq(dOf(Parser.computeGameStats(dynRec), 'opp'), 2, 'computeGameStats: 2 resets Dynamo adverse (règle blocage+attaques)');
+  // Dynamo équipé mais jamais bloqué → 0 marqueur → 0 reset (vrai 0, tuile affichée).
+  const dynNoBlock = { myName: 'Me', oppName: 'Opp',
+    players: { me: { hero: 'Oscilio', equipment: {} }, opp: { hero: 'Hala', equipment: dynEq } },
+    turns: [{ player: 'Opp', chain: [{ card: 'Zenith Blade' }, { card: 'Zenith Blade' }], events: [] }] };
+  const gsNoBlock = Parser.computeGameStats(dynNoBlock);
+  eq(gsNoBlock.dynamo.length, 1, 'computeGameStats: Dynamo équipé → tuile présente');
+  eq(dOf(gsNoBlock, 'opp'), 0, 'computeGameStats: Dynamo jamais bloqué → 0 reset');
+  // 2 attaques mais aucun marqueur → pas de reset (on ne retire pas un compteur absent).
+  eq(dOf(gsNoBlock, 'opp'), 0, 'computeGameStats: pas de reset sans marqueur');
+  // Pas de Valiant Dynamo → liste dynamo vide.
+  eq(Parser.computeGameStats(gsRec).dynamo.length, 0, 'computeGameStats: pas de Dynamo → dynamo vide');
 })();
 
 // ---------- Bilan ----------

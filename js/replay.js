@@ -1261,8 +1261,8 @@
     if (gs.heroPowerActivations > 0) {
       cards.push([gs.heroPowerActivations, 'Pouvoir de héros utilisé', 'violet', 'Nombre de fois où tu as activé le pouvoir de ton héros.']);
     }
-    // Resets de Valiant Dynamo, par camp qui l'équipe (nécessite les compteurs
-    // d'équipement, captés à partir du grabber v1.26).
+    // Resets de Valiant Dynamo, par camp qui l'équipe (reconstruit depuis les
+    // blocages journalisés + les attaques à l'arme).
     gs.dynamo.forEach(d => {
       const label = 'Resets Valiant Dynamo' + (d.side === 'me' ? '' : ' (adv.)');
       cards.push([d.resets, label, 'green', 'Marqueurs -1 retirés de Valiant Dynamo (2 attaques d’arme dans le tour).']);
