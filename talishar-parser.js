@@ -22,7 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 2;   // v2 : ajout de turns[].equipCounters + snapshots.equipCounters
+  const SCHEMA_VERSION = 3;   // v3 : garde-fou duplication moins agressif (health.ok peut passer false→true) → re-parse des parties en cache
+  // v2 : ajout de turns[].equipCounters + snapshots.equipCounters
   const PARSER_VERSION = '2.2.0';
 
   const EQ_SLOTS = ['head', 'chest', 'arms', 'legs', 'weaponL', 'weaponR'];
