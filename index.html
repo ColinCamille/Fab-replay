@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=186">
+<link rel="stylesheet" href="css/style.css?v=187">
 </head>
 <body>
 
@@ -138,18 +138,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=186"></script>
-<script src="js/images.js?v=186"></script>
-<script src="js/db.js?v=186"></script>
-<script src="js/sync.js?v=186"></script>
-<script src="js/replay.js?v=186"></script>
-<script src="js/boardreplay.js?v=186"></script>
-<script src="js/dashboard.js?v=186"></script>
+<script src="talishar-parser.js?v=187"></script>
+<script src="js/images.js?v=187"></script>
+<script src="js/db.js?v=187"></script>
+<script src="js/sync.js?v=187"></script>
+<script src="js/replay.js?v=187"></script>
+<script src="js/boardreplay.js?v=187"></script>
+<script src="js/dashboard.js?v=187"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=186"></script>
-<script src="js/cloud.js?v=186"></script>
+<script src="js/cloud-config.js?v=187"></script>
+<script src="js/cloud.js?v=187"></script>
 
 <script>
 // ============================================================
@@ -601,9 +601,13 @@
   // (mêmes règles que la synchro : pas de doublon, respect des suppressions).
   async function mergeCloudGames() {
     if (!window.Cloud || !window.Cloud.getUser()) return { added: 0, removed: 0 };
-    let rows;
-    try { rows = await window.Cloud.fetchGames(); } catch (e) { console.error(e); return { added: 0, removed: 0 }; }
-    const cloudIds = new Set(rows.map(r => String(r.game_id)));
+    const uid = window.Cloud.getUser().id;
+    // 1) Index LÉGER d'abord (sans `raw`) : ne peut pas expirer, même avec des
+    // centaines de parties. On ne télécharge le `raw` (gros) que de ce qui en a
+    // besoin → plus de « statement timeout », et la nouvelle partie s'affiche vite.
+    let idx;
+    try { idx = await window.Cloud.fetchGamesIndex(uid); } catch (e) { console.error(e); return { added: 0, removed: 0 }; }
+    const cloudIds = new Set(idx.map(r => String(r.game_id)));
     const local = await window.FabDB.getAllEntries();
     const have = new Set(local.map(e => String(e.gameId)));
     // Version de schéma stockée par partie : sert à re-parser une partie déjà en
@@ -612,7 +616,21 @@
     const haveVer = new Map(local.map(e => [String(e.gameId), e.schemaVersion || 0]));
     const curSchema = (window.TalisharParser && window.TalisharParser.SCHEMA_VERSION) || 0;
     let added = 0, removed = 0, metaChanged = 0, reparsed = 0;
-    // Ajouts + application des tags/favoris (colonne meta), dernier-écrit-gagne.
+    // 2) Parties dont il faut (re)télécharger le raw : absentes du cache, ou de
+    // schéma périmé. Rien de neuf → aucun `raw` téléchargé (synchro quasi instantanée).
+    const needRaw = idx.filter(r => {
+      const gid = String(r.game_id);
+      if (window.FabDB.isDeleted(gid)) return false;
+      const known = have.has(gid);
+      const stale = known && ((haveVer.get(gid) || 0) < curSchema);
+      return !known || stale;
+    }).map(r => String(r.game_id));
+    let rows = [];
+    if (needRaw.length) {
+      try { rows = await window.Cloud.fetchGamesRaw(uid, needRaw); } catch (e) { console.error(e); }
+    }
+    // 3) Parse + stocke les parties nouvelles/périmées.
+    const stripId = s => s ? String(s).replace(/\s*\([^)]*\)\s*$/, '').trim() : s;
     for (const row of rows) {
       if (!row || !row.raw) continue;
       let rec;
@@ -621,22 +639,21 @@
       // on complète depuis les colonnes dénormalisées du compte (my_hero/opp_hero,
       // fiables). Ces colonnes stockent « Nom (id) » → on retire l'id pour coller
       // au format du parseur (nom seul).
-      const stripId = s => s ? String(s).replace(/\s*\([^)]*\)\s*$/, '').trim() : s;
       if (rec.players) {
         if (rec.players.me && !rec.players.me.hero && row.my_hero) rec.players.me.hero = stripId(row.my_hero);
         if (rec.players.opp && !rec.players.opp.hero && row.opp_hero) rec.players.opp.hero = stripId(row.opp_hero);
       }
       const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
-      if (!gid) continue;
-      // Nouvelle partie OU partie connue dont le record stocké est d'un schéma
-      // périmé → (re)parser et (re)stocker. putGame préserve les tags/favoris.
+      if (!gid || window.FabDB.isDeleted(gid)) continue;
       const known = have.has(gid);
-      const stale = known && ((haveVer.get(gid) || 0) < curSchema);
-      if ((!known || stale) && !window.FabDB.isDeleted(gid)) {
-        try { await window.FabDB.putGame(rec, row.raw); have.add(gid); haveVer.set(gid, curSchema); if (known) reparsed++; else added++; } catch (e) { console.error(e); }
-      }
-      if (row.meta && have.has(gid)) {
-        try { if (await window.FabDB.applyCloudMeta(gid, row.meta)) metaChanged++; } catch (e) { console.error(e); }
+      try { await window.FabDB.putGame(rec, row.raw); have.add(gid); haveVer.set(gid, curSchema); if (known) reparsed++; else added++; } catch (e) { console.error(e); }
+    }
+    // 4) Tags/favoris : la meta est déjà dans l'index → applique sur toutes les
+    // parties en cache (dernier-écrit-gagne), sans avoir eu besoin du raw.
+    for (const r of idx) {
+      const gid = String(r.game_id);
+      if (r.meta && have.has(gid)) {
+        try { if (await window.FabDB.applyCloudMeta(gid, r.meta)) metaChanged++; } catch (e) { console.error(e); }
       }
     }
     // Réconciliation des suppressions : une partie locale à id numérique (donc
