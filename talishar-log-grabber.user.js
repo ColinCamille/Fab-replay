@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.27.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). Export texte / téléchargement + localStorage.
+// @version      1.28.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). v1.28 : SOUL — capte la zone « soul » par tour (nombre de cartes des 2 camps via playerX.SoulCount, + noms si révélés) pour les héros à soul (Boltyn, Breaker of Dawn…) → la vue Table l'affiche. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.27.0';
+  const VERSION = '1.28.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -29,6 +29,7 @@
   const LS_FIELDTL_PREFIX = 'taliFieldTl_';
   const LS_GRAVE_PREFIX = 'taliGrave_';
   const LS_BANISH_PREFIX = 'taliBanish_';
+  const LS_SOUL_PREFIX = 'taliSoul_';
   const LS_LIFE_PREFIX = 'taliLife_';
   const LS_META_PREFIX = 'taliMeta_';
   const LS_TS_PREFIX = 'taliTs_';
@@ -43,7 +44,7 @@
   // = une clé taliMeta_ présente) et porte l'horodatage capturedAt (tri LRU).
   const LS_ALL_PREFIXES = [
     LS_PREFIX, LS_HAND_PREFIX, LS_HANDTL_PREFIX, LS_ARSENAL_PREFIX, LS_OPPARS_PREFIX,
-    LS_FIELD_PREFIX, LS_FIELDTL_PREFIX, LS_GRAVE_PREFIX, LS_BANISH_PREFIX, LS_LIFE_PREFIX,
+    LS_FIELD_PREFIX, LS_FIELDTL_PREFIX, LS_GRAVE_PREFIX, LS_BANISH_PREFIX, LS_SOUL_PREFIX, LS_LIFE_PREFIX,
     LS_META_PREFIX, LS_TS_PREFIX, LS_ENDSTATS_PREFIX, LS_CHAIN_PREFIX, LS_HEROFORM_PREFIX,
     LS_EQCTR_PREFIX, LS_RAWCHAT_PREFIX
   ];
@@ -79,6 +80,7 @@
   let fieldTimeline = [];   // [{ pos, me, opp }] à CHAQUE changement du terrain (jetons/auras éphémères)
   let graveSnapshots = {};  // clé tour -> { me, opp } (cimetière, zone publique)
   let banishSnapshots = {}; // clé tour -> { me, opp } (banni, zone publique)
+  let soulSnapshots = {};   // clé tour -> { me:{count,cards}, opp:{count,cards} } (zone « soul » : Boltyn… — nombre public, noms si révélés)
   let heroFormSnapshots = {}; // clé tour -> { me, opp } (FORME du héros ce tour-là : Arakni se transforme)
   let equipCounterSnapshots = {}; // clé tour -> { me:{slot:val}, opp:{slot:val} } (compteurs d'équipement : Tunic 1/2/3, -1 counters…)
   let lifeSnapshots = {};   // clé tour -> { me, opp, myDeck, oppDeck }
@@ -602,6 +604,7 @@
       localStorage.setItem(LS_FIELDTL_PREFIX + gameName, JSON.stringify(fieldTimeline));
       localStorage.setItem(LS_GRAVE_PREFIX + gameName, JSON.stringify(graveSnapshots));
       localStorage.setItem(LS_BANISH_PREFIX + gameName, JSON.stringify(banishSnapshots));
+      localStorage.setItem(LS_SOUL_PREFIX + gameName, JSON.stringify(soulSnapshots));
       localStorage.setItem(LS_HEROFORM_PREFIX + gameName, JSON.stringify(heroFormSnapshots));
       localStorage.setItem(LS_EQCTR_PREFIX + gameName, JSON.stringify(equipCounterSnapshots));
       localStorage.setItem(LS_LIFE_PREFIX + gameName, JSON.stringify(lifeSnapshots));
@@ -627,6 +630,7 @@
     fieldTimeline = read(LS_FIELDTL_PREFIX + gameName, []);
     graveSnapshots = read(LS_GRAVE_PREFIX + gameName, {});
     banishSnapshots = read(LS_BANISH_PREFIX + gameName, {});
+    soulSnapshots = read(LS_SOUL_PREFIX + gameName, {});
     heroFormSnapshots = read(LS_HEROFORM_PREFIX + gameName, {});
     equipCounterSnapshots = read(LS_EQCTR_PREFIX + gameName, {});
     lifeSnapshots = read(LS_LIFE_PREFIX + gameName, {});
@@ -739,6 +743,28 @@
     const g = getGameState();
     if (!g) return null;
     return { me: zoneNamesOf(g.playerOne, zone), opp: zoneNamesOf(g.playerTwo, zone) };
+  }
+
+  // Zone « SOUL » (Boltyn, Breaker of Dawn… : les cartes bannies « to soul »).
+  // Le NOMBRE (playerX.SoulCount) est PUBLIC et toujours présent dans state.game
+  // → c'est la donnée fiable. Les NOMS (playerX.Soul) ne sont peuplés par Talishar
+  // que si la fenêtre « Soul » a été ouverte (requête à part) → souvent absents :
+  // on les capte quand ils sont là (bonus), jamais inventés sinon. Renvoie
+  // { me:{count,cards}, opp:{count,cards} } ou null si aucune soul des deux côtés
+  // (la grande majorité des héros n'en ont pas → pas de zone parasite au plateau).
+  function soulOf(player) {
+    if (!player) return { count: 0, cards: [] };
+    const cards = Array.isArray(player.Soul) ? cardListNames(player.Soul) : [];
+    let count = asNum(player.SoulCount);
+    if (count == null) count = cards.length;
+    return { count: count, cards: cards };
+  }
+  function extractSoul() {
+    const g = getGameState();
+    if (!g) return null;
+    const me = soulOf(g.playerOne), opp = soulOf(g.playerTwo);
+    if (!me.count && !opp.count && !me.cards.length && !opp.cards.length) return null;
+    return { me: me, opp: opp };
   }
 
   function extractLife() {
@@ -958,6 +984,7 @@
           const ec0 = extractEquipCounters(); if (ec0) equipCounterSnapshots['__opening__'] = ec0;
           const gr0 = extractTwoCamp('Graveyard'); if (gr0) graveSnapshots['__opening__'] = gr0;
           const bn0 = extractTwoCamp('Banish'); if (bn0) banishSnapshots['__opening__'] = bn0;
+          const sl0 = extractSoul(); if (sl0) soulSnapshots['__opening__'] = sl0;
           openingPreAction = true;
         }
       }
@@ -989,6 +1016,7 @@
         const ec0 = extractEquipCounters(); if (ec0) equipCounterSnapshots['__opening__'] = ec0;
         const gr0 = extractTwoCamp('Graveyard'); if (gr0) graveSnapshots['__opening__'] = gr0;
         const bn0 = extractTwoCamp('Banish'); if (bn0) banishSnapshots['__opening__'] = bn0;
+        const sl0 = extractSoul(); if (sl0) soulSnapshots['__opening__'] = sl0;
       } else if (prev.length && hand.length < prev.length) {
         openingSnapped = true;                              // 1re baisse → main d'ouverture figée
       }
@@ -1010,6 +1038,7 @@
       const ec = extractEquipCounters(); if (ec) equipCounterSnapshots[key] = ec;
       const gr = extractTwoCamp('Graveyard'); if (gr) graveSnapshots[key] = gr;
       const bn = extractTwoCamp('Banish'); if (bn) banishSnapshots[key] = bn;
+      const sl = extractSoul(); if (sl) soulSnapshots[key] = sl;
       lifeSnapshots[key] = extractLife();
     }
     captureCombatChain();
@@ -1357,6 +1386,24 @@
   function fieldBlockText() { return twoCampBlock('FIELD SNAPSHOTS (permanents/tokens en jeu : toi | adversaire)', fieldSnapshots); }
   function graveBlockText() { return twoCampBlock('GRAVEYARD SNAPSHOTS (cimetière : toi | adversaire)', graveSnapshots); }
   function banishBlockText() { return twoCampBlock('BANISH SNAPSHOTS (banni : toi | adversaire)', banishSnapshots); }
+  // Bloc « SOUL » par tour : [tour] me: <nb> (noms si connus) | opp: <nb>
+  // Le NOMBRE fait autorité (zone publique) ; les noms entre parenthèses ne sont
+  // là que si Talishar les a révélés. Vide → bloc omis (rétro-compat).
+  function soulBlockText() {
+    const keys = Object.keys(soulSnapshots);
+    if (!keys.length) return '';
+    const fmt = s => {
+      const c = (s && s.count) || 0;
+      const names = (s && s.cards && s.cards.length) ? ' (' + s.cards.join(', ') + ')' : '';
+      return String(c) + names;
+    };
+    const lines = keys.map(k => {
+      const label = k === '__opening__' ? 'OUVERTURE' : k.replace('#', ' #');
+      const s = soulSnapshots[k] || {};
+      return '[' + label + '] me: ' + fmt(s.me) + ' | opp: ' + fmt(s.opp);
+    });
+    return '\n=== SOUL SNAPSHOTS (zone soul : nombre — noms entre parenthèses si révélés : toi | adversaire) ===\n' + lines.join('\n') + '\n';
+  }
 
   function metaBlockText() {
     const eqText = eq => {
@@ -1478,6 +1525,7 @@
       + fieldTimelineBlockText()
       + graveBlockText()
       + banishBlockText()
+      + soulBlockText()
       + heroFormBlockText()
       + equipCounterBlockText()
       + snapshotBlockText('LIFE SNAPSHOTS (vie et taille de deck : toi / adversaire)', lifeSnapshots, lifeLineFmt)
@@ -1622,7 +1670,7 @@
   function clearLog() {
     if (!confirm('Effacer le log, les snapshots et les métadonnées capturés de cette partie ?')) return;
     captured = []; capturedRaw = []; lastVisibleSig = ''; handSnapshots = {}; handTimeline = []; arsenalSnapshots = {}; oppArsenalSnapshots = {};
-    fieldSnapshots = {}; fieldTimeline = []; graveSnapshots = {}; banishSnapshots = {}; lifeSnapshots = {}; equipCounterSnapshots = {}; tsBatches = []; meta = {};
+    fieldSnapshots = {}; fieldTimeline = []; graveSnapshots = {}; banishSnapshots = {}; soulSnapshots = {}; lifeSnapshots = {}; equipCounterSnapshots = {}; tsBatches = []; meta = {};
     chainLinks = []; pendingChain = null;
     lastTurnKey = null; openingSnapped = false; openingPreAction = false;
     save(); updateUI();

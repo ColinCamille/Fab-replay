@@ -693,6 +693,56 @@ assert(eqTl.steps.every(s => s.state.meEquipCounters && Object.keys(s.state.meEq
   && s.state.oppEquipCounters && Object.keys(s.state.oppEquipCounters).length === 0),
   'compteur : bloc absent (vieux log) → maps vides, aucune erreur');
 
+// ── Zone « SOUL » par tour (Boltyn, Breaker of Dawn…) ────────────────────────
+// A. Parser : le bloc SOUL SNAPSHOTS est extrait (nombre + noms si révélés) et
+//    rattaché par tour ; les noms sont optionnels (entre parenthèses).
+const soulRaw = [
+  '=== Talishar game 901 — test ===', '',
+  "Me's turn 1 has begun.", 'Me played Card A',
+  "Opp's turn 2 has begun.", 'Opp played Card B',
+  "Me's turn 3 has begun.", 'Me played Card C', '',
+  '=== SOUL SNAPSHOTS (zone soul : nombre — noms entre parenthèses si révélés : toi | adversaire) ===',
+  '[Me #1] me: 1 | opp: 0',
+  '[Opp #2] me: 2 | opp: 0',
+  '[Me #3] me: 3 (Sonata Prelude, Cindering Foothills, Sink Below) | opp: 0', '',
+  '=== META ===', 'me: Me', 'opp: Opp', ''
+].join('\n');
+const soulRec = Parser.parse(soulRaw);
+assert(soulRec.snapshots && soulRec.snapshots.soul, 'SOUL : bloc exposé dans record.snapshots');
+assert(soulRec.health.ok === true, 'SOUL : le bloc ne casse pas l\'analyse (santé ok)');
+const soulT3 = soulRec.turns.find(t => t.turnNumber === 3 && t.player === 'Me');
+assert(soulT3 && soulT3.soul && soulT3.soul.me.count === 3, 'SOUL : nombre (3) capté au tour 3');
+eq(soulT3.soul.me.cards.length, 3, 'SOUL : 3 noms révélés capté au tour 3');
+assert(soulT3.soul.me.cards.indexOf('Sonata Prelude') >= 0, 'SOUL : nom de carte de la soul extrait');
+eq(soulT3.soul.opp.count, 0, 'SOUL : soul adverse à 0');
+const soulT1 = soulRec.turns.find(t => t.turnNumber === 1 && t.player === 'Me');
+assert(soulT1 && soulT1.soul.me.count === 1 && soulT1.soul.me.cards.length === 0, 'SOUL : nombre seul (sans noms) capté au tour 1');
+
+// B. buildTimeline : le nombre ET les noms remontent dans l'état, et usesSoul est vrai.
+const soulTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Boltyn, Breaker of Dawn', equipment: {} }, opp: { hero: 'Bravo', equipment: {} } },
+  lifeSeries: { me: [40, 40, 40], opp: [40, 40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], soul: { me: { count: 1, cards: [] }, opp: { count: 0, cards: [] } }, events: [ { type: 'played', player: 'Me', card: 'Card A' } ] },
+    { player: 'Opp', label: 'Opp — Tour 2', hand: [], arsenal: [], soul: { me: { count: 2, cards: [] }, opp: { count: 0, cards: [] } }, events: [ { type: 'played', player: 'Opp', card: 'Card B' }, { type: 'combatResult', hit: false } ] },
+    { player: 'Me', label: 'Me — Tour 3', hand: [], arsenal: [], soul: { me: { count: 3, cards: ['Sonata Prelude', 'Cindering Foothills', 'Sink Below'] }, opp: { count: 0, cards: [] } }, events: [ { type: 'played', player: 'Me', card: 'Card C' } ] }
+  ]
+});
+assert(soulTl.usesSoul === true, 'SOUL : usesSoul vrai quand une soul est utilisée');
+eq(soulTl.steps[0].state.meSoulCount, 1, 'SOUL : compteur à 1 dès la 1re étape');
+const soulLast = soulTl.steps[soulTl.steps.length - 1];
+eq(soulLast.state.meSoulCount, 3, 'SOUL : compteur à 3 à la dernière étape');
+eq(soulLast.state.meSoul.length, 3, 'SOUL : noms remontés dans l\'état à la dernière étape');
+eq(soulLast.state.oppSoulCount, 0, 'SOUL : soul adverse à 0 dans l\'état');
+
+// C. Rétro-compat : une partie SANS bloc (vieux log / héros sans soul) → aucune
+//    soul, usesSoul faux, aucune erreur.
+assert(eqTl.usesSoul === false, 'SOUL : usesSoul faux quand aucune soul (rétro-compat)');
+assert(eqTl.steps.every(s => s.state.meSoulCount === 0 && s.state.oppSoulCount === 0
+  && s.state.meSoul.length === 0 && s.state.oppSoul.length === 0),
+  'SOUL : bloc absent (vieux log) → compteurs à 0 et listes vides, aucune erreur');
+
 // Détection AUTO d'un équipement détruit via le cimetière (sans liste de cartes) :
 // une pièce qui apparaît au cimetière est retirée du plateau (ex. Crown de bloc).
 const crownTl = BR.buildTimeline({

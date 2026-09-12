@@ -136,6 +136,7 @@
       meHandCards: [], meHandPitches: [], meHandCount: 0, meFaceUp: false, oppHandCount: 4,
       mePitch: [], oppPitch: [], meArsenal: [], oppArsenalCount: 0,
       meGrave: [], oppGrave: [], meBanish: [], oppBanish: [], meTokens: [], oppTokens: [],
+      meSoul: [], oppSoul: [], meSoulCount: 0, oppSoulCount: 0,
       meEquipGone: [], oppEquipGone: [], meEquipUsed: [], oppEquipUsed: [], meBorn: [], oppBorn: [],
       meEquipCounters: {}, oppEquipCounters: {}, life: { me: 0, opp: 0 }
     };
@@ -148,6 +149,7 @@
       mePitch: st.mePitch.slice(), oppPitch: st.oppPitch.slice(), meArsenal: st.meArsenal.slice(), oppArsenalCount: st.oppArsenalCount,
       meGrave: st.meGrave.slice(), oppGrave: st.oppGrave.slice(), meBanish: st.meBanish.slice(), oppBanish: st.oppBanish.slice(),
       meTokens: st.meTokens.slice(), oppTokens: st.oppTokens.slice(),
+      meSoul: st.meSoul.slice(), oppSoul: st.oppSoul.slice(), meSoulCount: st.meSoulCount, oppSoulCount: st.oppSoulCount,
       meEquipGone: st.meEquipGone.slice(), oppEquipGone: st.oppEquipGone.slice(),
       meEquipUsed: st.meEquipUsed.slice(), oppEquipUsed: st.oppEquipUsed.slice(),
       meBorn: st.meBorn.slice(), oppBorn: st.oppBorn.slice(),
@@ -268,6 +270,14 @@
       // Sinon (vieux logs), on garde la reconstruction cumulée depuis le récit.
       if (t.grave) { st.meGrave = (t.grave.me || []).slice(); st.oppGrave = (t.grave.opp || []).slice(); }
       if (t.banish) { st.meBanish = (t.banish.me || []).slice(); st.oppBanish = (t.banish.opp || []).slice(); }
+      // Zone « soul » (Boltyn…) : instantané par tour capté par le grabber. Le
+      // NOMBRE fait autorité (zone publique) ; les NOMS ne sont là que si Talishar
+      // les a révélés (sinon dos de carte + compteur). Absent → zone conservée en
+      // l'état (cumulatif) pour ne pas « clignoter » à un tour sans capture.
+      if (t.soul) {
+        st.meSoulCount = (t.soul.me && t.soul.me.count) || 0; st.meSoul = (t.soul.me && t.soul.me.cards || []).slice();
+        st.oppSoulCount = (t.soul.opp && t.soul.opp.count) || 0; st.oppSoul = (t.soul.opp && t.soul.opp.cards || []).slice();
+      }
 
       // Détection AUTOMATIQUE des équipements détruits (sans liste de cartes) :
       // un équipement détruit part au cimetière (ou banni). Dès qu'une pièce
@@ -1001,7 +1011,11 @@
       me: Object.assign({}, GAME.players.me || {}, { createdWeapons: createdWeapons.me }),
       opp: Object.assign({}, GAME.players.opp || {}, { createdWeapons: createdWeapons.opp })
     };
-    return { players, myName: MY, oppName: OPP, hero: HERO, steps };
+    // La partie utilise-t-elle une zone « soul » (Boltyn…) ? On n'affiche
+    // l'emplacement soul que dans ce cas — la grande majorité des héros n'en ont
+    // pas, inutile d'encombrer le plateau d'une zone vide.
+    const usesSoul = (GAME.turns || []).some(t => t.soul && (((t.soul.me && t.soul.me.count) || 0) > 0 || ((t.soul.opp && t.soul.opp.count) || 0) > 0 || (t.soul.me && t.soul.me.cards && t.soul.me.cards.length) || (t.soul.opp && t.soul.opp.cards && t.soul.opp.cards.length)));
+    return { players, myName: MY, oppName: OPP, hero: HERO, steps, usesSoul };
   }
 
   // ============================================================
@@ -1023,16 +1037,21 @@
   // Champ d'un joueur (tapis miroir) : rail cimetière·deck·pitch | héros entouré
   // de son équipement + arme | arsenal. Les IDs des emplacements dynamiques
   // (cimetière/pitch/arsenal) sont conservés pour que render() les remplisse.
-  function buildZone(side, pl) {
+  function buildZone(side, pl, hasSoul) {
     const e = pl.equipment || {};
     const nm = k => (e[k] && e[k].name) || '—';
     const gId = side === 'me' ? 'mGrave' : 'oGrave', pId = side === 'me' ? 'mPitch' : 'oPitch';
     const arsId = side === 'me' ? 'mArsenal' : 'oArsenal', bId = side === 'me' ? 'mBanish' : 'oBanish';
+    const sId = side === 'me' ? 'mSoul' : 'oSoul';
+    // Emplacement « soul » (Boltyn, Breaker of Dawn…) ajouté seulement si la partie
+    // en utilise une (cf. usesSoul) → jamais de zone vide pour les autres héros.
+    const soulSlot = hasSoul ? '<div class="br-slot p-soul" id="br-' + sId + '" title="Soul">Soul</div>' : '';
     const leftRail = '<div class="br-rail br-left">' +
       '<div class="br-slot p-grave" id="br-' + gId + '">Cimetière</div>' +
       '<div class="br-deck p-deck" title="Deck"></div>' +
       '<div class="br-slot p-pitch" id="br-' + pId + '">Pitch</div>' +
       '<div class="br-slot p-banish" id="br-' + bId + '" title="Banni">Banni</div>' +
+      soulSlot +
       '</div>';
     const equip = '<div class="br-equip">' +
       gcard(side, 'head', nm('head')) + gcard(side, 'chest', nm('chest')) +
@@ -1088,7 +1107,7 @@
         '</div>' +
         '<div class="br-mat">' +
           '<div class="br-hand br-opp" id="br-oppHand"></div>' +
-          '<div class="br-field br-opp" id="br-fOpp">' + buildZone('opp', P.opp) + '</div>' +
+          '<div class="br-field br-opp" id="br-fOpp">' + buildZone('opp', P.opp, data.usesSoul) + '</div>' +
           '<div class="br-mid">' +
             '<span class="br-turnchip" id="br-turnPill"> </span>' +
             '<div class="br-lifeside">' +
@@ -1103,7 +1122,7 @@
             '</div>' +
             '<div class="br-lane" id="br-stage"></div>' +
           '</div>' +
-          '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me) + '</div>' +
+          '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me, data.usesSoul) + '</div>' +
           '<div class="br-hand br-me" id="br-myHand"></div>' +
         '</div>' +
         '<div class="br-timeline">' +
@@ -1178,6 +1197,15 @@
       else { el.classList.remove('br-clickable'); el.removeAttribute('data-zone'); }
       if (prevCounts[key] != null && n > prevCounts[key]) { el.classList.remove('br-bump'); void el.offsetWidth; el.classList.add('br-bump'); }
       prevCounts[key] = n;
+    }
+    // Remplit un emplacement « soul ». Noms connus → face visible + cliquable
+    // (zone 'soul' → zoneCards lit stt.meSoul/oppSoul). Sinon compte seul → dos
+    // de carte + badge ×N (mode 'back', non cliquable). Vide → placeholder « Soul ».
+    function fillSoul(sel, cards, count, side) {
+      if (cards && cards.length) { fillSlot(sel, 'Soul', cards, side, 'grave', 'soul'); return; }
+      const n = count || 0;
+      if (n > 0) { const backsArr = []; for (let k = 0; k < n; k++) backsArr.push('?'); fillSlot(sel, 'Soul', backsArr, side, 'back'); }
+      else fillSlot(sel, 'Soul', [], side, 'up');
     }
     function backs(el, count, emptyTxt) {
       el.innerHTML = '';
@@ -1272,6 +1300,12 @@
       fillSlot('#br-oGrave', 'Cimetière', stt.oppGrave, 'opp', 'grave', 'grave');
       fillSlot('#br-mBanish', 'Banni', stt.meBanish, 'me', 'grave', 'banish');
       fillSlot('#br-oBanish', 'Banni', stt.oppBanish, 'opp', 'grave', 'banish');
+      // Zone « soul » (Boltyn…) : si les NOMS sont connus (révélés par Talishar) →
+      // carte du dessus visible + zone cliquable (voir tout). Sinon on connaît
+      // seulement le NOMBRE (zone publique) → dos de carte + badge ×N, non cliquable
+      // (théâtre d'erreur : on ne devine jamais une carte cachée).
+      fillSoul('#br-mSoul', stt.meSoul, stt.meSoulCount, 'me');
+      fillSoul('#br-oSoul', stt.oppSoul, stt.oppSoulCount, 'opp');
       // Tokens/permanents : on regroupe les exemplaires identiques en UNE tuile
       // avec un badge « ×N » (ordre de 1ʳᵉ apparition), au lieu d'empiler N
       // copies côte à côte (ex. Oscilio : plusieurs « Seismic Surge »).
@@ -1354,7 +1388,7 @@
     zoom.className = 'br-zoom';
     zoom.hidden = true;
     container.appendChild(zoom);
-    const ZONE_LABEL = { grave: 'Cimetière', banish: 'Banni', pitch: 'Pitch', arsenal: 'Arsenal' };
+    const ZONE_LABEL = { grave: 'Cimetière', banish: 'Banni', pitch: 'Pitch', arsenal: 'Arsenal', soul: 'Soul' };
     // zone+side → tableau d'état de l'étape courante (meGrave, oppBanish, mePitch…).
     const zoneCards = (zone, side) => {
       const stt = steps[i].state;
