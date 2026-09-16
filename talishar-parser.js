@@ -421,6 +421,34 @@
     return { rest, snapshots: out };
   }
 
+  // Zone « SOUL » par tour (Boltyn, Breaker of Dawn… : cartes bannies « to soul »),
+  // DEUX camps. Valeur d'un camp : un NOMBRE (fait autorité, zone publique) suivi,
+  // entre parenthèses et seulement si Talishar les a révélés, des noms de cartes.
+  // Format d'une ligne : [LABEL] me: 3 (Card A, Card B) | opp: 0
+  // → { me:{count,cards}, opp:{count,cards} }. Bloc absent (vieux logs / héros sans
+  // soul) → {} → aucune zone soul (rétro-compat, pas d'erreur).
+  function parseSoulBlock(text, marker) {
+    const out = {};
+    const { rest, body } = sliceBlock(text, marker);
+    if (body == null) return { rest: text, snapshots: out };
+    const lineRe = /^\[(.+?)\]\s*(.*)$/gm;
+    const parseSide = s => {
+      s = (s || '').trim();
+      const m = s.match(/^(\d+)\s*(?:\(([^)]*)\))?/);
+      const count = m ? parseInt(m[1], 10) : 0;
+      const names = (m && m[2]) ? m[2].split(',').map(x => x.trim()).filter(Boolean) : [];
+      return { count: isFinite(count) ? count : 0, cards: names };
+    };
+    let hm;
+    while ((hm = lineRe.exec(body))) {
+      const key = labelToKey(hm[1].trim());
+      if (!key) continue;
+      const mm = hm[2].match(/me:\s*(.*?)\s*\|\s*opp:\s*(.*)$/i);
+      out[key] = mm ? { me: parseSide(mm[1]), opp: parseSide(mm[2]) } : { me: { count: 0, cards: [] }, opp: { count: 0, cards: [] } };
+    }
+    return { rest, snapshots: out };
+  }
+
   // Bloc de COMPTES par tour (ex. arsenal adverse : un entier par tour).
   function parseCountSnapshotBlock(text, marker) {
     const out = {};
@@ -587,6 +615,7 @@
     const fieldRes = parseFieldSnapshotBlock(text, '=== FIELD SNAPSHOTS'); text = fieldRes.rest;
     const graveRes = parseFieldSnapshotBlock(text, '=== GRAVEYARD SNAPSHOTS'); text = graveRes.rest;
     const banishRes = parseFieldSnapshotBlock(text, '=== BANISH SNAPSHOTS'); text = banishRes.rest;
+    const soulRes = parseSoulBlock(text, '=== SOUL SNAPSHOTS'); text = soulRes.rest;
     const heroFormRes = parseHeroFormBlock(text, '=== HERO FORMS'); text = heroFormRes.rest;
     const eqCtrRes = parseEquipCounterBlock(text, '=== EQUIP COUNTERS'); text = eqCtrRes.rest;
     const endStatsRes = parseEndStatsBlock(text); text = endStatsRes.rest;
@@ -617,6 +646,7 @@
     const fieldSnapshots = fieldRes.snapshots;
     const graveSnapshots = graveRes.snapshots;
     const banishSnapshots = banishRes.snapshots;
+    const soulSnapshots = soulRes.snapshots;
     const heroFormSnapshots = heroFormRes.snapshots;
     const equipCounterSnapshots = eqCtrRes.snapshots;
     const lifeSnapshots = lifeRes.snapshots;
@@ -1038,6 +1068,9 @@
       t.field = resolveSnap(fieldSnapshots, t, i, null);
       t.grave = resolveSnap(graveSnapshots, t, i, null);
       t.banish = resolveSnap(banishSnapshots, t, i, null);
+      // Zone « soul » à ce tour (Boltyn…) : { me:{count,cards}, opp:{count,cards} }
+      // ou null (vieux logs / héros sans soul, zone publique captée par le grabber).
+      t.soul = resolveSnap(soulSnapshots, t, i, null);
       // Forme du héros à ce tour (Arakni se transforme) : { me, opp } ou null.
       t.heroForm = resolveSnap(heroFormSnapshots, t, i, null);
       // Compteurs d'équipement à ce tour (Tunic 1/2/3, -1 counters…) :
@@ -1317,7 +1350,7 @@
       lifeHistory,
       lifeSeries,
       life: finalLife,
-      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, grave: graveSnapshots, banish: banishSnapshots, heroForm: heroFormSnapshots, equipCounters: equipCounterSnapshots, life: lifeSnapshots },
+      snapshots: { hand: handSnapshots, arsenal: arsenalSnapshots, field: fieldSnapshots, grave: graveSnapshots, banish: banishSnapshots, soul: soulSnapshots, heroForm: heroFormSnapshots, equipCounters: equipCounterSnapshots, life: lifeSnapshots },
       timeline: { startTs, endTs, durationSec, lineTs: lineTs || null },
       cardsSeen: Array.from(cardsSeen).sort(),
       stats,
