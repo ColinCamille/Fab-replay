@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=193">
+<link rel="stylesheet" href="css/style.css?v=194">
 </head>
 <body>
 
@@ -138,18 +138,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=193"></script>
-<script src="js/images.js?v=193"></script>
-<script src="js/db.js?v=193"></script>
-<script src="js/sync.js?v=193"></script>
-<script src="js/replay.js?v=193"></script>
-<script src="js/boardreplay.js?v=193"></script>
-<script src="js/dashboard.js?v=193"></script>
+<script src="talishar-parser.js?v=194"></script>
+<script src="js/images.js?v=194"></script>
+<script src="js/db.js?v=194"></script>
+<script src="js/sync.js?v=194"></script>
+<script src="js/replay.js?v=194"></script>
+<script src="js/boardreplay.js?v=194"></script>
+<script src="js/dashboard.js?v=194"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=193"></script>
-<script src="js/cloud.js?v=193"></script>
+<script src="js/cloud-config.js?v=194"></script>
+<script src="js/cloud.js?v=194"></script>
 
 <script>
 // ============================================================
@@ -632,7 +632,7 @@
     // le record périmé (sans les nouveaux champs) resterait affiché à jamais.
     const haveVer = new Map(local.map(e => [String(e.gameId), e.schemaVersion || 0]));
     const curSchema = (window.TalisharParser && window.TalisharParser.SCHEMA_VERSION) || 0;
-    let added = 0, removed = 0, metaChanged = 0, reparsed = 0;
+    let added = 0, removed = 0, metaChanged = 0, reparsed = 0, shrunk = 0;
     // 2) Parties à télécharger : SEULEMENT celles absentes du cache. Une partie
     // déjà connue mais de schéma périmé a son log brut EN LOCAL → on la re-parse
     // sur place (zéro réseau) au lieu de re-télécharger toute la bibliothèque à
@@ -660,10 +660,24 @@
     rows = rows.concat(localRows);
     // 3) Parse + stocke les parties nouvelles/périmées.
     const stripId = s => s ? String(s).replace(/\s*\([^)]*\)\s*$/, '').trim() : s;
+    let done = 0;
     for (const row of rows) {
+      if (rows.length > 3 && libHint) libHint.textContent = 'Mise à jour de la bibliothèque… (' + (++done) + '/' + rows.length + ')';
       if (!row || !row.raw) continue;
       let rec;
       try { rec = window.TalisharParser.parse(row.raw); } catch (e) { continue; }
+      // COMPACTION : les logs capturés par le grabber ≤ 1.28 contiennent le
+      // chatLog recopié des dizaines de fois (jusqu'à 15 Mo pour UNE partie).
+      // On ne remplace qu'après avoir vérifié, parseur à l'appui, que le record
+      // est équivalent et qu'aucune couleur n'est perdue (canReplaceRaw).
+      let raw = row.raw, compacted = false;
+      try {
+        const slim = window.TalisharParser.compactRawChatLog(raw);
+        if (slim.length < raw.length * 0.9) {
+          const recSlim = window.TalisharParser.parse(slim);
+          if (window.TalisharParser.canReplaceRaw(rec, recSlim)) { raw = slim; rec = recSlim; compacted = true; }
+        }
+      } catch (e) { console.error(e); }
       // Filet de sécurité : si le parseur n'a pas résolu un héros (log atypique),
       // on complète depuis les colonnes dénormalisées du compte (my_hero/opp_hero,
       // fiables). Ces colonnes stockent « Nom (id) » → on retire l'id pour coller
@@ -675,8 +689,14 @@
       const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
       if (!gid || window.FabDB.isDeleted(gid)) continue;
       const known = have.has(gid);
-      try { await window.FabDB.putGame(rec, row.raw, null, { rawAlreadyStored: !!row.fromCache }); have.add(gid); haveVer.set(gid, curSchema); if (known) reparsed++; else added++; } catch (e) { console.error(e); }
+      try { await window.FabDB.putGame(rec, raw, null, { rawAlreadyStored: !!row.fromCache && !compacted }); have.add(gid); haveVer.set(gid, curSchema); if (known) reparsed++; else added++; } catch (e) { console.error(e); }
+      // Le compte garde la version compactée : plus rien à re-télécharger de
+      // gonflé (sur cet appareil comme sur les autres).
+      if (compacted) {
+        try { await window.Cloud.updateRaw(gid, raw); shrunk++; } catch (e) { console.error(e); }
+      }
     }
+    if (rows.length > 3 && libHint) libHint.textContent = '';   // fin de la progression (l'appelant écrira son bilan)
     // 4) Tags/favoris : la meta est déjà dans l'index → applique sur toutes les
     // parties en cache (dernier-écrit-gagne), sans avoir eu besoin du raw.
     for (const r of idx) {
@@ -694,7 +714,7 @@
         try { await window.FabDB.dropGame(gid); removed++; } catch (err) { console.error(err); }
       }
     }
-    return { added, removed, metaChanged, reparsed };
+    return { added, removed, metaChanged, reparsed, shrunk };
   }
 
   if (cloudBtn) cloudBtn.addEventListener('click', async () => {
@@ -745,12 +765,13 @@
       if (!user) { closeFriendMenu(); if (_friendCtx) backToMine(); }
       if (user) {
         if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
-        const { added, removed, metaChanged, reparsed } = await mergeCloudGames(_lastEntries);
-        if (added || removed || metaChanged || reparsed) {
+        const { added, removed, metaChanged, reparsed, shrunk } = await mergeCloudGames(_lastEntries);
+        if (added || removed || metaChanged || reparsed || shrunk) {
           const parts = [];
           if (added) parts.push(added + ' récupérée(s)');
           if (removed) parts.push(removed + ' supprimée(s) ailleurs');
           if (metaChanged) parts.push(metaChanged + ' tag(s)/favori(s) synchronisés');
+          if (shrunk) parts.push(shrunk + ' log(s) compacté(s)');
           // reparsed (re-analyse suite à un bump de schéma) n'a pas de message
           // dédié mais doit rafraîchir le dashboard (ex. une partie qui n'est
           // plus masquée par un faux positif de santé).

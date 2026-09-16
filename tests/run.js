@@ -2383,6 +2383,73 @@ console.log('Stats par partie —');
   eq(Parser.computeGameStats(gsRec).dynamo.length, 0, 'computeGameStats: pas de Dynamo → dynamo vide');
 })();
 
+// ---------- Compaction du bloc RAW CHATLOG (logs gonflés par le grabber ≤ 1.28) ----------
+// Reproduit le bug : fenêtres chatLog recousues en comparant du HTML que Talishar
+// régénère (URL d'image du héros qui change à la transformation) → l'ancien
+// grabber ré-empilait toute la fenêtre à chaque tick (jusqu'à 68 copies mesurées
+// sur une vraie partie de 15 Mo). compactRawChatLog doit rendre le journal
+// d'origine, sans rien changer au record parsé.
+console.log('Compaction chatLog brut —');
+(function () {
+  const heroImg = form => sd(form, 'Arakni');
+  // Journal « vrai » : 40 entrées, dont des lignes qui citent le héros.
+  const trueLog = form => {
+    const out = ['[[TURN_START:1:1]]'];
+    for (let i = 0; i < 39; i++) {
+      out.push(i % 5 === 0 ? ('Player 1 activated ' + heroImg(form))
+        : i % 3 === 0 ? 'Player 1 passed'
+        : ('Player 1 played ' + sd('card_' + i + '_red', 'Card ' + i)));
+    }
+    return out;
+  };
+  // Fenêtres glissantes bornées (tampon Talishar), avec transformation du héros à
+  // mi-partie → toutes les entrées suivantes sont RE-RENDUES avec la nouvelle URL.
+  const windows = [];
+  for (let end = 20; end <= 40; end += 5) {
+    const form = end <= 25 ? 'arakni' : 'arakni_orb_weaver';
+    windows.push(trueLog(form).slice(Math.max(0, end - 20), end));
+  }
+  // Ancien comportement fautif : concaténation de chaque fenêtre.
+  let bloated = [];
+  windows.forEach(w => { bloated = bloated.concat(w); });
+  assert(bloated.length > 40 * 2, 'compaction : le journal gonflé est bien un empilement (' + bloated.length + ' entrées pour 40)');
+
+  const compact = Parser.compactChatLogArray(bloated);
+  const strip = x => String(x).replace(/<[^>]+>/g, '');
+  eq(compact.map(strip).join('|'), trueLog('arakni').map(strip).join('|'),
+    'compaction : les recopies sont retirées, le journal d’origine est restitué');
+
+  // Sur le .txt complet : le record re-parsé doit être IDENTIQUE (c’est la
+  // garantie exigée avant de remplacer quoi que ce soit).
+  const body = "Arakni's turn 1 has begun.\n" + trueLog('arakni').slice(1).map(strip)
+    .map(l => l.replace(/^Player 1 /, 'Arakni ')).join('\n') + '\n';
+  const txt = '=== Talishar game 77 — test ===\n\n' + body
+    + '\n=== RAW CHATLOG (state.game.chatLog, verbatim) ===\n' + JSON.stringify(bloated) + '\n';
+  const slimTxt = Parser.compactRawChatLog(txt);
+  assert(slimTxt.length < txt.length / 2, 'compaction : le .txt maigrit fortement');
+  // Le bloc RAW CHATLOG ne sert QU'AUX COULEURS (le déroulé vient du journal
+  // texte, que la compaction ne touche pas) : la structure doit être identique,
+  // et aucune couleur ne doit être perdue → c'est le feu vert canReplaceRaw.
+  const recBefore = Parser.parse(txt), recAfter = Parser.parse(slimTxt);
+  assert(Parser.canReplaceRaw(recBefore, recAfter), 'compaction : feu vert (structure identique, aucune couleur perdue)');
+  const evOf = (r, idx) => r.turns[1].events[idx];
+  eq(evOf(recAfter, 0).text, evOf(recBefore, 0).text, 'compaction : le déroulé est inchangé');
+  // Bonus : les recopies décalaient les files de couleurs → la forme du héros
+  // d'après-transformation était perdue. Compactée, elle est correcte.
+  eq(evOf(recAfter, 25).cardId, 'arakni_orb_weaver', 'compaction : couleurs/formes réalignées (l’empilement les décalait)');
+  eq(evOf(recBefore, 25).cardId, 'arakni', 'compaction : (avant) le journal gonflé collait la forme d’origine');
+  // Un log compacté à la MAIN qui perdrait des couleurs doit être REFUSÉ.
+  const loseColors = JSON.parse(JSON.stringify(recAfter));
+  loseColors.turns[1].events.forEach(e => { delete e.cardId; });
+  assert(!Parser.canReplaceRaw(recAfter, loseColors), 'canReplaceRaw : refuse une version qui perd des couleurs');
+  const loseTurn = JSON.parse(JSON.stringify(recAfter));
+  loseTurn.turns[1].events.splice(3, 1);
+  assert(!Parser.canReplaceRaw(recAfter, loseTurn), 'canReplaceRaw : refuse une version qui perd un événement');
+  // Rien à compacter → texte inchangé (aucune écriture inutile).
+  eq(Parser.compactRawChatLog(slimTxt), slimTxt, 'compaction : log déjà propre → inchangé');
+  eq(Parser.compactRawChatLog('pas de bloc'), 'pas de bloc', 'compaction : sans bloc RAW CHATLOG → inchangé');
+})();
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);

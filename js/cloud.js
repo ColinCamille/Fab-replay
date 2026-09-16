@@ -20,6 +20,7 @@
  *   fetchGames()           → [{game_id, raw, my_hero, opp_hero, format, captured_at}] (index + raw par lots)
  *   fetchGamesIndex(uid?)  → idem SANS `raw` (léger, pas de timeout)
  *   fetchGamesRaw(uid,ids) → `raw` des ids donnés, par lots (≤ RAW_BATCH/requête)
+ *   updateRaw(id, raw)     → remplace le log brut d'une partie (compaction)
  *   createPairing(label)   → { token } (appairage 1-clic du grabber, phase 2)
  * ============================================================ */
 (function (root) {
@@ -134,6 +135,19 @@
     const idx = await fetchGamesIndex(currentUser.id);
     if (!idx.length) return [];
     return await fetchGamesRaw(currentUser.id, idx.map(r => r.game_id));
+  }
+
+  // Remplace le LOG BRUT d'une partie du compte (RLS update_own). Utilisé par la
+  // compaction : les logs capturés par le grabber ≤ 1.28 contiennent le chatLog
+  // recopié des dizaines de fois (jusqu'à 15 Mo pour une partie). On n'envoie la
+  // version compactée qu'après vérification que le record re-parsé est équivalent
+  // (cf. TalisharParser.canReplaceRaw).
+  async function updateRaw(gameId, raw) {
+    if (!client || !currentUser || !raw) return false;
+    const { error } = await client.from('games').update({ raw: raw })
+      .eq('user_id', currentUser.id).eq('game_id', String(gameId));
+    if (error) throw error;
+    return true;
   }
 
   // Met à jour les métadonnées utilisateur (tags/favori) d'une partie du compte.
@@ -291,7 +305,7 @@
   }
 
   root.Cloud = {
-    available, init, onChange, getUser, signIn, signOut, fetchGames, fetchGamesIndex, fetchGamesRaw, updateMeta, createPairing, uploadGames, deleteGame, deleteAccount,
+    available, init, onChange, getUser, signIn, signOut, fetchGames, fetchGamesIndex, fetchGamesRaw, updateMeta, updateRaw, createPairing, uploadGames, deleteGame, deleteAccount,
     // Amis
     myProfile, setDisplayName, sendFriendRequest, respondRequest, removeFriend, listFriends, pendingRequests, fetchFriendGames
   };
