@@ -231,9 +231,9 @@
       const seenThisGame = new Set();  // une carte ne compte qu'une fois par partie
       cards.forEach(c => {
         const key = norm(c.name);
-        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, cycled: 0, games: 0, gamesWon: 0, gamesLost: 0 });
+        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, cycled: 0, charged: 0, games: 0, gamesWon: 0, gamesLost: 0 });
         agg.played += num(c.played); agg.blocked += num(c.blocked); agg.pitched += num(c.pitched);
-        agg.discarded += num(c.discarded); agg.timesHit += num(c.timesHit);
+        agg.discarded += num(c.discarded); agg.timesHit += num(c.timesHit); agg.charged += num(c.charged);
         if (!seenThisGame.has(key)) {
           agg.games++;
           if (o === true) agg.gamesWon++; else if (o === false) agg.gamesLost++;
@@ -246,7 +246,7 @@
       const cyc = countHeroPowerCycles(e.record);
       Object.keys(cyc).forEach(key => {
         const c = cyc[key];
-        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, cycled: 0, games: 0, gamesWon: 0, gamesLost: 0 });
+        const agg = cardMap[key] || (cardMap[key] = { name: c.name, played: 0, blocked: 0, pitched: 0, discarded: 0, timesHit: 0, cycled: 0, charged: 0, games: 0, gamesWon: 0, gamesLost: 0 });
         agg.cycled += c.cycled;
         if (!seenThisGame.has(key)) {
           agg.games++;
@@ -320,6 +320,7 @@
     { key: 'blocked', label: 'Défense', tip: 'Fois utilisée pour bloquer' },
     { key: 'pitched', label: 'Pitch' },
     { key: 'cycled', label: 'Cyclée', tip: 'Instant défaussé via le pouvoir de héros (Oscilio) pour piocher' },
+    { key: 'charged', label: 'Soul', tip: 'Fois où la carte a été chargée depuis la main, donc envoyée dans la soul (Ser Boltyn, Breaker of Dawn…)' },
     { key: 'timesHit', label: 'Coups', hit: true, tip: 'Coups portés (attaque non bloquée)' }
   ];
   const MUTED = '<span class="muted">·</span>';
@@ -639,7 +640,11 @@
     // Taux de cyclage : part de l'instant défaussée via le pouvoir plutôt que
     // gardée/jouée → « toujours cyclé » (proche 100 %) vs « gardé » (proche 0 %).
     if (col.key === 'cycled') { const denom = (c.cycled || 0) + (c.played || 0); return denom ? raw / denom * 100 : null; }
-    const usage = (c.played || 0) + (c.blocked || 0) + (c.pitched || 0);
+    // La charge est une UTILISATION de la carte au même titre que jouer / bloquer
+    // / pitcher (elle part de la main) → elle entre dans le dénominateur pour que
+    // la ligne continue de faire ≈ 100 %. Héros sans soul : charged = 0, rien ne
+    // change.
+    const usage = (c.played || 0) + (c.blocked || 0) + (c.pitched || 0) + (c.charged || 0);
     return usage ? raw / usage * 100 : null;
   }
   function fmtCell(col, c) {
@@ -654,8 +659,11 @@
     // sélectionné ET qu'il y a réellement des cyclages (donc, en pratique,
     // Oscilio) — jamais affichée pour les autres héros (pas de colonne à zéro).
     const showCycled = !!state.hero && (_A.cardPerf || []).some(c => c.cycled > 0);
-    const cols = CARD_COLS.filter(col => col.key !== 'cycled' || showCycled);
-    const total = (_A.cardPerf || []).filter(c => c.played || c.blocked || c.timesHit || c.cycled);
+    // Colonne « Soul » : même règle, seulement quand il y a réellement des cartes
+    // chargées (donc un héros à soul, Ser Boltyn en tête) — jamais de colonne à zéro.
+    const showCharged = (_A.cardPerf || []).some(c => c.charged > 0);
+    const cols = CARD_COLS.filter(col => (col.key !== 'cycled' || showCycled) && (col.key !== 'charged' || showCharged));
+    const total = (_A.cardPerf || []).filter(c => c.played || c.blocked || c.timesHit || c.cycled || c.charged);
     const qn = norm(state.cardQ);
     const filtered = qn ? total.filter(c => norm(c.name).indexOf(qn) >= 0) : total;
     // Tri sur la valeur RÉELLEMENT AFFICHÉE (donc sur le % en mode « % ») ; à
@@ -679,7 +687,8 @@
     }).join('');
     const body = shown.map(c => '<tr>' + cols.map(col => col.key === 'name' ? '<td data-card="' + esc2(c.name) + '">' + esc2(c.name) + '</td>' : '<td' + (col.hit && c.timesHit ? ' class="hit"' : '') + '>' + fmtCell(col, c) + '</td>').join('') + '</tr>').join('');
     const cycNote = showCycled ? ' <b>Cyclée</b> = part défaussée via le pouvoir (cyclée ÷ (cyclée + jouée)) : proche de 100 % = instant que tu cycles toujours, proche de 0 % = que tu gardes.' : '';
-    const note = state.cardMode === 'pct' ? '<div class="note">Par ligne : <b>Jouée + Défense + Pitch ≈ 100 %</b> (à quoi sert la carte). <b>Coups</b> = taux de coups portés (touché ÷ jouée).' + cycNote + '</div>' : '';
+    const soulNote = showCharged ? ' <b>Soul</b> = part envoyée dans la soul (carte chargée depuis la main).' : '';
+    const note = state.cardMode === 'pct' ? '<div class="note">Par ligne : <b>Jouée + Défense + Pitch' + (showCharged ? ' + Soul' : '') + ' ≈ 100 %</b> (à quoi sert la carte). <b>Coups</b> = taux de coups portés (touché ÷ jouée).' + cycNote + soulNote + '</div>' : '';
     host.innerHTML = '<table class="tbl"><tr>' + head + '</tr>' + body + '</table>' + note;
   }
 

@@ -22,10 +22,10 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 4;   // v4 : compaction du bloc RAW CHATLOG (logs gonflés par le grabber ≤ 1.28) → re-parse LOCAL des parties en cache
+  const SCHEMA_VERSION = 5;   // v5 : compteur « charged » (cartes envoyées dans la soul, Boltyn…) lu dans END GAME STATS → re-parse LOCAL des parties en cache
   // v3 : garde-fou duplication moins agressif (health.ok peut passer false→true)
   // v2 : ajout de turns[].equipCounters + snapshots.equipCounters
-  const PARSER_VERSION = '2.2.0';
+  const PARSER_VERSION = '2.3.0';
 
   const EQ_SLOTS = ['head', 'chest', 'arms', 'legs', 'weaponL', 'weaponR'];
 
@@ -61,6 +61,11 @@
     // ne nomme pas le joueur → la vue Table attribue le camp au joueur actif (ou à
     // MOI si la carte est dans ma main affichée). Sert à matérialiser l'étape banish.
     if ((m = line.match(/^(.+?) was banished\.?$/))) return { type: 'banished', card: m[1].trim(), text: line };
+    // Charge (Boltyn, Breaker of Dawn… : « <Carte> was charged. ») : la carte
+    // quitte la MAIN pour la zone « soul ». La ligne ne nomme pas le joueur →
+    // même règle que le bannissement : camp = MOI si la carte est dans ma main
+    // affichée, sinon le joueur actif du tour (cf. boardreplay).
+    if ((m = line.match(/^(.+?) was charged\.?$/))) return { type: 'charged', card: m[1].trim(), text: line };
     // Intimidation (ex. Leave Them Hanging) : le camp ciblé bannit une carte FACE
     // CACHÉE (nom masqué par la règle) qui REVIENT en fin de tour. Sans étape
     // explicite, la carte « disparaît » de la main affichée sans raison (game
@@ -347,7 +352,11 @@
       const cards = (d.cardResults || []).map(c => ({
         name: c.cardName || c.cardId || c.name || '?',
         played: +c.played || 0, blocked: +c.blocked || 0, pitched: +c.pitched || 0,
-        discarded: +c.discarded || 0, timesHit: +(c.hits != null ? c.hits : c.timesHit) || 0
+        discarded: +c.discarded || 0, timesHit: +(c.hits != null ? c.hits : c.timesHit) || 0,
+        // « charged » = fois où la carte a été CHARGÉE depuis la main, c.-à-d.
+        // envoyée dans la zone « soul » (Boltyn, Breaker of Dawn… : la charge
+        // est exactement « bannir une carte de sa main vers sa soul »).
+        charged: +c.charged || 0
       }));
       return {
         won: won, firstPlayer: firstPlayer,
@@ -1482,7 +1491,7 @@
   //    retire UN seul (le compteur remonte). resets = nb de retraits effectifs.
   // Source de vérité = log parsé ; rien d'applicable → listes vides (pas d'erreur).
   function computeGameStats(rec) {
-    const out = { weapons: [], heroPowerActivations: 0, dynamo: [] };
+    const out = { weapons: [], heroPowerActivations: 0, dynamo: [], soul: [] };
     if (!rec) return out;
     const players = rec.players || {};
     const sides = [
@@ -1538,6 +1547,26 @@
         if (wCount[key]) out.weapons.push({ side: side.key, name, count: wCount[key] });
       });
       if (hasDynamo) out.dynamo.push({ side: side.key, resets: dynResets });
+
+      // CARTES ENVOYÉES DANS LA SOUL (charge : Ser Boltyn, Breaker of Dawn…).
+      // Deux sources, aucune parfaite seule :
+      //  · END GAME STATS (`cardResults[].charged`) — officiel et attribué au
+      //    bon joueur, mais absent si la partie n'est pas terminée.
+      //  · le journal (« <Carte> was charged. ») — toujours là, mais la ligne ne
+      //    nomme PAS le joueur → attribuée au joueur ACTIF du tour (une charge
+      //    faite en défense, rare, irait au mauvais camp) et le journal peut
+      //    être tronqué en tête (tampon roulant du grabber).
+      // On garde le MAXIMUM des deux : même grandeur mesurée, chacune ne pouvant
+      // que SOUS-compter. Zéro des deux côtés → rien (pas de tuile à 0).
+      let logCharges = 0;
+      turns.forEach(t => {
+        if (!side.name || t.player !== side.name) return;
+        (t.events || []).forEach(e => { if (e.type === 'charged') logCharges++; });
+      });
+      const esCards = (rec.endStats && rec.endStats[side.key] && rec.endStats[side.key].cards) || [];
+      const esCharges = esCards.reduce((a, c) => a + (Number(c.charged) || 0), 0);
+      const charges = Math.max(logCharges, esCharges);
+      if (charges > 0) out.soul.push({ side: side.key, charges });
     });
     return out;
   }

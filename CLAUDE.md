@@ -140,6 +140,13 @@ des parties d'un **ami accepté**).
   détecter les **transformations** (Arakni, Levia…) **indépendamment du log** :
   certains héros loggent « X becomes Y » (Arakni, set Hunter), d'autres **non**
   (Levia → Blasmophet, set Dusk Till Dawn) — le snapshot par tour couvre les deux.
+- **Charge = soul** (Ser Boltyn…) : charger = **bannir une carte de la MAIN vers
+  la soul** (serveur : `DQCharge()` → `ADDSOUL`, `MONWarrior.php`). Talishar
+  loggue « `<Carte> was charged.` » (SANS nom de joueur → même règle
+  d'attribution que « was banished ») et compte la charge par carte dans
+  **`END GAME STATS`** (`cardResults[].charged`) → c'est la source de la colonne
+  **Soul** du tableau de bord (les NOMS de la zone soul, eux, sont souvent
+  absents de `playerX.Soul`).
 - **`END GAME STATS`** (JSON) : stats officielles Talishar de fin de partie
   (`byPlayer.{1,2}.cardResults` avec `cardId` coloré + `pitchValue`, résultat,
   tours…). Dispo seulement si la partie est **terminée** (écran « Game Summary »).
