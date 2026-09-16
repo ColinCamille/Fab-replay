@@ -766,6 +766,66 @@ assert(soulOppTl.usesSoul.opp === true, 'SOUL : usesSoul.opp vrai quand SEUL l\'
 assert(soulOppTl.usesSoul.me === false, 'SOUL : aucun emplacement soul chez moi quand seul l\'adversaire en a une');
 eq(soulOppTl.steps[soulOppTl.steps.length - 1].state.oppSoulCount, 2, 'SOUL : compteur adverse suivi par étape');
 
+// ── CHARGE (carte envoyée dans la soul : Ser Boltyn, Breaker of Dawn…) ───────
+// A. Parser : « <Carte> was charged. » devient un événement dédié (plus « unknown »).
+eq(Parser.classifyLine('Sonata Prelude was charged.').type, 'charged', 'CHARGE : ligne classée en événement charged');
+eq(Parser.classifyLine('Sonata Prelude was charged.').card, 'Sonata Prelude', 'CHARGE : carte extraite');
+eq(Parser.classifyLine('Cindering Foothills was banished.').type, 'banished', 'CHARGE : le bannissement reste distinct de la charge');
+
+// B. Parser : le compteur officiel « charged » d'END GAME STATS remonte par carte.
+const chargedRaw = '=== Talishar game 77 — test ===\n\n' +
+  "Boltyn's turn 1 has begun.\nBoltyn played Sigil of Solace\nSonata Prelude was charged.\n" +
+  '\n=== META ===\nme: Boltyn\nmy_hero: Ser Boltyn, Breaker of Dawn (ser_boltyn_breaker_of_dawn)\n' +
+  '\n=== END GAME STATS (Talishar, JSON) ===\n' +
+  JSON.stringify({ myPlayerID: 1, byPlayer: { 1: { winner: 1, turns: 1, cardResults: [
+    { cardName: 'Sonata Prelude', played: 1, charged: 2 },
+    { cardName: 'Sigil of Solace', played: 1 }
+  ] }, 2: { winner: 1, turns: 1 } } }) + '\n';
+const chRec2 = Parser.parse(chargedRaw);
+const sonata = chRec2.endStats.me.cards.find(c => c.name === 'Sonata Prelude');
+eq(sonata && sonata.charged, 2, 'CHARGE : compteur « charged » lu dans END GAME STATS');
+const sigil = chRec2.endStats.me.cards.find(c => c.name === 'Sigil of Solace');
+eq(sigil && sigil.charged, 0, 'CHARGE : carte jamais chargée → 0 (pas undefined)');
+
+// C. buildTimeline : la carte chargée QUITTE la main (sinon elle y restait
+//    affichée jusqu'au tour suivant) et une étape l'explique.
+const chargeTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Ser Boltyn, Breaker of Dawn', equipment: {} }, opp: { hero: 'Bravo', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: ['Sonata Prelude', 'Bolt of Courage'], arsenal: [],
+      soul: { me: { count: 0, cards: [] }, opp: { count: 0, cards: [] } },
+      events: [ { type: 'charged', card: 'Sonata Prelude' }, { type: 'played', player: 'Me', card: 'Bolt of Courage' } ] }
+  ]
+});
+const chargeStep = chargeTl.steps.find(s => s.stage && s.stage.soul);
+assert(chargeStep, 'CHARGE : une étape dédiée matérialise la carte chargée');
+eq(chargeStep && chargeStep.stage.card.nm, 'Sonata Prelude', 'CHARGE : la bonne carte dans l\'étape');
+const chargeLast = chargeTl.steps[chargeTl.steps.length - 1];
+assert(chargeLast.state.meHandCards.indexOf('Sonata Prelude') < 0, 'CHARGE : la carte chargée ne reste pas en main');
+
+// D. Dashboard : « charged » agrégé par carte, et la part de charge entre dans
+//    le calcul en % (Jouée + Défense + Pitch + Soul ≈ 100 %).
+const boltynEntries = [
+  { gameId: 'b1', record: mkRec({ iWon: true, myHero: 'Ser Boltyn, Breaker of Dawn', oppHero: 'Briar', first: true, date: '2026-08-01T10:00:00Z',
+      cards: [ { name: 'Sonata Prelude', played: 1, charged: 2 } ] }) },
+  { gameId: 'b2', record: mkRec({ iWon: false, myHero: 'Ser Boltyn, Breaker of Dawn', oppHero: 'Briar', first: false, date: '2026-08-02T10:00:00Z',
+      cards: [ { name: 'Sonata Prelude', played: 1, charged: 0 } ] }) }
+];
+const boltynAgg = Dashboard.aggregate(boltynEntries, { myHero: 'Ser Boltyn, Breaker of Dawn' });
+const sona = boltynAgg.cardPerf.find(c => c.name === 'Sonata Prelude');
+eq(sona && sona.charged, 2, 'CHARGE : cartes chargées sommées sur les parties');
+eq(sona && sona.games, 2, 'CHARGE : parties comptées normalement');
+const colCharged = { key: 'charged' }, colPlayed = { key: 'played' };
+eq(Dashboard.cardCellValue(colCharged, sona, 'total', 2), 2, 'CHARGE : mode total = nombre de charges');
+eq(Dashboard.cardCellValue(colCharged, sona, 'pergame', 2), 1, 'CHARGE : mode par partie = 1 charge/partie');
+eq(Math.round(Dashboard.cardCellValue(colCharged, sona, 'pct', 2)), 50, 'CHARGE : mode % = part des utilisations (2 chargées / 4 utilisations)');
+eq(Math.round(Dashboard.cardCellValue(colPlayed, sona, 'pct', 2)), 50, 'CHARGE : la charge entre dans le dénominateur des autres colonnes');
+// Héros sans soul : aucun compteur (colonne masquée côté UI).
+const noSoul = Dashboard.aggregate(entries, {}).cardPerf.find(c => c.name === 'Brutal Assault');
+assert(noSoul && !noSoul.charged, 'CHARGE : héros sans soul → charged 0/absent');
+
 // Détection AUTO d'un équipement détruit via le cimetière (sans liste de cartes) :
 // une pièce qui apparaît au cimetière est retirée du plateau (ex. Crown de bloc).
 const crownTl = BR.buildTimeline({

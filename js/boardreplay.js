@@ -778,6 +778,17 @@
           const bz = s === 'me' ? st.meBanish : st.oppBanish;
           if (bz.indexOf(e.card) < 0) bz.push(e.card);
           push(label, s, { type: 'play', side: s, card: { nm: e.card }, banish: true, text: HERO[s] + ' bannit ' + e.card });
+        } else if (e.type === 'charged') {
+          // Charge (« <Carte> was charged. ») : la carte quitte la MAIN pour la
+          // zone « soul » (Boltyn, Breaker of Dawn…). La ligne ne nomme pas le
+          // joueur → camp = MOI si la carte est dans ma main affichée, sinon le
+          // joueur actif du tour (même règle que le bannissement). Sans cette
+          // étape, la carte restait affichée en main jusqu'au tour suivant.
+          // Le CONTENU de la soul reste celui de l'instantané par tour (source
+          // publique qui fait autorité) : on n'ajoute rien à la zone ici.
+          const s = (st.meFaceUp && st.meHandCards.some(c => norm(c) === norm(e.card))) ? 'me' : atkSide;
+          removeCard(s, e.card);
+          push(label, s, { type: 'play', side: s, card: { nm: e.card }, soul: true, text: HERO[s] + ' charge ' + e.card + ' dans sa soul' });
         } else if (e.type === 'intimidate') {
           // Intimidation : le camp ciblé bannit une carte FACE CACHÉE (nom masqué)
           // qui revient en fin de tour. On explique la « disparition » d'une carte de
@@ -1169,7 +1180,7 @@
         const preventLine = ((s.prevent && s.prevent.length) || prevented > 0)
           ? '<div class="br-arc-prevent">🛡 ' + (s.threat ? ('menacé ' + s.threat + ' → ' + (s.dmg || 0)) : 'prévention') + (prevented > 0 ? ' (−' + prevented + ')' : '') + (s.prevent && s.prevent.length ? ' · adv pitch ' + esc(s.prevent.join(', ')) : '') + '</div>'
           : '';
-        return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.banish ? '<span class="br-react">🗑 banni</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + discardLine(s.discards) + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + (s.heal > 0 ? '<div class="br-verdict br-heal">❤️ +' + s.heal + ' vie</div>' : '') + preventLine + '</div>';
+        return '<div class="br-playone br-' + s.side + '">' + pcard(s.card, s.side, true) + (s.act ? '<span class="br-act">⚡ activé</span>' : '') + (s.reaction ? '<span class="br-react">↩ réaction</span>' : '') + (s.token ? '<span class="br-act">✨ jeton</span>' : '') + (s.banish ? '<span class="br-react">🗑 banni</span>' : '') + (s.soul ? '<span class="br-react">📿 chargée (soul)</span>' : '') + (s.chosen ? '<span class="br-chosen">🃏 ' + esc(s.chosen) + ' choisie</span>' : '') + (s.pitch ? '<span class="br-pitch-pill">🔷 pitch ' + esc(s.pitch) + '</span>' : '') + discardLine(s.discards) + (s.dmg > 0 ? '<div class="br-verdict br-through">💥 ' + s.dmg + ' dégât' + (s.dmg > 1 ? 's' : '') + ' d\'arcane</div>' : '') + (s.heal > 0 ? '<div class="br-verdict br-heal">❤️ +' + s.heal + ' vie</div>' : '') + preventLine + '</div>';
       }
       if (s.type === 'clash') {
         const bl = s.blocks.length ? s.blocks.map(b => pcard(b, s.blockWho)).join('') : '<span class="br-noblock">Non bloqué</span>';
