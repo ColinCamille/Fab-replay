@@ -499,6 +499,13 @@ const dorHero = aggMe.byMyHero.find(h => h.hero === 'Dorinthea');
 assert(briHero && briHero.games === 1 && briHero.winrate === 100, 'byMyHero Briar 1-0 (100%)');
 assert(dorHero && dorHero.games === 1 && dorHero.winrate === 0, 'byMyHero Dorinthea 0-1 (0%)');
 
+// Date de dernière partie par héros joué (tri « du plus récent au plus ancien »
+// dans le carrousel du dashboard).
+eq(briHero.lastPlayed, Date.parse('2026-07-01T10:00:00Z'), 'byMyHero Briar : lastPlayed = 01/07');
+eq(dorHero.lastPlayed, Date.parse('2026-07-02T10:00:00Z'), 'byMyHero Dorinthea : lastPlayed = 02/07');
+const recentOrder = aggMe.byMyHero.slice().sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0) || b.games - a.games).map(h => h.hero);
+eq(recentOrder.join(','), 'Dorinthea,Briar', 'héros triés du plus récemment joué au plus ancien');
+
 // 1er/2e joueur détaillé par matchup : Dorinthea → g1 1er(V), g2 2e(D).
 const dorMu = agg.byMatchup.find(m => m.hero === 'Dorinthea');
 assert(dorMu && dorMu.first.games === 1 && dorMu.first.winrate === 100, 'byMatchup Dorinthea 1er : 1-0 (100%)');

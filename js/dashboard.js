@@ -158,8 +158,11 @@
         const hero = heroPick(e.record) || '(inconnu)';
         const o = outcome(e.record);
         const fp = firstPlayerOf(e.record);
-        const m = map[hero] || (map[hero] = { hero, games: 0, wins: 0, decided: 0, first: { games: 0, wins: 0 }, second: { games: 0, wins: 0 } });
+        const m = map[hero] || (map[hero] = { hero, games: 0, wins: 0, decided: 0, lastPlayed: 0, first: { games: 0, wins: 0 }, second: { games: 0, wins: 0 } });
         m.games++;
+        // Date de la partie la plus récente avec ce héros (tri « récemment joué »).
+        const ts = Date.parse(dateOf(e.record) || '') || 0;
+        if (ts > m.lastPlayed) m.lastPlayed = ts;
         if (o != null) {
           m.decided++; if (o) m.wins++;
           if (fp != null) { const s = fp ? m.first : m.second; s.games++; if (o) s.wins++; }
@@ -168,6 +171,7 @@
       return Object.values(map)
         .map(m => ({
           hero: m.hero, games: m.games, wins: m.wins, losses: m.decided - m.wins, decided: m.decided, winrate: winrate(m.wins, m.decided),
+          lastPlayed: m.lastPlayed || null,
           first: { games: m.first.games, wins: m.first.wins, winrate: winrate(m.first.wins, m.first.games) },
           second: { games: m.second.games, wins: m.second.wins, winrate: winrate(m.second.wins, m.second.games) }
         }))
@@ -485,7 +489,10 @@
     return '<button class="hcard' + (o.all ? ' isall' : '') + '" data-key="' + esc2(o.key) + '" aria-pressed="' + o.sel + '">' + frame + '<div class="name">' + esc2(o.name) + '</div></button>';
   }
   function renderCarousel() {
-    const rows = _L.byMyHero.filter(m => m.hero !== '(inconnu)' && m.games > 0).sort((a, b) => b.games - a.games);
+    // Ordre du carrousel : du héros joué le plus récemment au plus ancien
+    // (à défaut de date, on retombe sur le nombre de parties).
+    const rows = _L.byMyHero.filter(m => m.hero !== '(inconnu)' && m.games > 0)
+      .sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0) || b.games - a.games);
     const g = _L.global;
     let html = hcardHTML({ all: true, name: 'Tous', wins: g.wins, losses: g.losses, wr: g.winrate, sel: !state.hero, key: '__all__' });
     rows.forEach(m => html += hcardHTML({ all: false, name: m.hero, wins: m.wins, losses: m.losses, wr: m.winrate, sel: state.hero === m.hero, key: m.hero }));
