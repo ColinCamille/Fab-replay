@@ -729,7 +729,8 @@ const soulTl = BR.buildTimeline({
     { player: 'Me', label: 'Me — Tour 3', hand: [], arsenal: [], soul: { me: { count: 3, cards: ['Sonata Prelude', 'Cindering Foothills', 'Sink Below'] }, opp: { count: 0, cards: [] } }, events: [ { type: 'played', player: 'Me', card: 'Card C' } ] }
   ]
 });
-assert(soulTl.usesSoul === true, 'SOUL : usesSoul vrai quand une soul est utilisée');
+assert(soulTl.usesSoul.me === true, 'SOUL : usesSoul.me vrai quand J\'ai une soul');
+assert(soulTl.usesSoul.opp === false, 'SOUL : usesSoul.opp faux quand l\'adversaire n\'en a pas');
 eq(soulTl.steps[0].state.meSoulCount, 1, 'SOUL : compteur à 1 dès la 1re étape');
 const soulLast = soulTl.steps[soulTl.steps.length - 1];
 eq(soulLast.state.meSoulCount, 3, 'SOUL : compteur à 3 à la dernière étape');
@@ -738,10 +739,25 @@ eq(soulLast.state.oppSoulCount, 0, 'SOUL : soul adverse à 0 dans l\'état');
 
 // C. Rétro-compat : une partie SANS bloc (vieux log / héros sans soul) → aucune
 //    soul, usesSoul faux, aucune erreur.
-assert(eqTl.usesSoul === false, 'SOUL : usesSoul faux quand aucune soul (rétro-compat)');
+assert(eqTl.usesSoul.me === false && eqTl.usesSoul.opp === false, 'SOUL : usesSoul faux des 2 côtés quand aucune soul (rétro-compat)');
 assert(eqTl.steps.every(s => s.state.meSoulCount === 0 && s.state.oppSoulCount === 0
   && s.state.meSoul.length === 0 && s.state.oppSoul.length === 0),
   'SOUL : bloc absent (vieux log) → compteurs à 0 et listes vides, aucune erreur');
+
+// D. Soul de l'ADVERSAIRE seulement (j'affronte un Boltyn sans en jouer un) :
+//    l'emplacement n'apparaît QUE de son côté — pas de zone vide à vie chez moi.
+const soulOppTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'Bravo', equipment: {} }, opp: { hero: 'Boltyn, Breaker of Dawn', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], soul: { me: { count: 0, cards: [] }, opp: { count: 0, cards: [] } }, events: [ { type: 'played', player: 'Me', card: 'Card A' } ] },
+    { player: 'Opp', label: 'Opp — Tour 2', hand: [], arsenal: [], soul: { me: { count: 0, cards: [] }, opp: { count: 2, cards: [] } }, events: [ { type: 'played', player: 'Opp', card: 'Card B' } ] }
+  ]
+});
+assert(soulOppTl.usesSoul.opp === true, 'SOUL : usesSoul.opp vrai quand SEUL l\'adversaire a une soul');
+assert(soulOppTl.usesSoul.me === false, 'SOUL : aucun emplacement soul chez moi quand seul l\'adversaire en a une');
+eq(soulOppTl.steps[soulOppTl.steps.length - 1].state.oppSoulCount, 2, 'SOUL : compteur adverse suivi par étape');
 
 // Détection AUTO d'un équipement détruit via le cimetière (sans liste de cartes) :
 // une pièce qui apparaît au cimetière est retirée du plateau (ex. Crown de bloc).

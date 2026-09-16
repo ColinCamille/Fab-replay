@@ -1011,10 +1011,17 @@
       me: Object.assign({}, GAME.players.me || {}, { createdWeapons: createdWeapons.me }),
       opp: Object.assign({}, GAME.players.opp || {}, { createdWeapons: createdWeapons.opp })
     };
-    // La partie utilise-t-elle une zone « soul » (Boltyn…) ? On n'affiche
-    // l'emplacement soul que dans ce cas — la grande majorité des héros n'en ont
-    // pas, inutile d'encombrer le plateau d'une zone vide.
-    const usesSoul = (GAME.turns || []).some(t => t.soul && (((t.soul.me && t.soul.me.count) || 0) > 0 || ((t.soul.opp && t.soul.opp.count) || 0) > 0 || (t.soul.me && t.soul.me.cards && t.soul.me.cards.length) || (t.soul.opp && t.soul.opp.cards && t.soul.opp.cards.length)));
+    // Qui utilise une zone « soul » (Boltyn…) ? Calculé PAR CAMP : chaque joueur
+    // n'a l'emplacement que s'il a LUI-MÊME une soul. Un drapeau commun à la
+    // partie collait une zone vide à vie sur le plateau d'en face quand un seul
+    // des deux jouait Boltyn. La grande majorité des héros n'en ont pas → aucune
+    // zone parasite. Piloté par la DONNÉE captée, jamais par un nom de héros :
+    // un futur héros à soul est couvert sans toucher au code.
+    const soulSideUsed = sd => (GAME.turns || []).some(t => {
+      const s = t.soul && t.soul[sd];
+      return !!s && (((s.count || 0) > 0) || !!(s.cards && s.cards.length));
+    });
+    const usesSoul = { me: soulSideUsed('me'), opp: soulSideUsed('opp') };
     return { players, myName: MY, oppName: OPP, hero: HERO, steps, usesSoul };
   }
 
@@ -1107,7 +1114,7 @@
         '</div>' +
         '<div class="br-mat">' +
           '<div class="br-hand br-opp" id="br-oppHand"></div>' +
-          '<div class="br-field br-opp" id="br-fOpp">' + buildZone('opp', P.opp, data.usesSoul) + '</div>' +
+          '<div class="br-field br-opp" id="br-fOpp">' + buildZone('opp', P.opp, data.usesSoul.opp) + '</div>' +
           '<div class="br-mid">' +
             '<span class="br-turnchip" id="br-turnPill"> </span>' +
             '<div class="br-lifeside">' +
@@ -1122,7 +1129,7 @@
             '</div>' +
             '<div class="br-lane" id="br-stage"></div>' +
           '</div>' +
-          '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me, data.usesSoul) + '</div>' +
+          '<div class="br-field br-me br-active" id="br-fMe">' + buildZone('me', P.me, data.usesSoul.me) + '</div>' +
           '<div class="br-hand br-me" id="br-myHand"></div>' +
         '</div>' +
         '<div class="br-timeline">' +
