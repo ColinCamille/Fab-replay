@@ -1261,6 +1261,14 @@
     if (gs.heroPowerActivations > 0) {
       cards.push([gs.heroPowerActivations, 'Pouvoir de héros utilisé', 'violet', 'Nombre de fois où tu as activé le pouvoir de ton héros.']);
     }
+    // Cartes envoyées dans la SOUL (charge : Ser Boltyn, Breaker of Dawn…), par
+    // camp. Tuile affichée seulement si ce camp a réellement chargé.
+    gs.soul.forEach(sl => {
+      const label = 'Cartes dans la soul' + (sl.side === 'me' ? '' : ' (adv.)');
+      const tip = (sl.side === 'me' ? 'Cartes que tu as chargées' : 'Cartes chargées par l’adversaire')
+        + ' depuis la main vers la soul sur toute la partie (Ser Boltyn, Breaker of Dawn…).';
+      cards.push([sl.charges, label, 'violet', tip]);
+    });
     // Resets de Valiant Dynamo, par camp qui l'équipe (reconstruit depuis les
     // blocages journalisés + les attaques à l'arme).
     gs.dynamo.forEach(d => {

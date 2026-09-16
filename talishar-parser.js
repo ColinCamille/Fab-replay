@@ -1491,7 +1491,7 @@
   //    retire UN seul (le compteur remonte). resets = nb de retraits effectifs.
   // Source de vérité = log parsé ; rien d'applicable → listes vides (pas d'erreur).
   function computeGameStats(rec) {
-    const out = { weapons: [], heroPowerActivations: 0, dynamo: [] };
+    const out = { weapons: [], heroPowerActivations: 0, dynamo: [], soul: [] };
     if (!rec) return out;
     const players = rec.players || {};
     const sides = [
@@ -1547,6 +1547,26 @@
         if (wCount[key]) out.weapons.push({ side: side.key, name, count: wCount[key] });
       });
       if (hasDynamo) out.dynamo.push({ side: side.key, resets: dynResets });
+
+      // CARTES ENVOYÉES DANS LA SOUL (charge : Ser Boltyn, Breaker of Dawn…).
+      // Deux sources, aucune parfaite seule :
+      //  · END GAME STATS (`cardResults[].charged`) — officiel et attribué au
+      //    bon joueur, mais absent si la partie n'est pas terminée.
+      //  · le journal (« <Carte> was charged. ») — toujours là, mais la ligne ne
+      //    nomme PAS le joueur → attribuée au joueur ACTIF du tour (une charge
+      //    faite en défense, rare, irait au mauvais camp) et le journal peut
+      //    être tronqué en tête (tampon roulant du grabber).
+      // On garde le MAXIMUM des deux : même grandeur mesurée, chacune ne pouvant
+      // que SOUS-compter. Zéro des deux côtés → rien (pas de tuile à 0).
+      let logCharges = 0;
+      turns.forEach(t => {
+        if (!side.name || t.player !== side.name) return;
+        (t.events || []).forEach(e => { if (e.type === 'charged') logCharges++; });
+      });
+      const esCards = (rec.endStats && rec.endStats[side.key] && rec.endStats[side.key].cards) || [];
+      const esCharges = esCards.reduce((a, c) => a + (Number(c.charged) || 0), 0);
+      const charges = Math.max(logCharges, esCharges);
+      if (charges > 0) out.soul.push({ side: side.key, charges });
     });
     return out;
   }

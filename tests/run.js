@@ -2448,6 +2448,32 @@ console.log('Stats par partie —');
   eq(dOf(gsNoBlock, 'opp'), 0, 'computeGameStats: pas de reset sans marqueur');
   // Pas de Valiant Dynamo → liste dynamo vide.
   eq(Parser.computeGameStats(gsRec).dynamo.length, 0, 'computeGameStats: pas de Dynamo → dynamo vide');
+
+  // ── Cartes envoyées dans la SOUL (charge) : stat PAR PARTIE, par camp ──────
+  const soulOf = (gs2, side) => { const x = gs2.soul.find(y => y.side === side); return x ? x.charges : null; };
+  // a) Sans stats officielles : compté depuis le journal, attribué au joueur ACTIF.
+  const chargeRec = {
+    myName: 'Me', oppName: 'Opp',
+    players: { me: { hero: 'Ser Boltyn, Breaker of Dawn', equipment: {} }, opp: { hero: 'Bravo', equipment: {} } },
+    turns: [
+      { player: 'Me', events: [{ type: 'charged', card: 'Sonata Prelude' }, { type: 'played', player: 'Me', card: 'Bolt of Courage' }], chain: [] },
+      { player: 'Opp', events: [{ type: 'played', player: 'Opp', card: 'Crippling Crush' }], chain: [] },
+      { player: 'Me', events: [{ type: 'charged', card: 'Cindering Foothills' }], chain: [] }
+    ]
+  };
+  eq(soulOf(Parser.computeGameStats(chargeRec), 'me'), 2, 'soul/partie : 2 charges comptées depuis le journal');
+  eq(soulOf(Parser.computeGameStats(chargeRec), 'opp'), null, 'soul/partie : camp sans charge → pas de tuile');
+  // b) Stats officielles plus complètes que le journal (tronqué en tête) → on garde le max.
+  const chargeRecES = Object.assign({}, chargeRec, { endStats: { me: { cards: [
+    { name: 'Sonata Prelude', played: 1, charged: 3 }, { name: 'Cindering Foothills', played: 0, charged: 2 }
+  ] }, opp: { cards: [{ name: 'Crippling Crush', played: 1, charged: 0 }] } } });
+  eq(soulOf(Parser.computeGameStats(chargeRecES), 'me'), 5, 'soul/partie : compteur officiel (5) l\'emporte sur le journal (2)');
+  eq(soulOf(Parser.computeGameStats(chargeRecES), 'opp'), null, 'soul/partie : adversaire à 0 charge → pas de tuile');
+  // c) Journal plus complet que les stats officielles (charge hors decklist) → max aussi.
+  const chargeRecLog = Object.assign({}, chargeRec, { endStats: { me: { cards: [{ name: 'Sonata Prelude', charged: 1 }] }, opp: null } });
+  eq(soulOf(Parser.computeGameStats(chargeRecLog), 'me'), 2, 'soul/partie : journal (2) l\'emporte quand les stats officielles sous-comptent');
+  // d) Héros sans soul → aucune tuile (pas de 0 affiché).
+  eq(Parser.computeGameStats(gsRec).soul.length, 0, 'soul/partie : héros sans soul → liste vide');
 })();
 
 // ---------- Compaction du bloc RAW CHATLOG (logs gonflés par le grabber ≤ 1.28) ----------
