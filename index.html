@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=192">
+<link rel="stylesheet" href="css/style.css?v=193">
 </head>
 <body>
 
@@ -138,18 +138,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=192"></script>
-<script src="js/images.js?v=192"></script>
-<script src="js/db.js?v=192"></script>
-<script src="js/sync.js?v=192"></script>
-<script src="js/replay.js?v=192"></script>
-<script src="js/boardreplay.js?v=192"></script>
-<script src="js/dashboard.js?v=192"></script>
+<script src="talishar-parser.js?v=193"></script>
+<script src="js/images.js?v=193"></script>
+<script src="js/db.js?v=193"></script>
+<script src="js/sync.js?v=193"></script>
+<script src="js/replay.js?v=193"></script>
+<script src="js/boardreplay.js?v=193"></script>
+<script src="js/dashboard.js?v=193"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=192"></script>
-<script src="js/cloud.js?v=192"></script>
+<script src="js/cloud-config.js?v=193"></script>
+<script src="js/cloud.js?v=193"></script>
 
 <script>
 // ============================================================
@@ -195,10 +195,15 @@
   }
 
   // ---------- Chargement / rendu du dashboard ----------
-  async function reloadDashboard() {
+  // Dernière liste d'entrées lue (sans les logs bruts) : la synchro du compte la
+  // réutilise au lieu de relire toute la bibliothèque une 2ᵉ fois au démarrage.
+  let _lastEntries = null;
+  // `known` (optionnel) : entrées DÉJÀ lues par l'appelant → évite de retraverser
+  // toute la bibliothèque (c'est la lecture la plus lourde du démarrage).
+  async function reloadDashboard(known) {
     if (_pairMode) return [];
     if (_friendCtx) return [];   // on regarde les parties d'un ami : ne pas remonter les miennes
-    const entries = await window.FabDB.getAllEntries();
+    const entries = known || await window.FabDB.getAllEntries();
     const dashEmpty = $('#dashEmpty'), dashBody = $('#dashboardBody');
     if (_pairMode || !dashEmpty || !dashBody) return entries;   // body a pu être remplacé pendant l'await (pop-up)
     const hasGames = entries.length > 0;
@@ -214,6 +219,7 @@
     if (hasGames) {
       window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onMeta: updateMeta });
     }
+    _lastEntries = entries;
     return entries;
   }
 
@@ -253,10 +259,13 @@
   }
   document.querySelectorAll('.replay-tab-btn').forEach(b => b.addEventListener('click', () => setReplayTab(b.dataset.tab)));
 
-  let _openRaw = null, _openId = null;   // log brut de la partie ouverte (pour le bouton « ⬇ Log brut »)
+  // Log brut de la partie ouverte (bouton « ⬇ Log brut »). Il n'est PLUS chargé
+  // avec l'entrée (il pèse des Mo) : on le relit à la demande, au clic.
+  let _openRaw = null, _openId = null, _openHasRaw = false;
   function openGame(entry) {
     _openRaw = entry.raw || null; _openId = entry.gameId || null;
-    const dl = $('#dlRaw'); if (dl) dl.style.display = _openRaw ? '' : 'none';
+    _openHasRaw = !!(_openRaw || entry.hasRaw);
+    const dl = $('#dlRaw'); if (dl) dl.style.display = _openHasRaw ? '' : 'none';
     window.Replay.show(entry.record);
     setReplayTab('table');   // vue Table par défaut (rejeu sur plateau)
     showView('replay');
@@ -266,7 +275,10 @@
   // Télécharge le log brut de la partie ouverte (.txt) — pour signaler un souci.
   (function () {
     const dl = document.getElementById('dlRaw');
-    if (dl) dl.addEventListener('click', () => {
+    if (dl) dl.addEventListener('click', async () => {
+      if (!_openRaw && _openHasRaw && _openId) {
+        try { _openRaw = await window.FabDB.getRaw(_openId); } catch (e) { console.error(e); }
+      }
       if (!_openRaw) { alert('Log brut indisponible pour cette partie (recapture-la pour l\'obtenir).'); return; }
       const blob = new Blob([_openRaw], { type: 'text/plain' });
       const a = document.createElement('a');
@@ -564,7 +576,10 @@
 
   if (migrateBtn) migrateBtn.addEventListener('click', async () => {
     if (!window.Cloud || !window.Cloud.getUser()) { alert('Connecte-toi d’abord (🔑 Se connecter).'); return; }
-    const entries = await window.FabDB.getAllEntries();
+    // Le `raw` n'est plus chargé avec l'entrée → on le relit ici (c'est LUI
+    // qu'on migre vers le compte).
+    const entries = await Promise.all((await window.FabDB.getAllEntries())
+      .map(async e => (e.raw || !e.hasRaw) ? e : Object.assign({}, e, { raw: await window.FabDB.getRaw(e.gameId) })));
     const list = entries.map(e => ({
       game_id: (e.record && e.record.source && e.record.source.gameId) || e.gameId,
       raw: e.raw,
@@ -599,7 +614,7 @@
 
   // Récupère les parties du compte connecté et les fusionne dans le cache local
   // (mêmes règles que la synchro : pas de doublon, respect des suppressions).
-  async function mergeCloudGames() {
+  async function mergeCloudGames(localEntries) {
     if (!window.Cloud || !window.Cloud.getUser()) return { added: 0, removed: 0 };
     const uid = window.Cloud.getUser().id;
     // 1) Index LÉGER d'abord (sans `raw`) : ne peut pas expirer, même avec des
@@ -608,7 +623,9 @@
     let idx;
     try { idx = await window.Cloud.fetchGamesIndex(uid); } catch (e) { console.error(e); return { added: 0, removed: 0 }; }
     const cloudIds = new Set(idx.map(r => String(r.game_id)));
-    const local = await window.FabDB.getAllEntries();
+    // Entrées locales : réutilise la lecture déjà faite au démarrage (une seule
+    // traversée de la bibliothèque par chargement).
+    const local = localEntries || await window.FabDB.getAllEntries();
     const have = new Set(local.map(e => String(e.gameId)));
     // Version de schéma stockée par partie : sert à re-parser une partie déjà en
     // cache quand le parseur a évolué (ex. ajout des compteurs d'équipement) — sinon
@@ -616,19 +633,31 @@
     const haveVer = new Map(local.map(e => [String(e.gameId), e.schemaVersion || 0]));
     const curSchema = (window.TalisharParser && window.TalisharParser.SCHEMA_VERSION) || 0;
     let added = 0, removed = 0, metaChanged = 0, reparsed = 0;
-    // 2) Parties dont il faut (re)télécharger le raw : absentes du cache, ou de
-    // schéma périmé. Rien de neuf → aucun `raw` téléchargé (synchro quasi instantanée).
-    const needRaw = idx.filter(r => {
+    // 2) Parties à télécharger : SEULEMENT celles absentes du cache. Une partie
+    // déjà connue mais de schéma périmé a son log brut EN LOCAL → on la re-parse
+    // sur place (zéro réseau) au lieu de re-télécharger toute la bibliothèque à
+    // chaque bump de SCHEMA_VERSION (des centaines de Mo, des minutes d'attente).
+    const idxById = new Map(idx.map(r => [String(r.game_id), r]));
+    const toFetch = [], staleIds = [];
+    for (const r of idx) {
       const gid = String(r.game_id);
-      if (window.FabDB.isDeleted(gid)) return false;
-      const known = have.has(gid);
-      const stale = known && ((haveVer.get(gid) || 0) < curSchema);
-      return !known || stale;
-    }).map(r => String(r.game_id));
-    let rows = [];
-    if (needRaw.length) {
-      try { rows = await window.Cloud.fetchGamesRaw(uid, needRaw); } catch (e) { console.error(e); }
+      if (window.FabDB.isDeleted(gid)) continue;
+      if (!have.has(gid)) toFetch.push(gid);
+      else if ((haveVer.get(gid) || 0) < curSchema) staleIds.push(gid);
     }
+    // Re-parse local des parties au schéma périmé (log brut déjà en cache).
+    const localRows = [];
+    for (const gid of staleIds) {
+      let raw = null;
+      try { raw = await window.FabDB.getRaw(gid); } catch (e) { console.error(e); }
+      if (raw) localRows.push(Object.assign({}, idxById.get(gid), { game_id: gid, raw: raw, fromCache: true }));
+      else toFetch.push(gid);   // pas de log brut en local (vieille entrée) → il faut le télécharger
+    }
+    let rows = [];
+    if (toFetch.length) {
+      try { rows = await window.Cloud.fetchGamesRaw(uid, toFetch); } catch (e) { console.error(e); }
+    }
+    rows = rows.concat(localRows);
     // 3) Parse + stocke les parties nouvelles/périmées.
     const stripId = s => s ? String(s).replace(/\s*\([^)]*\)\s*$/, '').trim() : s;
     for (const row of rows) {
@@ -646,7 +675,7 @@
       const gid = String((rec.source && rec.source.gameId) || row.game_id || '');
       if (!gid || window.FabDB.isDeleted(gid)) continue;
       const known = have.has(gid);
-      try { await window.FabDB.putGame(rec, row.raw); have.add(gid); haveVer.set(gid, curSchema); if (known) reparsed++; else added++; } catch (e) { console.error(e); }
+      try { await window.FabDB.putGame(rec, row.raw, null, { rawAlreadyStored: !!row.fromCache }); have.add(gid); haveVer.set(gid, curSchema); if (known) reparsed++; else added++; } catch (e) { console.error(e); }
     }
     // 4) Tags/favoris : la meta est déjà dans l'index → applique sur toutes les
     // parties en cache (dernier-écrit-gagne), sans avoir eu besoin du raw.
@@ -716,7 +745,7 @@
       if (!user) { closeFriendMenu(); if (_friendCtx) backToMine(); }
       if (user) {
         if (await maybePairPopup()) return;   // pop-up d'appairage → code renvoyé, on n'affiche pas le dashboard
-        const { added, removed, metaChanged, reparsed } = await mergeCloudGames();
+        const { added, removed, metaChanged, reparsed } = await mergeCloudGames(_lastEntries);
         if (added || removed || metaChanged || reparsed) {
           const parts = [];
           if (added) parts.push(added + ' récupérée(s)');

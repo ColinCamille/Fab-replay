@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.28.0
+// @version      1.29.0
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). v1.28 : SOUL — capte la zone « soul » par tour (nombre de cartes des 2 camps via playerX.SoulCount, + noms si révélés) pour les héros à soul (Boltyn, Breaker of Dawn…) → la vue Table l'affiche. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.28.0';
+  const VERSION = '1.29.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -480,15 +480,25 @@
   // queue/tête, il RÉ-EMPILAIT tout le journal à chaque poll → logs géants
   // dupliqués (parties illisibles). On détecte donc le re-rendu complet et on
   // adopte le rendu le plus complet au lieu de le concaténer.
-  function mergeLines(captured, visible) {
+  // `keyFn` (optionnel) : ce sur quoi on COMPARE deux entrées (par défaut
+  // l'entrée elle-même). Indispensable pour le chatLog BRUT (HTML) : Talishar
+  // REGÉNÈRE le HTML du journal à chaque poll, et l'URL d'image d'un héros change
+  // quand il se transforme (Arakni…) → des entrées déjà vues n'étaient plus
+  // égales, aucun chevauchement n'était trouvé et TOUT le journal était ré-empilé
+  // (logs de 15 Mo, journal répété 68 fois, app interminable à charger). On
+  // compare donc le brut sur son TEXTE (stripHtmlText), stable comme l'est déjà
+  // le journal texte.
+  function mergeLines(captured, visible, keyFn) {
     if (!visible.length) return { lines: captured, from: -1 };
     if (!captured.length) return { lines: visible.slice(), from: 0 };
+    const key = typeof keyFn === 'function' ? keyFn : (x => x);
+    const ck = captured.map(key), vk = visible.map(key);
     // Cas 1 — fenêtre glissante : queue(captured) == tête(visible).
-    const maxK = Math.min(captured.length, visible.length);
+    const maxK = Math.min(ck.length, vk.length);
     for (let k = maxK; k > 0; k--) {
       let ok = true;
       for (let i = 0; i < k; i++) {
-        if (captured[captured.length - k + i] !== visible[i]) { ok = false; break; }
+        if (ck[ck.length - k + i] !== vk[i]) { ok = false; break; }
       }
       if (ok) {
         const added = visible.slice(k);
@@ -497,12 +507,27 @@
     }
     // Cas 2 — re-rendu complet (même 1re ligne) : on ADOPTE le plus complet,
     // jamais on ne ré-empile (sinon duplication de tout l'historique).
-    if (visible[0] === captured[0]) {
+    if (vk[0] === ck[0]) {
       return visible.length > captured.length ? { lines: visible.slice(), from: captured.length } : { lines: captured, from: -1 };
     }
+    // Cas 2 bis — la fenêtre est DÉJÀ CONTENUE (en retard d'un cran, ou
+    // simplement plus courte) : rien de neuf, surtout ne pas ré-empiler.
+    if (containsBlock(ck, vk)) return { lines: captured, from: -1 };
     // Cas 3 — contenu réellement disjoint (ex. début décalé par un repli en
     // tête) : on ajoute.
     return { lines: captured.concat(visible), from: captured.length };
+  }
+
+  // `hay` contient-il le bloc CONTIGU `needle` ? (comparaison de clés déjà
+  // calculées). Utilisé comme garde anti-duplication dans mergeLines.
+  function containsBlock(hay, needle) {
+    if (!needle.length || needle.length > hay.length) return false;
+    for (let p = hay.length - needle.length; p >= 0; p--) {
+      let ok = true;
+      for (let i = 0; i < needle.length; i++) { if (hay[p + i] !== needle[i]) { ok = false; break; } }
+      if (ok) return true;
+    }
+    return false;
   }
 
   function merge(visible) {
@@ -1138,8 +1163,10 @@
           // dernière fenêtre était conservée et les couleurs des 1ers tours d'une
           // longue partie étaient perdues. Uniquement en source 'chatlog' :
           // `lastRawChatLog` n'est à jour que là (en repli DOM il serait périmé).
+          // Comparaison sur le TEXTE (stripHtmlText) : le HTML, lui, est
+          // régénéré par Talishar à chaque poll (cf. mergeLines).
           if (logSource === 'chatlog' && Array.isArray(lastRawChatLog))
-            capturedRaw = mergeLines(capturedRaw, lastRawChatLog).lines;
+            capturedRaw = mergeLines(capturedRaw, lastRawChatLog, stripHtmlText).lines;
           save(); updateUI();
         }
       }
