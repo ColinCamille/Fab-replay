@@ -2457,6 +2457,36 @@ console.log('Compaction chatLog brut —');
   eq(Parser.compactRawChatLog('pas de bloc'), 'pas de bloc', 'compaction : sans bloc RAW CHATLOG → inchangé');
 })();
 
+// ---------- Performance des cartes : valeur affichée = valeur triée ----------
+// Bug : en mode « % », cliquer sur la colonne « Jouée » triait sur le NOMBRE
+// brut de fois jouée, pas sur le pourcentage affiché. En cherchant les cartes
+// qu'on joue le moins (candidates au remplacement), on obtenait donc juste les
+// cartes les moins piochées. cardCellValue() rend la valeur du mode courant :
+// c'est elle qui sert au rendu ET au tri.
+(function () {
+  const col = { key: 'played' }, games = { key: 'games', label: 'Parties', count: true };
+  // A : piochée souvent mais presque toujours pitchée (2 jouée / 20 usages = 10 %).
+  const A = { name: 'A', games: 10, played: 2, blocked: 0, pitched: 18, timesHit: 1 };
+  // B : rarement vue mais toujours jouée (1 jouée / 1 usage = 100 %).
+  const B = { name: 'B', games: 1, played: 1, blocked: 0, pitched: 0, timesHit: 1 };
+  eq(Dashboard.cardCellValue(col, A, 'total', 10), 2, 'cardCellValue : mode total = nombre brut');
+  eq(Dashboard.cardCellValue(col, A, 'pergame', 10), 0.2, 'cardCellValue : mode par partie = brut / parties');
+  eq(Dashboard.cardCellValue(col, A, 'pct', 10), 10, 'cardCellValue : mode % = jouée / (jouée+défense+pitch)');
+  eq(Dashboard.cardCellValue(col, B, 'pct', 10), 100, 'cardCellValue : carte toujours jouée = 100 %');
+  // Le nombre brut classe A devant B ; le pourcentage les inverse.
+  assert(A.played > B.played, 'pré-requis : A est jouée plus de fois que B en absolu');
+  assert(Dashboard.cardCellValue(col, A, 'pct', 10) < Dashboard.cardCellValue(col, B, 'pct', 10),
+    'tri % : la carte qu’on pitche tout le temps passe SOUS celle qu’on joue toujours');
+  // Colonnes « count » (Parties) : jamais converties, quel que soit le mode.
+  eq(Dashboard.cardCellValue(games, A, 'pct', 10), 10, 'cardCellValue : colonne Parties reste un compte en mode %');
+  // Coups = touché / jouée ; cyclée = cyclée / (cyclée + jouée).
+  eq(Dashboard.cardCellValue({ key: 'timesHit' }, A, 'pct', 10), 50, 'cardCellValue : Coups = touché / jouée');
+  eq(Dashboard.cardCellValue({ key: 'cycled' }, { cycled: 3, played: 1 }, 'pct', 10), 75, 'cardCellValue : Cyclée = cyclée / (cyclée + jouée)');
+  // Dénominateur nul → null (cellule « · »), jamais 0 % qui serait un mensonge.
+  eq(Dashboard.cardCellValue({ key: 'timesHit' }, { played: 0, timesHit: 0 }, 'pct', 10), null,
+    'cardCellValue : pas de dénominateur → null (pas de faux 0 %)');
+})();
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);

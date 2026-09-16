@@ -625,16 +625,29 @@
     }).join('') + '<div class="note">Winrate des parties où la carte a été jouée. Les faibles échantillons (&lt; 3 parties) sont grisés — ajuste le seuil ci-dessus.</div>';
   }
   const pct1 = v => Math.round(v * 10) / 10 + '%';
-  function fmtCell(col, c) {
+  // Valeur numérique d'une cellule DANS LE MODE COURANT (total / par partie / %).
+  // Fonction PURE (testable en Node) qui sert à l'affichage ET AU TRI : en mode
+  // « % », trier sur « Jouée » doit classer par pourcentage et non par nombre
+  // brut — sinon, en cherchant les cartes qu'on joue le moins (celles qu'on ne
+  // fait que pitcher/bloquer), on ne voyait que les cartes rarement piochées.
+  // Renvoie null quand la valeur n'existe pas (dénominateur nul).
+  function cardCellValue(col, c, mode, totalGames) {
     const raw = c[col.key] || 0;
-    if (col.count || state.cardMode === 'total') return raw ? String(raw) : MUTED;
-    if (state.cardMode === 'pergame') { const tg = _A.global.games || 0, v = tg ? raw / tg : 0; return v ? String(Math.round(v * 100) / 100) : MUTED; }
-    if (col.key === 'timesHit') { const p = c.played || 0; return (p && raw) ? pct1(raw / p * 100) : MUTED; }
+    if (col.count || mode === 'total') return raw;
+    if (mode === 'pergame') return totalGames ? raw / totalGames : 0;
+    if (col.key === 'timesHit') { const p = c.played || 0; return p ? raw / p * 100 : null; }
     // Taux de cyclage : part de l'instant défaussée via le pouvoir plutôt que
     // gardée/jouée → « toujours cyclé » (proche 100 %) vs « gardé » (proche 0 %).
-    if (col.key === 'cycled') { const denom = (c.cycled || 0) + (c.played || 0); return denom ? pct1(raw / denom * 100) : MUTED; }
+    if (col.key === 'cycled') { const denom = (c.cycled || 0) + (c.played || 0); return denom ? raw / denom * 100 : null; }
     const usage = (c.played || 0) + (c.blocked || 0) + (c.pitched || 0);
-    return (usage && raw) ? pct1(raw / usage * 100) : MUTED;
+    return usage ? raw / usage * 100 : null;
+  }
+  function fmtCell(col, c) {
+    const v = cardCellValue(col, c, state.cardMode, _A.global.games || 0);
+    if (!v) return MUTED;
+    if (col.count || state.cardMode === 'total') return String(v);
+    if (state.cardMode === 'pergame') return String(Math.round(v * 100) / 100);
+    return pct1(v);
   }
   function renderCardPerf() {
     // Colonne « Cyclée » (pouvoir d'Oscilio) : seulement quand un héros est
@@ -645,8 +658,15 @@
     const total = (_A.cardPerf || []).filter(c => c.played || c.blocked || c.timesHit || c.cycled);
     const qn = norm(state.cardQ);
     const filtered = qn ? total.filter(c => norm(c.name).indexOf(qn) >= 0) : total;
-    const sorted = filtered.slice().sort((a, b) => state.cardSort.key === 'name' ? String(a.name).localeCompare(String(b.name)) : (a[state.cardSort.key] || 0) - (b[state.cardSort.key] || 0));
-    if (state.cardSort.dir === 'desc') sorted.reverse();
+    // Tri sur la valeur RÉELLEMENT AFFICHÉE (donc sur le % en mode « % ») ; à
+    // égalité, ordre alphabétique. Les valeurs absentes passent sous zéro.
+    const dir = state.cardSort.dir === 'desc' ? -1 : 1;
+    const sortCol = cols.find(col => col.key === state.cardSort.key) || { key: state.cardSort.key };
+    const tg = _A.global.games || 0;
+    const num = c => { const v = cardCellValue(sortCol, c, state.cardMode, tg); return v == null ? -1 : v; };
+    const sorted = filtered.slice().sort((a, b) => state.cardSort.key === 'name'
+      ? dir * String(a.name).localeCompare(String(b.name))
+      : dir * (num(a) - num(b)) || String(a.name).localeCompare(String(b.name)));
     const shown = state.cardCap > 0 ? sorted.slice(0, state.cardCap) : sorted;
     const cntEl = D.getElementById('hxCardCount');
     if (cntEl) cntEl.textContent = filtered.length === total.length ? total.length + ' cartes' : filtered.length + ' / ' + total.length + ' cartes';
@@ -1004,6 +1024,6 @@
   function refresh() { if (_built) renderAll(); }
 
   // Exports : cœur d'agrégation (Node + navigateur) + API de rendu (navigateur).
-  root.Dashboard = { aggregate, outcome, oppHeroOf, dateOf, mount, refresh, getHero: function () { return state.hero; }, applyHeroTheme: themeFor, restoreTheme: function () { themeFor(state.hero); } };
+  root.Dashboard = { aggregate, cardCellValue, outcome, oppHeroOf, dateOf, mount, refresh, getHero: function () { return state.hero; }, applyHeroTheme: themeFor, restoreTheme: function () { themeFor(state.hero); } };
   if (typeof module === 'object' && module.exports) module.exports = root.Dashboard;
 })(typeof self !== 'undefined' ? self : this);
