@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=194">
+<link rel="stylesheet" href="css/style.css?v=195">
 </head>
 <body>
 
@@ -138,18 +138,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=194"></script>
-<script src="js/images.js?v=194"></script>
-<script src="js/db.js?v=194"></script>
-<script src="js/sync.js?v=194"></script>
-<script src="js/replay.js?v=194"></script>
-<script src="js/boardreplay.js?v=194"></script>
-<script src="js/dashboard.js?v=194"></script>
+<script src="talishar-parser.js?v=195"></script>
+<script src="js/images.js?v=195"></script>
+<script src="js/db.js?v=195"></script>
+<script src="js/sync.js?v=195"></script>
+<script src="js/replay.js?v=195"></script>
+<script src="js/boardreplay.js?v=195"></script>
+<script src="js/dashboard.js?v=195"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=194"></script>
-<script src="js/cloud.js?v=194"></script>
+<script src="js/cloud-config.js?v=195"></script>
+<script src="js/cloud.js?v=195"></script>
 
 <script>
 // ============================================================
@@ -983,8 +983,40 @@
   // ---------- Démarrage ----------
   (async function boot() {
     refreshSyncBtn();
+    // Pop-up d'appairage du grabber : aucune bibliothèque à charger ici, on ne
+    // fait que rendre le code au grabber (cf. maybePairPopup).
+    if (window.opener && /(^|[#&])pair\b/.test(location.hash)) { setupCloud(); return; }
+    const dashEmpty = $('#dashEmpty');
+    // La base ne peut pas passer en v2 tant qu'un autre onglet du site la tient
+    // ouverte : on l'explique au lieu de laisser une page vide.
+    window.onFabDbBlocked = () => {
+      if (!dashEmpty) return;
+      dashEmpty.style.display = 'block';
+      dashEmpty.innerHTML = 'Le site est ouvert dans un <strong>autre onglet</strong> : ferme-le, '
+        + 'la bibliothèque se chargera toute seule ici.';
+    };
+    // Migration v1 → v2 (le log brut part dans son propre store). Incrémentale,
+    // une partie à la fois : l'interface reste vivante et on affiche l'avancement.
+    try {
+      if (window.FabDB.needsRawMigration && window.FabDB.needsRawMigration()) {
+        await window.FabDB.migrateRaws((i, n) => {
+          if (n < 4 || !dashEmpty) return;
+          dashEmpty.style.display = 'block';
+          dashEmpty.innerHTML = 'Optimisation de la bibliothèque… <strong>' + i + '/' + n + '</strong><br>'
+            + '<span style="font-size:.8rem">(une seule fois — le site se chargera bien plus vite ensuite)</span>';
+        });
+      }
+    } catch (e) { console.error(e); }
+    try { await reloadDashboard(); }
+    catch (e) {
+      console.error(e);
+      if (dashEmpty) {
+        dashEmpty.style.display = 'block';
+        dashEmpty.textContent = 'Impossible de lire la bibliothèque locale (voir la console). Tes parties restent dans ton compte.';
+      }
+    }
+    // Le compte (et sa synchro) seulement APRÈS le premier affichage.
     setupCloud();
-    await reloadDashboard();
 
     // Lecture GitHub (héritage) : COUPÉE dans le modèle Supabase — sinon tout
     // utilisateur du site central hériterait des parties publiques du dépôt.

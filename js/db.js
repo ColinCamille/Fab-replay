@@ -97,9 +97,13 @@
     if (_dbPromise) return _dbPromise;
     _dbPromise = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
+      // L'upgrade ne fait QUE créer les stores : c'est instantané. Déplacer les
+      // logs bruts ici (transaction de version sur des centaines de Mo) bloquait
+      // l'ouverture de la base — donc TOUTE l'app — et restait bloqué pour de bon
+      // si un autre onglet du site tenait la base en v1. Le déplacement se fait
+      // maintenant APRÈS ouverture, partie par partie (migrateRaws).
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        const upTx = e.target.transaction;
         if (!db.objectStoreNames.contains(STORE)) {
           const store = db.createObjectStore(STORE, { keyPath: 'gameId' });
           // index utiles aux tris/filtres du dashboard
@@ -108,30 +112,58 @@
           store.createIndex('format', 'format', { unique: false });
         }
         if (!db.objectStoreNames.contains(RAW_STORE)) db.createObjectStore(RAW_STORE, { keyPath: 'gameId' });
-        // v1 → v2 : on SORT le log brut (et le chatLog brut du record) des
-        // entrées existantes. Passe unique par appareil : après ça, afficher le
-        // dashboard ne relit plus des centaines de Mo pour rien.
-        if (e.oldVersion < 2 && upTx && db.objectStoreNames.contains(STORE)) {
-          const games = upTx.objectStore(STORE), raws = upTx.objectStore(RAW_STORE);
-          games.openCursor().onsuccess = (ev) => {
-            const cur = ev.target.result;
-            if (!cur) return;
-            const entry = cur.value;
-            let touched = false;
-            if (entry && entry.raw) {
-              raws.put({ gameId: entry.gameId, raw: entry.raw });
-              delete entry.raw; entry.hasRaw = true; touched = true;
-            }
-            if (entry && entry.record && entry.record.rawChatLog) { delete entry.record.rawChatLog; touched = true; }
-            if (touched) cur.update(entry);
-            cur.continue();
-          };
-        }
       };
-      req.onsuccess = (e) => resolve(e.target.result);
+      // Un autre onglet garde l'ancienne version ouverte → l'upgrade attend. On le
+      // DIT au lieu de rester sur une page vide (l'app reprend dès l'onglet fermé).
+      req.onblocked = () => {
+        console.warn('[db] mise à jour de la base bloquée par un autre onglet du site');
+        if (typeof root.onFabDbBlocked === 'function') { try { root.onFabDbBlocked(); } catch (e) {} }
+      };
+      req.onsuccess = (e) => {
+        const db = e.target.result;
+        // Une autre page demande une nouvelle version : on libère la base, sinon
+        // c'est NOUS qui la bloquerions.
+        db.onversionchange = () => { try { db.close(); } catch (err) {} _dbPromise = null; };
+        resolve(db);
+      };
       req.onerror = (e) => reject(e.target.error);
     });
     return _dbPromise;
+  }
+
+  // ---------- Migration v1 → v2, INCRÉMENTALE (hors transaction de version) ----------
+  // Sort le log brut de chaque entrée vers le store `raws` (et jette
+  // `record.rawChatLog`, inutile hors parsing), UNE PARTIE À LA FOIS : chaque pas
+  // est une petite transaction, l'interface reste vivante, un échec sur une partie
+  // n'empêche pas les autres, et l'espace disque ne double jamais.
+  // Réexécutable : une entrée déjà migrée est simplement sautée.
+  const MIGRATED_KEY = 'fabRawsMigratedV2';
+  function needsRawMigration() {
+    try { return localStorage.getItem(MIGRATED_KEY) !== '1'; } catch (e) { return true; }
+  }
+  function markRawMigrated() { try { localStorage.setItem(MIGRATED_KEY, '1'); } catch (e) {} }
+
+  async function migrateRaws(onProgress) {
+    const store = await tx('readonly');
+    const ids = (await wrap(store.getAllKeys())) || [];
+    let moved = 0, failed = 0, i = 0;
+    for (const id of ids) {
+      i++;
+      try {
+        const entry = await getMeta(id);
+        if (!entry) continue;
+        const hadRaw = entry.raw != null;
+        const hadChat = !!(entry.record && entry.record.rawChatLog);
+        if (!hadRaw && !hadChat) continue;                     // déjà migrée
+        if (hadRaw) await putRaw(entry.gameId, entry.raw);     // 1) le brut à part…
+        const st = await tx('readwrite');
+        await wrap(st.put(slimEntry(entry)));                  // 2) …puis l'entrée allégée
+        moved++;
+      } catch (e) { failed++; console.error('[db] migration de', id, 'échouée', e); }
+      if (typeof onProgress === 'function') { try { onProgress(i, ids.length); } catch (e) {} }
+    }
+    if (!failed) markRawMigrated();
+    return { moved, failed, total: ids.length };
   }
 
   function tx(mode) {
@@ -404,6 +436,6 @@
     open, keyFor, putGame, getAllEntries, getEntry, getMeta, getRaw, removeGame, dropGame, count, clearAll,
     putEntry, buildExport, normalizeImport, exportAll, importEntries,
     markDeleted, unmarkDeleted, isDeleted, deletedIds, clearDeleted,
-    normalizeTags, setMeta, applyCloudMeta, slimEntry
+    normalizeTags, setMeta, applyCloudMeta, slimEntry, migrateRaws, needsRawMigration
   };
 })(typeof self !== 'undefined' ? self : this);
