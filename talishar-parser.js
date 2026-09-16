@@ -22,7 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 3;   // v3 : garde-fou duplication moins agressif (health.ok peut passer false→true) → re-parse des parties en cache
+  const SCHEMA_VERSION = 4;   // v4 : compaction du bloc RAW CHATLOG (logs gonflés par le grabber ≤ 1.28) → re-parse LOCAL des parties en cache
+  // v3 : garde-fou duplication moins agressif (health.ok peut passer false→true)
   // v2 : ajout de turns[].equipCounters + snapshots.equipCounters
   const PARSER_VERSION = '2.2.0';
 
@@ -190,6 +191,97 @@
     const body = text.slice(blockStart, blockEnd);
     const rest = text.slice(0, idx) + text.slice(blockEnd);
     return { rest, body };
+  }
+
+  // ============================================================
+  // Compaction du bloc RAW CHATLOG (logs gonflés par le grabber ≤ 1.28)
+  // ------------------------------------------------------------
+  // Jusqu'à la v1.29, le grabber recousait le chatLog BRUT en comparant du
+  // HTML que Talishar REGÉNÈRE à chaque poll (l'URL d'image d'un héros change
+  // quand il se transforme) : faute de chevauchement reconnu, il ré-empilait
+  // toute la fenêtre à chaque tick. Résultat : des logs de plusieurs Mo où le
+  // journal est recopié des dizaines de fois (jusqu'à 68× mesurées), lourds à
+  // télécharger et à parser.
+  // On retire ici les RECOPIES : tout bloc CONTIGU d'au moins MIN_BLOCK entrées
+  // déjà vu plus haut (comparaison sur le TEXTE, stable) est une recopie. Les
+  // répétitions courtes et légitimes (« X passed », « X passed ») sont gardées.
+  // PUR → testable en Node. L'appelant doit vérifier que le record re-parsé est
+  // identique avant de remplacer quoi que ce soit (règle « jamais une mauvaise
+  // donnée »).
+  const RAWCHAT_MIN_BLOCK = 8;
+  function chatKey(x) { return String(x == null ? '' : x).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); }
+  function compactChatLogArray(arr) {
+    if (!Array.isArray(arr) || arr.length < RAWCHAT_MIN_BLOCK * 2) return arr || [];
+    const keys = arr.map(chatKey);
+    const out = [], outKeys = [], pos = new Map();   // clé → positions dans `out`
+    let i = 0;
+    while (i < arr.length) {
+      let best = 0;
+      const cands = pos.get(keys[i]);
+      if (cands) {
+        for (const p of cands) {
+          let l = 0;
+          while (p + l < outKeys.length && i + l < keys.length && outKeys[p + l] === keys[i + l]) l++;
+          if (l > best) best = l;
+        }
+      }
+      if (best >= RAWCHAT_MIN_BLOCK) { i += best; continue; }   // recopie → on saute
+      const k = keys[i];
+      if (!pos.has(k)) pos.set(k, []);
+      pos.get(k).push(out.length);
+      out.push(arr[i]); outKeys.push(k);
+      i++;
+    }
+    return out;
+  }
+
+  // Même chose sur le .txt COMPLET : renvoie le texte avec son bloc RAW CHATLOG
+  // compacté (ou le texte inchangé s'il n'y a rien à gagner).
+  function compactRawChatLog(rawText) {
+    const text = String(rawText == null ? '' : rawText);
+    const marker = '=== RAW CHATLOG';
+    const idx = text.indexOf(marker);
+    if (idx < 0) return text;
+    const nl = text.indexOf('\n', idx);
+    if (nl < 0) return text;
+    const nextBlock = text.indexOf('\n=== ', nl + 1);
+    const blockEnd = nextBlock >= 0 ? nextBlock : text.length;
+    const body = text.slice(nl + 1, blockEnd);
+    const jsonLine = body.trim().split('\n')[0];
+    let arr;
+    try { arr = JSON.parse(jsonLine); } catch (e) { return text; }
+    if (!Array.isArray(arr)) return text;
+    const slim = compactChatLogArray(arr);
+    if (slim.length >= arr.length) return text;
+    return text.slice(0, nl + 1) + JSON.stringify(slim) + '\n' + text.slice(blockEnd);
+  }
+
+  // Feu vert pour remplacer un log brut par sa version compactée. Le bloc RAW
+  // CHATLOG ne sert QU'AUX COULEURS (le déroulé vient du journal texte, intact) :
+  //   · la structure du record doit être IDENTIQUE (hors couleurs) ;
+  //   · on ne doit pas PERDRE de couleurs ni de couverture.
+  // NB : la compaction en RÉTABLIT souvent (les recopies décalaient les files de
+  // couleurs → cartes coloriées avec la couleur d'une autre occurrence).
+  // PUR → testable en Node.
+  function canReplaceRaw(before, after) {
+    if (!before || !after) return false;
+    const strip = r => {
+      const c = JSON.parse(JSON.stringify(r));
+      delete c.rawChatLog;
+      if (c.source) delete c.source.parsedAt;
+      delete c.colorCoverageFromTurn;
+      (c.turns || []).forEach(t => (t.events || []).forEach(e => { delete e.cardId; delete e.pitch; }));
+      return JSON.stringify(c);
+    };
+    if (strip(before) !== strip(after)) return false;
+    const colored = r => {
+      let n = 0;
+      (r.turns || []).forEach(t => (t.events || []).forEach(e => { if (e.cardId) n++; }));
+      return n;
+    };
+    if (colored(after) < colored(before)) return false;
+    const cov = r => (r.colorCoverageFromTurn == null ? 0 : r.colorCoverageFromTurn);
+    return !(cov(before) === 0 ? cov(after) !== 0 : cov(after) > cov(before));
   }
 
   // Combats : attaque/défense EFFECTIVES (buffs compris) captées par le grabber
@@ -1560,5 +1652,5 @@
     return (q && q.length) ? q.shift() : null;
   }
 
-  return { SCHEMA_VERSION, PARSER_VERSION, parse, classifyLine, formatDuration, EQ_SLOTS, normName, pitchFromCardId, computeGameStats, heroCardMatch };
+  return { SCHEMA_VERSION, PARSER_VERSION, parse, classifyLine, formatDuration, EQ_SLOTS, normName, pitchFromCardId, computeGameStats, heroCardMatch, compactRawChatLog, compactChatLogArray, canReplaceRaw };
 });

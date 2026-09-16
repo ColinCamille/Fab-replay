@@ -1714,12 +1714,18 @@ console.log('Grabber merge —');
   // On extrait la fonction PURE mergeLines du userscript (sans exécuter le boot
   // navigateur) et on la teste sur des séquences d'instantanés.
   const src = fs.readFileSync(path.join(__dirname, '..', 'talishar-log-grabber.user.js'), 'utf8');
-  const start = src.indexOf('function mergeLines');
-  const braceStart = src.indexOf('{', start);
-  let depth = 0, end = braceStart;
-  for (; end < src.length; end++) { const c = src[end]; if (c === '{') depth++; else if (c === '}' && --depth === 0) { end++; break; } }
-  const mergeLines = eval('(' + src.slice(start, end) + ')');
-  const run = seq => { let cap = []; seq.forEach(v => { cap = mergeLines(cap, v).lines; }); return cap; };
+  // Extrait le code source d'une fonction déclarée dans le userscript.
+  const grab = name => {
+    const start = src.indexOf('function ' + name);
+    const braceStart = src.indexOf('{', start);
+    let depth = 0, end = braceStart;
+    for (; end < src.length; end++) { const c = src[end]; if (c === '{') depth++; else if (c === '}' && --depth === 0) { end++; break; } }
+    return src.slice(start, end);
+  };
+  // mergeLines s'appuie sur containsBlock → on évalue les deux dans la même portée.
+  const mergeLines = eval('(function(){' + grab('mergeLines') + '\n' + grab('containsBlock') + '\nreturn mergeLines;})()');
+  const stripTxt = eval('(' + grab('stripHtmlText') + ')');
+  const run = (seq, keyFn) => { let cap = []; seq.forEach(v => { cap = mergeLines(cap, v, keyFn).lines; }); return cap; };
 
   // Démarrage à vide.
   eq(mergeLines([], ['a', 'b']).lines.join('|'), 'a|b', 'merge: captured vide → adopte visible');
@@ -1749,6 +1755,26 @@ console.log('Grabber merge —');
   eq(run([w1, w1, w2, w3]).join('|'),
     '[[TURN_START:1:1]]|P1 played Foo|P1 pitched Bar|[[TURN_START:2:1]]|P2 played Baz|[[TURN_START:3:1]]',
     'raw: fenêtres chatLog glissantes recousues → chatLog complet (tous tours)');
+
+  // ── chatLog BRUT (HTML) : Talishar REGÉNÈRE le HTML à chaque poll et l'image du
+  // héros change quand il se transforme (Arakni) → comparer le HTML faisait passer
+  // des entrées déjà vues pour du neuf : tout le journal était ré-empilé à chaque
+  // tick (logs de 15 Mo). On compare donc sur le TEXTE.
+  const htmlLine = (txt, img) => "<span onmouseover=\"ShowDetail(event,'./WebpImages/" + img + ".webp')\">" + txt + '</span>';
+  const r1 = [htmlLine('Arakni activated', 'arakni'), htmlLine('P1 played Foo', 'foo_red')];
+  // Même journal, mais le héros s'est transformé → l'URL d'image change partout.
+  const r2 = [htmlLine('Arakni activated', 'arakni_orb_weaver'), htmlLine('P1 played Foo', 'foo_red'),
+              htmlLine('P1 played Bar', 'bar_blue')];
+  const merged = run([r1, r1, r2, r2, r1], stripTxt);
+  eq(merged.length, 3, 'raw HTML : héros transformé (URL d’image changée) → aucune duplication');
+  eq(merged.map(stripTxt).join('|'), 'Arakni activated|P1 played Foo|P1 played Bar',
+    'raw HTML : le contenu reste le journal complet, une seule fois');
+  // Sans clé de comparaison, le même scénario empilerait tout (garde du bug).
+  assert(run([r1, r2, r1, r2]).length > 3, 'raw HTML : comparaison brute (sans clé) → c’était bien ça le bug');
+
+  // Fenêtre en RETARD (déjà entièrement contenue dans l'accumulé) → rien à ajouter.
+  eq(mergeLines(['a', 'b', 'c', 'd'], ['b', 'c']).lines.join('|'), 'a|b|c|d',
+    'merge: fenêtre déjà contenue → aucun ré-empilement');
 
   // ── stitchAdopt : adoption du chatLog sans perdre les 1ers tours (anti-troncature).
   const sa0 = src.indexOf('function stitchAdopt');
@@ -1919,6 +1945,20 @@ eq(DB.normalizeTags('mono').length, 1, 'normalizeTags: chaîne unique → 1 tag'
 eq(DB.normalizeTags(null).length, 0, 'normalizeTags: null → []');
 eq(DB.normalizeTags(['', '   ']).length, 0, 'normalizeTags: entrées vides ignorées');
 assert(typeof DB.setMeta === 'function', 'DB.setMeta exposé');
+
+// slimEntry : forme STOCKÉE d'une entrée. Le log brut part dans son propre store
+// et `record.rawChatLog` (utile seulement au parsing) n'est pas persisté — sans
+// ça, afficher le dashboard relisait des centaines de Mo pour rien.
+(function () {
+  const entry = { gameId: '908070', record: Object.assign({}, rec, { rawChatLog: ['<span>x</span>'] }), raw: raw, tags: ['gone'] };
+  const slim = DB.slimEntry(entry);
+  eq(slim.raw, undefined, 'slimEntry: le log brut n’est pas stocké dans l’entrée');
+  eq(slim.hasRaw, true, 'slimEntry: hasRaw mémorise qu’un log brut existe');
+  eq(slim.record.rawChatLog, undefined, 'slimEntry: record.rawChatLog n’est pas persisté');
+  eq(slim.tags.join(','), 'gone', 'slimEntry: le reste de l’entrée est intact');
+  assert(entry.raw === raw && entry.record.rawChatLog.length === 1, 'slimEntry: l’entrée d’origine n’est pas modifiée');
+  eq(DB.slimEntry({ gameId: 'x', record: rec }).hasRaw, false, 'slimEntry: sans log brut → hasRaw faux');
+})();
 
 // ---------- 4. Export / Import (sauvegarde multi-appareils) ----------
 console.log('Export/Import —');
@@ -2341,6 +2381,73 @@ console.log('Stats par partie —');
   eq(dOf(gsNoBlock, 'opp'), 0, 'computeGameStats: pas de reset sans marqueur');
   // Pas de Valiant Dynamo → liste dynamo vide.
   eq(Parser.computeGameStats(gsRec).dynamo.length, 0, 'computeGameStats: pas de Dynamo → dynamo vide');
+})();
+
+// ---------- Compaction du bloc RAW CHATLOG (logs gonflés par le grabber ≤ 1.28) ----------
+// Reproduit le bug : fenêtres chatLog recousues en comparant du HTML que Talishar
+// régénère (URL d'image du héros qui change à la transformation) → l'ancien
+// grabber ré-empilait toute la fenêtre à chaque tick (jusqu'à 68 copies mesurées
+// sur une vraie partie de 15 Mo). compactRawChatLog doit rendre le journal
+// d'origine, sans rien changer au record parsé.
+console.log('Compaction chatLog brut —');
+(function () {
+  const heroImg = form => sd(form, 'Arakni');
+  // Journal « vrai » : 40 entrées, dont des lignes qui citent le héros.
+  const trueLog = form => {
+    const out = ['[[TURN_START:1:1]]'];
+    for (let i = 0; i < 39; i++) {
+      out.push(i % 5 === 0 ? ('Player 1 activated ' + heroImg(form))
+        : i % 3 === 0 ? 'Player 1 passed'
+        : ('Player 1 played ' + sd('card_' + i + '_red', 'Card ' + i)));
+    }
+    return out;
+  };
+  // Fenêtres glissantes bornées (tampon Talishar), avec transformation du héros à
+  // mi-partie → toutes les entrées suivantes sont RE-RENDUES avec la nouvelle URL.
+  const windows = [];
+  for (let end = 20; end <= 40; end += 5) {
+    const form = end <= 25 ? 'arakni' : 'arakni_orb_weaver';
+    windows.push(trueLog(form).slice(Math.max(0, end - 20), end));
+  }
+  // Ancien comportement fautif : concaténation de chaque fenêtre.
+  let bloated = [];
+  windows.forEach(w => { bloated = bloated.concat(w); });
+  assert(bloated.length > 40 * 2, 'compaction : le journal gonflé est bien un empilement (' + bloated.length + ' entrées pour 40)');
+
+  const compact = Parser.compactChatLogArray(bloated);
+  const strip = x => String(x).replace(/<[^>]+>/g, '');
+  eq(compact.map(strip).join('|'), trueLog('arakni').map(strip).join('|'),
+    'compaction : les recopies sont retirées, le journal d’origine est restitué');
+
+  // Sur le .txt complet : le record re-parsé doit être IDENTIQUE (c’est la
+  // garantie exigée avant de remplacer quoi que ce soit).
+  const body = "Arakni's turn 1 has begun.\n" + trueLog('arakni').slice(1).map(strip)
+    .map(l => l.replace(/^Player 1 /, 'Arakni ')).join('\n') + '\n';
+  const txt = '=== Talishar game 77 — test ===\n\n' + body
+    + '\n=== RAW CHATLOG (state.game.chatLog, verbatim) ===\n' + JSON.stringify(bloated) + '\n';
+  const slimTxt = Parser.compactRawChatLog(txt);
+  assert(slimTxt.length < txt.length / 2, 'compaction : le .txt maigrit fortement');
+  // Le bloc RAW CHATLOG ne sert QU'AUX COULEURS (le déroulé vient du journal
+  // texte, que la compaction ne touche pas) : la structure doit être identique,
+  // et aucune couleur ne doit être perdue → c'est le feu vert canReplaceRaw.
+  const recBefore = Parser.parse(txt), recAfter = Parser.parse(slimTxt);
+  assert(Parser.canReplaceRaw(recBefore, recAfter), 'compaction : feu vert (structure identique, aucune couleur perdue)');
+  const evOf = (r, idx) => r.turns[1].events[idx];
+  eq(evOf(recAfter, 0).text, evOf(recBefore, 0).text, 'compaction : le déroulé est inchangé');
+  // Bonus : les recopies décalaient les files de couleurs → la forme du héros
+  // d'après-transformation était perdue. Compactée, elle est correcte.
+  eq(evOf(recAfter, 25).cardId, 'arakni_orb_weaver', 'compaction : couleurs/formes réalignées (l’empilement les décalait)');
+  eq(evOf(recBefore, 25).cardId, 'arakni', 'compaction : (avant) le journal gonflé collait la forme d’origine');
+  // Un log compacté à la MAIN qui perdrait des couleurs doit être REFUSÉ.
+  const loseColors = JSON.parse(JSON.stringify(recAfter));
+  loseColors.turns[1].events.forEach(e => { delete e.cardId; });
+  assert(!Parser.canReplaceRaw(recAfter, loseColors), 'canReplaceRaw : refuse une version qui perd des couleurs');
+  const loseTurn = JSON.parse(JSON.stringify(recAfter));
+  loseTurn.turns[1].events.splice(3, 1);
+  assert(!Parser.canReplaceRaw(recAfter, loseTurn), 'canReplaceRaw : refuse une version qui perd un événement');
+  // Rien à compacter → texte inchangé (aucune écriture inutile).
+  eq(Parser.compactRawChatLog(slimTxt), slimTxt, 'compaction : log déjà propre → inchangé');
+  eq(Parser.compactRawChatLog('pas de bloc'), 'pas de bloc', 'compaction : sans bloc RAW CHATLOG → inchangé');
 })();
 
 // ---------- Bilan ----------
