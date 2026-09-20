@@ -1956,8 +1956,12 @@ console.log('Grabber merge —');
   // localStorage et les constantes/variables qu'elles référencent.
   const LS_META_PREFIX = 'taliMeta_';
   const LS_ALL_PREFIXES = ['taliLog_', 'taliHand_', 'taliHandTl_', 'taliArsenal_', 'taliOppArs_',
-    'taliField_', 'taliFieldTl_', 'taliGrave_', 'taliBanish_', 'taliLife_', 'taliMeta_',
+    'taliField_', 'taliFieldTl_', 'taliGrave_', 'taliBanish_', 'taliSoul_', 'taliLife_', 'taliMeta_',
     'taliTs_', 'taliEnd_', 'taliChain_', 'taliHeroForm_', 'taliEqCtr_', 'taliRawChat_'];
+  // Doit rester le miroir de LS_ALL_PREFIXES du userscript (sinon une purge
+  // laisserait des clés derrière elle).
+  eq(LS_ALL_PREFIXES.length, (src.match(/const LS_[A-Z_]*PREFIX = '/g) || []).length,
+    'purge: le faux store liste TOUS les préfixes du userscript');
   let gameName = 'g_current';
   const store = {};
   const localStorage = {
@@ -1967,9 +1971,20 @@ console.log('Grabber merge —');
     setItem(k, v) { store[k] = String(v); },
     removeItem(k) { delete store[k]; },
   };
+  // Budget en octets (v1.30) : constantes/état référencés par les fonctions eval'ées.
+  const MAX_LS_BYTES = 1500000;
+  const BUDGET_THROTTLE_MS = 10000;
+  let lastBudgetAt = 0;
+  let overBudget = false;
   const storedGameNames = evalFn('storedGameNames');
   const removeGame = evalFn('removeGame');
+  const capturedAtOf = evalFn('capturedAtOf');
   const purgeOldGames = evalFn('purgeOldGames');
+  const lsBytesOf = evalFn('lsBytesOf');
+  const grabberBytes = evalFn('grabberBytes');
+  const gameBytes = evalFn('gameBytes');
+  const enforceBudget = evalFn('enforceBudget');
+  const sweepOrphanKeys = evalFn('sweepOrphanKeys');
 
   // Fabrique une partie stockée : toutes les clés de préfixes + méta horodatée.
   const seedGame = (gn, iso) => {
@@ -1998,6 +2013,95 @@ console.log('Grabber merge —');
   // Purge agressive (keep 0) : ne garde QUE la partie courante.
   purgeOldGames(0);
   eq(storedGameNames().join(','), 'g_current', 'purge agressive (0): seule la partie courante subsiste');
+
+  // ── Plafond en OCTETS (v1.30). Le nb de parties ne suffit pas : le quota (~5 Mo)
+  // est PARTAGÉ avec l'app Talishar, donc 8 parties longues l'épuisaient et c'était
+  // TALISHAR qui n'arrivait plus à écrire (« exceeded the quota » sur
+  // sessionRecoveryDismissed_*) pendant que nos écritures passaient encore.
+  const reset = () => { for (const k of Object.keys(store)) delete store[k]; lastBudgetAt = 0; overBudget = false; };
+  // Partie de `chars` caractères utiles (poids compté en UTF-16 → ×2 octets).
+  const seedBig = (gn, iso, chars) => {
+    seedGame(gn, iso);
+    store['taliRawChat_' + gn] = 'x'.repeat(chars);
+  };
+
+  reset();
+  eq(lsBytesOf('taliLog_absent'), 0, 'octets: clé absente → 0');
+  store.taliLog_x = 'abcd';
+  eq(lsBytesOf('taliLog_x'), ('taliLog_x'.length + 4) * 2, 'octets: (clé + valeur) × 2 (UTF-16)');
+  reset();
+
+  // 10 parties de ~200 Ko (100 000 caractères) = ~2 Mo → au-dessus du budget.
+  for (let i = 1; i <= 9; i++) seedBig('g' + i, '2026-01-' + String(i).padStart(2, '0') + 'T00:00:00Z', 100000);
+  seedBig('g_current', '2026-02-01T00:00:00Z', 100000);
+  eq(grabberBytes() > MAX_LS_BYTES, true, 'budget: 10 parties de ~200 Ko dépassent le plafond');
+  eq(Math.abs(gameBytes('g1') - 200000) < 2000, true, 'budget: gameBytes ≈ 200 Ko pour une partie de 100k caractères');
+  const cut = enforceBudget(false);
+  eq(cut, 3, 'budget: purge des 3 parties les plus anciennes (juste assez pour repasser sous le plafond)');
+  eq(grabberBytes() <= MAX_LS_BYTES, true, 'budget: empreinte revenue sous ~1,5 Mo');
+  eq(storedGameNames().includes('g1'), false, 'budget: g1 (la plus ancienne) purgée');
+  eq(storedGameNames().includes('g_current'), true, 'budget: la partie courante est épargnée');
+  eq(overBudget, false, 'budget: plus de dépassement → pas d’alerte canari');
+
+  // Throttle : un 2e appel immédiat ne remesure rien (la mesure relit tout le store).
+  for (let i = 20; i <= 29; i++) seedBig('h' + i, '2026-03-' + String(i - 19).padStart(2, '0') + 'T00:00:00Z', 100000);
+  eq(enforceBudget(true), 0, 'budget: appel throttlé juste après → aucune purge');
+  eq(enforceBudget(false) > 0, true, 'budget: appel non throttlé → purge effective');
+
+  // Une SEULE partie plus lourde que le budget : on ne la supprime pas (c'est la
+  // partie en cours), on signale la persistance dégradée via le canari.
+  reset();
+  seedBig('g_current', '2026-02-01T00:00:00Z', 2000000);    // ~4 Mo
+  eq(enforceBudget(false), 0, 'budget: rien à purger quand seule la partie courante est stockée');
+  eq(storedGameNames().join(','), 'g_current', 'budget: la partie courante n’est JAMAIS supprimée');
+  eq(overBudget, true, 'budget: dépassement signalé (canari → persistance locale dégradée)');
+
+  // Hors page de partie (démarrage sur l'accueil : gameName vide) : la partie la
+  // plus RÉCEMMENT capturée est protégée (elle peut être en cours dans un autre onglet).
+  reset();
+  gameName = '';
+  seedBig('old1', '2026-01-01T00:00:00Z', 900000);
+  seedBig('old2', '2026-01-02T00:00:00Z', 900000);
+  seedBig('recent', '2026-01-03T00:00:00Z', 900000);
+  enforceBudget(false);
+  eq(storedGameNames().join(','), 'recent', 'budget: hors partie, seule la plus récente est protégée');
+  gameName = 'g_current';
+
+  // Clés orphelines (pas de taliMeta_) : invisibles à storedGameNames donc jamais
+  // purgeables → c'était une fuite définitive quand une écriture était interrompue
+  // par un quota saturé (taliMeta_ était écrite en 13e position avant v1.30).
+  reset();
+  seedGame('vivante', '2026-01-01T00:00:00Z');
+  seedGame('orpheline', '2026-01-02T00:00:00Z');
+  delete store['taliMeta_orpheline'];
+  const swept = sweepOrphanKeys();
+  eq(swept, LS_ALL_PREFIXES.length - 1, 'orphelines: toutes les clés sans taliMeta_ sont retirées');
+  eq(Object.keys(store).some(k => k.endsWith('orpheline')), false, 'orphelines: plus aucune clé de la partie orpheline');
+  eq(storedGameNames().join(','), 'vivante', 'orphelines: la partie indexée est intacte');
+  eq(LS_ALL_PREFIXES.every(p => p + 'vivante' in store), true, 'orphelines: aucune clé de la partie saine supprimée');
+
+  // writeAll écrit taliMeta_ EN PREMIER : si le quota interrompt l'écriture, la
+  // partie reste INDEXÉE, donc purgeable (plus d'orphelines). On simule un quota
+  // qui casse à la 3e écriture.
+  reset();
+  let writes = 0;
+  const realSet = localStorage.setItem;
+  localStorage.setItem = (k, v) => { if (++writes === 3) throw new Error('QuotaExceededError'); realSet.call(localStorage, k, v); };
+  const captured = [], handSnapshots = {}, handTimeline = [], arsenalSnapshots = {}, oppArsenalSnapshots = {};
+  const fieldSnapshots = {}, fieldTimeline = [], graveSnapshots = {}, banishSnapshots = {}, soulSnapshots = {};
+  const heroFormSnapshots = {}, equipCounterSnapshots = {}, lifeSnapshots = {}, tsBatches = [], chainLinks = [];
+  const capturedRaw = [], endStats = null, meta = { capturedAt: '2026-02-01T00:00:00Z' };
+  const LS_PREFIX = 'taliLog_', LS_HAND_PREFIX = 'taliHand_', LS_HANDTL_PREFIX = 'taliHandTl_';
+  const LS_ARSENAL_PREFIX = 'taliArsenal_', LS_OPPARS_PREFIX = 'taliOppArs_', LS_FIELD_PREFIX = 'taliField_';
+  const LS_FIELDTL_PREFIX = 'taliFieldTl_', LS_GRAVE_PREFIX = 'taliGrave_', LS_BANISH_PREFIX = 'taliBanish_';
+  const LS_SOUL_PREFIX = 'taliSoul_', LS_HEROFORM_PREFIX = 'taliHeroForm_', LS_EQCTR_PREFIX = 'taliEqCtr_';
+  const LS_LIFE_PREFIX = 'taliLife_', LS_TS_PREFIX = 'taliTs_', LS_CHAIN_PREFIX = 'taliChain_';
+  const LS_RAWCHAT_PREFIX = 'taliRawChat_', LS_ENDSTATS_PREFIX = 'taliEnd_';
+  const writeAll = evalFn('writeAll');
+  eq(writeAll(), false, 'writeAll: quota saturé → false (jamais d’exception vers Talishar)');
+  localStorage.setItem = realSet;
+  eq(storedGameNames().join(','), 'g_current', 'writeAll: taliMeta_ écrite en 1er → la partie reste purgeable même écriture interrompue');
+  eq(purgeOldGames(0) >= 0, true, 'writeAll: la purge peut nettoyer la partie interrompue');
 })();
 
 // ---------- 3. Clé DB ----------

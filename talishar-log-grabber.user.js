@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.29.0
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). v1.28 : SOUL — capte la zone « soul » par tour (nombre de cartes des 2 camps via playerX.SoulCount, + noms si révélés) pour les héros à soul (Boltyn, Breaker of Dawn…) → la vue Table l'affiche. Export texte / téléchargement + localStorage.
+// @version      1.30.0
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). v1.28 : SOUL — capte la zone « soul » par tour (nombre de cartes des 2 camps via playerX.SoulCount, + noms si révélés) pour les héros à soul (Boltyn, Breaker of Dawn…) → la vue Table l'affiche. v1.30 : PLAFOND EN OCTETS du localStorage (~1,5 Mo pour nous) appliqué à chaque chargement de talishar.net, même hors partie — le quota (~5 Mo) est PARTAGÉ avec Talishar : quand on le remplit, c'est LUI qui casse (« exceeded the quota » sur sessionRecoveryDismissed_*) pendant que nos écritures passent encore, donc borner un NOMBRE de parties (v1.27) ne suffisait pas ; on ne garde plus que 2 parties (aucune UI ne lit les autres, elles sont déjà sur le compte), taliMeta_ est écrite EN PREMIER (une partie reste toujours purgeable) et les clés orphelines des écritures interrompues sont balayées. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.29.0';
+  const VERSION = '1.30.0';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -52,7 +52,18 @@
   // anciennes sont purgées (leur source de vérité est déjà le compte Supabase).
   // Borne l'empreinte localStorage pour ne PAS saturer le quota (~5 Mo) partagé
   // avec l'app Talishar elle-même (sinon : « exceeded the quota » côté Talishar).
-  const KEEP_RECENT_GAMES = 8;
+  // 2 suffit : AUCUNE UI du grabber ne lit une autre partie que la courante
+  // (loadExisting ne lit que gameName) ; on garde une partie de marge pour le
+  // rechargement/reconnexion d'une partie en cours.
+  const KEEP_RECENT_GAMES = 2;
+  // Plafond en OCTETS de toutes nos clés tali* (le compte de parties ne suffit
+  // pas : une seule partie longue pèse déjà des centaines de Ko). ~1,5 Mo pour
+  // nous → il reste ~3,5 Mo du quota (~5 Mo) à Talishar, qui écrit ses propres
+  // clés (sessionRecoveryDismissed_*, …) sur la MÊME origine : quand on remplit
+  // tout, c'est LUI qui casse (« exceeded the quota »), pas nous.
+  const MAX_LS_BYTES = 1500000;
+  // La mesure relit toutes nos valeurs → on ne la refait pas à chaque écriture.
+  const BUDGET_THROTTLE_MS = 10000;
 
   let captured = [];
   let lastVisibleSig = '';
@@ -67,6 +78,8 @@
   let capturedRaw = [];         // chatLog BRUT ACCUMULÉ à travers le tampon roulant (comme `captured` pour le texte) → couleurs COMPLÈTES, tous tours
   let canaryIssues = [];        // hypothèses Talishar cassées détectées à la capture
   let captureIssues = [];       // capture dégradée (ex. écran replay/résumé) → upload bloqué
+  let lastBudgetAt = 0;         // dernière mesure de l'empreinte localStorage (throttle)
+  let overBudget = false;       // empreinte hors budget malgré la purge → persistance locale dégradée
 
   let handSnapshots = {};
   // TIMELINE de MA main : un instantané { pos, cards } À CHAQUE CHANGEMENT (dédup —
@@ -405,6 +418,12 @@
       for (const l of captured) { const m = String(l).match(/'s turn (\d+) has begun\.$/) || String(l).match(/^turn (\d+)\s*\S/i); if (m) { ft = +m[1]; break; } }
       if (ft != null && ft > 1) issues.push('journal tronqué en tête (démarre au tour ' + ft + ' — 1ers tours hors tampon Talishar)');
     }
+    // Empreinte localStorage hors budget alors que toutes les AUTRES parties ont
+    // déjà été purgées (cf. enforceBudget) : cette seule partie dépasse notre part
+    // du quota → la persistance locale est dégradée (et Talishar risque à son tour
+    // « exceeded the quota »). La capture en mémoire, l'export ⬇ et l'envoi au
+    // compte, eux, ne sont PAS affectés.
+    if (overBudget) issues.push('localStorage saturé par cette seule partie (persistance locale dégradée)');
     canaryIssues = issues;
     if (issues.length && !runCanary._warned) {
       runCanary._warned = true;
@@ -589,28 +608,111 @@
     if (!gn) return;
     for (const p of LS_ALL_PREFIXES) { try { localStorage.removeItem(p + gn); } catch (e) {} }
   }
+  // Horodatage de capture d'une partie stockée (tri LRU). 0 si illisible.
+  function capturedAtOf(gn) {
+    try { const m = JSON.parse(localStorage.getItem(LS_META_PREFIX + gn) || '{}'); return Date.parse(m.capturedAt) || 0; }
+    catch (e) { return 0; }
+  }
   // Purge les parties les plus anciennes au-delà de KEEP_RECENT_GAMES, en
   // conservant toujours la partie courante. Tri LRU par meta.capturedAt (ISO).
   // Renvoie le nb de parties purgées.
   function purgeOldGames(keep) {
     const names = storedGameNames().filter(n => n && n !== gameName);
     if (names.length <= 0) return 0;
-    const tsOf = gn => {
-      try { const m = JSON.parse(localStorage.getItem(LS_META_PREFIX + gn) || '{}'); return Date.parse(m.capturedAt) || 0; }
-      catch (e) { return 0; }
-    };
-    names.sort((a, b) => tsOf(b) - tsOf(a));       // plus récentes d'abord
+    names.sort((a, b) => capturedAtOf(b) - capturedAtOf(a));   // plus récentes d'abord
     // On garde `keep` parties en plus de la courante ; le reste part.
     const doomed = names.slice(Math.max(0, keep));
     doomed.forEach(removeGame);
     return doomed.length;
   }
 
+  // ---- Plafond en OCTETS (le nb de parties ne suffit pas) --------------------
+  // Le quota localStorage (~5 Mo) est PARTAGÉ avec l'app Talishar : si on le
+  // remplit, c'est Talishar qui n'arrive plus à écrire ses propres clés (erreur
+  // « exceeded the quota » sur sessionRecoveryDismissed_*), pendant que nos
+  // écritures à nous passent encore (clés déjà existantes) — donc sans plafond
+  // explicite on ne s'en aperçoit jamais. On se borne à MAX_LS_BYTES.
+
+  // Poids d'une clé (UTF-16 : 2 octets/caractère, comme le comptent les navigateurs).
+  function lsBytesOf(key) {
+    try { const v = localStorage.getItem(key); return v == null ? 0 : (key.length + v.length) * 2; }
+    catch (e) { return 0; }
+  }
+  // Poids total de TOUTES nos clés tali* (une seule passe sur le localStorage).
+  function grabberBytes() {
+    let n = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && LS_ALL_PREFIXES.some(p => k.indexOf(p) === 0)) n += lsBytesOf(k);
+      }
+    } catch (e) {}
+    return n;
+  }
+  // Poids d'une partie (toutes ses clés).
+  function gameBytes(gn) {
+    if (!gn) return 0;
+    let n = 0;
+    for (const p of LS_ALL_PREFIXES) n += lsBytesOf(p + gn);
+    return n;
+  }
+  // Purge les parties les plus ANCIENNES jusqu'à repasser sous MAX_LS_BYTES.
+  // Épargne toujours (a) la partie courante et (b) la plus récemment capturée →
+  // on s'arrête sur elle même si elle dépasse à elle seule le budget (cas signalé
+  // par `overBudget` : persistance locale dégradée, capture/export intacts).
+  // `throttled` : ne mesure qu'une fois par BUDGET_THROTTLE_MS (la mesure relit
+  // toutes nos valeurs) — appel non throttlé pour le démarrage / un quota saturé.
+  function enforceBudget(throttled) {
+    const now = Date.now();
+    if (throttled && now - lastBudgetAt < BUDGET_THROTTLE_MS) return 0;
+    lastBudgetAt = now;
+    let bytes = grabberBytes();
+    if (bytes <= MAX_LS_BYTES) { overBudget = false; return 0; }
+    const all = storedGameNames();
+    all.sort((a, b) => capturedAtOf(b) - capturedAtOf(a));     // plus récentes d'abord
+    const spared = [gameName, all[0]].filter(Boolean);
+    const doomed = all.filter(n => spared.indexOf(n) < 0).reverse();   // plus anciennes d'abord
+    let purged = 0;
+    for (const gn of doomed) {
+      bytes -= gameBytes(gn);
+      removeGame(gn); purged++;
+      if (bytes <= MAX_LS_BYTES) break;
+    }
+    overBudget = bytes > MAX_LS_BYTES;
+    if (purged) console.log('[TLG] budget localStorage : ' + purged + ' partie(s) purgée(s) (~' + Math.round(bytes / 1024) + ' Ko restants) — déjà sauvegardées sur le compte');
+    if (overBudget) console.warn('[TLG] ⚠ la partie courante pèse à elle seule ~' + Math.round(bytes / 1024) + ' Ko : persistance locale dégradée (capture et envoi au compte non affectés)');
+    return purged;
+  }
+  // Clés d'une partie SANS sa clé taliMeta_ (= invisible à storedGameNames, donc
+  // jamais purgeable). Venait des écritures interrompues par un quota saturé
+  // avant v1.30, quand taliMeta_ n'était pas écrite en premier. Renvoie le nb de
+  // clés supprimées.
+  function sweepOrphanKeys() {
+    const keys = [];
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k) keys.push(k); } }
+    catch (e) { return 0; }
+    const known = {};
+    for (const gn of storedGameNames()) known[gn] = true;
+    let n = 0;
+    for (const k of keys) {
+      const p = LS_ALL_PREFIXES.find(pref => k.indexOf(pref) === 0);
+      if (!p || p === LS_META_PREFIX) continue;
+      if (known[k.slice(p.length)]) continue;
+      try { localStorage.removeItem(k); n++; } catch (e) {}
+    }
+    if (n) console.log('[TLG] ' + n + ' clé(s) orpheline(s) supprimée(s) du localStorage');
+    return n;
+  }
+
   function save() {
-    // 1re tentative ; si le quota localStorage est saturé (partagé avec l'app
-    // Talishar), on purge les vieilles parties et on réessaie une fois.
-    if (writeAll()) return;
+    // 1re tentative ; si elle passe, on vérifie tout de même (throttlé) qu'on
+    // reste sous notre part du quota — sans ça on ne verrait jamais qu'on affame
+    // Talishar, puisque NOS écritures continuent de réussir.
+    if (writeAll()) { enforceBudget(true); return; }
+    // Quota saturé : purge des vieilles parties (source de vérité = le compte)
+    // et nouvelle tentative.
     purgeOldGames(KEEP_RECENT_GAMES);
+    enforceBudget(false);
     if (writeAll()) return;
     // Toujours saturé : purge agressive (ne garder que la partie courante) et
     // dernier essai. En cas d'échec, on abandonne silencieusement (jamais de
@@ -620,6 +722,11 @@
   }
   function writeAll() {
     try {
+      // taliMeta_ EN PREMIER : c'est la clé d'index (storedGameNames) et le tri
+      // LRU. Si le quota interrompt l'écriture après elle, la partie reste
+      // listée donc purgeable ; écrite en dernier, ses autres clés devenaient
+      // des orphelines invisibles à la purge (fuite définitive).
+      localStorage.setItem(LS_META_PREFIX + gameName, JSON.stringify(meta));
       localStorage.setItem(LS_PREFIX + gameName, JSON.stringify(captured));
       localStorage.setItem(LS_HAND_PREFIX + gameName, JSON.stringify(handSnapshots));
       localStorage.setItem(LS_HANDTL_PREFIX + gameName, JSON.stringify(handTimeline));
@@ -633,7 +740,6 @@
       localStorage.setItem(LS_HEROFORM_PREFIX + gameName, JSON.stringify(heroFormSnapshots));
       localStorage.setItem(LS_EQCTR_PREFIX + gameName, JSON.stringify(equipCounterSnapshots));
       localStorage.setItem(LS_LIFE_PREFIX + gameName, JSON.stringify(lifeSnapshots));
-      localStorage.setItem(LS_META_PREFIX + gameName, JSON.stringify(meta));
       localStorage.setItem(LS_TS_PREFIX + gameName, JSON.stringify(tsBatches));
       localStorage.setItem(LS_CHAIN_PREFIX + gameName, JSON.stringify(chainLinks));
       localStorage.setItem(LS_RAWCHAT_PREFIX + gameName, JSON.stringify(capturedRaw));
@@ -1111,8 +1217,10 @@
         loadExisting();
         // Nouvelle partie : on borne l'empreinte localStorage en purgeant les
         // parties anciennes (déjà sauvegardées côté compte) → évite de saturer
-        // le quota partagé avec l'app Talishar.
+        // le quota partagé avec l'app Talishar. Puis plafond en octets (une
+        // partie longue pèse à elle seule des centaines de Ko).
         purgeOldGames(KEEP_RECENT_GAMES);
+        enforceBudget(false);
         updateUI();
       }
       // SPECTATEUR (playerID 3) : on ne capture ni n'envoie RIEN — sinon la partie
@@ -1953,6 +2061,13 @@
 
   // ============ Démarrage ============
   gameName = currentGameName();
+  // Ménage AVANT tout : orphelines, parties anciennes, plafond en octets. Fait à
+  // CHAQUE chargement de page talishar.net (même hors partie : accueil,
+  // deckbuilder…) → un utilisateur dont le localStorage est déjà saturé par nos
+  // vieilles clés est débloqué immédiatement, sans attendre une nouvelle partie.
+  sweepOrphanKeys();
+  purgeOldGames(KEEP_RECENT_GAMES);
+  enforceBudget(false);
   loadExisting();
   ensureUI();
 
