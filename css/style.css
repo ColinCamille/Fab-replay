@@ -1431,6 +1431,10 @@ footer a{color:var(--text-dim)}
 /* Défausse provoquée par la carte (ex. Golden Tipple) : même gabarit que le pitch, teinte « défausse » (gris/rouge sourd). */
 .br-discard-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#d79a9a;background:#2a171755;border:1px solid #63393966;padding:1px 7px;margin-top:2px;
   max-width:200px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center;border-radius:12px}
+/* Carte révélée par l'effet de la carte (ex. Ravenous Rabble révèle le dessus du deck) :
+   même gabarit que le pitch/la défausse, teinte « œil » (violet froid). */
+.br-reveal-pill{display:inline-flex;align-items:center;gap:4px;font:.62rem 'JetBrains Mono',monospace;color:#b8a6e8;background:#1f193355;border:1px solid #4a3d7066;padding:1px 7px;margin-top:2px;
+  max-width:200px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center;border-radius:12px}
 /* Prévention d'arcane : dégâts menacés (buffs compris) réduits par un pitch adverse. */
 .br-arc-prevent{margin-top:5px;font:.62rem 'JetBrains Mono',monospace;color:#c9a227;background:#3a2f0f55;border:1px solid #7a642855;border-radius:12px;padding:2px 8px;
   max-width:220px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;text-align:center}
@@ -1553,7 +1557,7 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-tokrow{gap:6px;max-width:300px}
   #boardReplay .br-tok{width:62px}
   #boardReplay .br-playone{max-width:100%}
-  #boardReplay .br-pitch-pill,#boardReplay .br-discard-pill{max-width:100%;white-space:normal;text-align:center}
+  #boardReplay .br-pitch-pill,#boardReplay .br-discard-pill,#boardReplay .br-reveal-pill{max-width:100%;white-space:normal;text-align:center}
   #boardReplay .br-big{font-size:1.5rem}
   #boardReplay .br-sub{font-size:.95rem}
   #boardReplay .br-cardrow{max-width:none}
