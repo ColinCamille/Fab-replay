@@ -83,7 +83,17 @@
     if ((m = line.match(/^Combat resolved with a hit for (\d+) damage$/))) return { type: 'combatResult', hit: true, amount: parseInt(m[1], 10), text: line };
     if ((m = line.match(/^🎯(.+?) was chosen as the target\.$/))) return { type: 'targeted', target: m[1], text: line };
     if ((m = line.match(/^(.+?)'s (.+?) was targeted(?: by (.+))?$/))) return { type: 'targetedSecondary', owner: m[1], card: m[2], text: line };
-    if ((m = line.match(/^👁️‍🗨️(.+?) reveals (.+)$/))) return { type: 'revealed', player: m[1], card: m[2], text: line };
+    // Révélation (« 👁️‍🗨️<joueur> reveals <Carte> », serveur : Deck::Reveal) :
+    // dessus du deck révélé par un effet (Ravenous Rabble à la déclaration
+    // d'attaque, clash…) ou carte montrée depuis la main. Variante quand c'est le
+    // deck ADVERSE qui est révélé : suffixe « from their opponent's deck! » — il
+    // doit être retiré du NOM (sinon la carte s'appelle « X from their opponent's
+    // deck! » et aucune image ne résout).
+    if ((m = line.match(/^👁️‍🗨️(.+?) reveals (.+?)( from their opponent's deck!)?$/))) {
+      const ev = { type: 'revealed', player: m[1], card: m[2], text: line };
+      if (m[3]) ev.fromOpponentDeck = true;
+      return ev;
+    }
     // Carte choisie par une capacité (ex. pouvoir d'Oscilio, Constella Intelligence :
     // « Card chosen: <carte> »). La ligne ne nomme pas le joueur → rattachée à
     // l'activation qui précède dans buildTimeline (annotation + retrait de la main).

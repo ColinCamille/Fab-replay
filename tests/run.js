@@ -996,6 +996,57 @@ const discActTl = BR.buildTimeline({
 const discActStep = discActTl.steps.map(s => s.stage).find(st => st.type === 'play' && st.act && st.card && st.card.nm === 'Gravy Bones, Shipwrecked Looter');
 assert(discActStep && (discActStep.discards || []).indexOf('Fiddler\'s Green') >= 0, 'défausse : annotée sur une capacité activée');
 
+// Révélation (« 👁️‍🗨️<joueur> reveals <Carte> ») : la carte révélée par un effet
+// (Ravenous Rabble révèle le dessus du deck à la déclaration d'attaque) est
+// annotée sur la carte responsable dans la vue Table.
+// (1) Parseur : nom propre, y compris la variante « deck adverse ».
+const revLine = Parser.classifyLine('👁️‍🗨️Me reveals Snatch');
+eq(revLine.type, 'revealed', 'révélation : ligne classée en « revealed »');
+eq(revLine.card, 'Snatch', 'révélation : nom de la carte révélée');
+const revOpp = Parser.classifyLine("👁️‍🗨️Me reveals Sigil of Solace from their opponent's deck!");
+eq(revOpp.card, 'Sigil of Solace', 'révélation : le suffixe « from their opponent\'s deck! » ne pollue pas le nom');
+eq(revOpp.fromOpponentDeck, true, 'révélation : deck adverse marqué');
+
+// (2) Table : carte d'ATTAQUE qui révèle (Ravenous Rabble) → annotation portée
+// par l'attaquant jusque dans l'échange (clash.atk.reveals).
+const revClashTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'X', equipment: {} }, opp: { hero: 'Y', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], grave: { me: [], opp: [] },
+      chain: [{ turn: 'Me#1', card: 'Ravenous Rabble', power: 5, defense: 2, kw: [] }],
+      events: [
+        { type: 'played', player: 'Me', card: 'Ravenous Rabble' },
+        { type: 'revealed', player: 'Me', card: 'Snatch' },
+        { type: 'damageTaken', player: 'Opp', amount: 3 },
+        { type: 'combatResult', hit: true, amount: 3 }
+      ] }
+  ]
+});
+const revClashStep = revClashTl.steps.map(s => s.stage).find(st => st.type === 'clash' && st.atk && st.atk.nm === 'Ravenous Rabble');
+assert(revClashStep && (revClashStep.atk.reveals || []).indexOf('Snatch') >= 0, 'révélation : annotée sur l\'attaquant dans l\'échange (clash)');
+
+// (3) Table : carte hors combat + révélation par l'ADVERSAIRE (clash, deck
+// adverse) → le héros du révélateur préfixe le nom, sinon on croirait que c'est
+// le joueur actif qui a révélé.
+const revPlayTl = BR.buildTimeline({
+  myName: 'Me', oppName: 'Opp',
+  players: { me: { hero: 'X', equipment: {} }, opp: { hero: 'Y', equipment: {} } },
+  lifeSeries: { me: [40, 40], opp: [40, 40] },
+  turns: [
+    { player: 'Me', label: 'Me — Tour 1', hand: [], arsenal: [], grave: { me: [], opp: [] },
+      events: [
+        { type: 'played', player: 'Me', card: 'Seek Horizon' },
+        { type: 'revealed', player: 'Me', card: 'Snatch' },
+        { type: 'revealed', player: 'Opp', card: 'Zipper Hit' }
+      ] }
+  ]
+});
+const revPlayStep = revPlayTl.steps.map(s => s.stage).find(st => st.type === 'play' && st.card && st.card.nm === 'Seek Horizon');
+assert(revPlayStep && (revPlayStep.reveals || []).indexOf('Snatch') >= 0, 'révélation : annotée sur la carte responsable (play)');
+assert(revPlayStep && (revPlayStep.reveals || []).indexOf('Y : Zipper Hit') >= 0, 'révélation adverse : préfixée par le héros qui révèle');
+
 // Arsenal adverse — chemin CAPTÉ : le compte du tour fait autorité.
 const arsCap = BR.buildTimeline({
   myName: 'Me', oppName: 'Opp',
