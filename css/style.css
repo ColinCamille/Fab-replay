@@ -1348,11 +1348,16 @@ footer a{color:var(--text-dim)}
 .br-counter.br-counter--neg{color:#fff;background:#c2413b;border-color:#00000066}
 .br-bump{animation:brBump .45s ease}
 @keyframes brBump{0%{transform:scale(1)}35%{transform:scale(1.18);box-shadow:0 0 10px #0006}100%{transform:scale(1)}}
-/* Bande centrale : PV (côté gauche) + piste de combat, entre les deux camps. */
-.br-mid{position:relative;display:flex;flex-direction:row;justify-content:center;align-items:stretch;gap:12px}
+/* Bande centrale : PV (côté gauche) + piste de combat, entre les deux camps.
+   padding-top = bande RÉSERVÉE à la pastille de tour : elle est en position
+   absolue et, sans cette réserve, elle recouvrait les tokens de l'adversaire
+   (et la carte jouée sur PC) — un nom de héros long la rend très large. */
+.br-mid{position:relative;display:flex;flex-direction:row;justify-content:center;align-items:stretch;gap:12px;
+  padding-top:18px}
 .br-turnchip{position:absolute;top:-4px;left:50%;transform:translateX(-50%);z-index:4;
   font:700 .56rem/1 'JetBrains Mono',monospace;color:#141414;background:var(--green);
-  border-radius:6px;padding:3px 9px;white-space:nowrap}
+  border-radius:6px;padding:3px 9px;white-space:nowrap;
+  max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis}
 .br-lane{position:relative;flex:1 1 auto;min-width:0;min-height:120px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:6px;padding:10px 10px;overflow:hidden;
   background:radial-gradient(80% 120% at 50% 50%,rgba(255,255,255,.04),transparent 72%)}
