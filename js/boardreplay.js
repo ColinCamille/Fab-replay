@@ -1069,17 +1069,25 @@
   // ============================================================
   // RENDU
   // ============================================================
+  // Les deux badges de compteur d'une tuile équipement/arme : charges (.br-counter)
+  // et compteurs de blocage « -1 » (.br-counter-def). Vides par défaut, remplis (ou
+  // pas) par applyEquipCounters() à chaque étape.
+  function counterBadges() {
+    return '<span class="br-counter" aria-hidden="true"></span>' +
+      '<span class="br-counter br-counter-def" aria-hidden="true"></span>';
+  }
   function gcard(side, slot, name, hero) {
     // data-equip = clé normalisée d'une pièce d'équipement (armure) : permet à
     // render() de la masquer quand elle est détruite. Le héros n'en porte pas.
-    // data-slot = emplacement (head/chest/arms/legs) : render() y pose le badge
-    // de compteur (Tunic 1/2/3, -1 counters…) capté par tour.
+    // data-slot = emplacement (head/chest/arms/legs) : render() y pose les badges
+    // de compteur captés par tour — charges (Tunic 1/2/3) en haut à droite et
+    // compteurs de blocage « -1 » (battleworn) en bas à droite.
     const equipped = !hero && name && name !== '—';
     const eqAttr = equipped ? ' data-equip="' + esc(norm(name)) + '"' : '';
     const slotAttr = equipped ? ' data-slot="' + esc(slot) + '"' : '';
     return '<div class="br-gcard br-' + side + ' p-' + slot + (hero ? ' br-hero' : '') + '"' + eqAttr + slotAttr + '>' +
       '<div class="br-art" data-card="' + esc(name) + '"' + (hero ? ' data-hero' : '') + '></div>' +
-      (equipped ? '<span class="br-counter" aria-hidden="true"></span>' : '') +
+      (equipped ? counterBadges() : '') +
       '<div class="br-lab">' + esc(name) + '</div></div>';
   }
   // Champ d'un joueur (tapis miroir) : rail cimetière·deck·pitch | héros entouré
@@ -1111,7 +1119,7 @@
     // — sinon deux dagues identiques (ex. deux « Hunter's Klaive ») partagent la
     // même clé et une seule destruction en masquerait deux (ou aucune).
     const wpnTile = (it, slot) => (it && it.name)
-      ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(rawKey(it)) + '" data-slot="' + esc(slot) + '"><div class="br-art" data-card="' + esc(it.name) + '"></div><span class="br-counter" aria-hidden="true"></span><div class="br-lab">' + esc(it.name) + '</div></div>'
+      ? '<div class="br-gcard br-' + side + ' br-wpn" data-equip="' + esc(rawKey(it)) + '" data-slot="' + esc(slot) + '"><div class="br-art" data-card="' + esc(it.name) + '"></div>' + counterBadges() + '<div class="br-lab">' + esc(it.name) + '</div></div>'
       : '';
     // Armes CRÉÉES en jeu (ex. Graphene Chelicera par le pouvoir d'Arakni,
     // Orb-Weaver) : absentes de l'équipement de départ, ajoutées par
@@ -1283,24 +1291,29 @@
         el.classList.toggle('br-used', !broken && used.indexOf(k) >= 0); // activé ce tour → grisé
       });
     }
-    // Compteurs d'équipement (Tunic 1/2/3, -1 counters…) : badge chiffré par
-    // slot, capté par tour. Positif → nombre nu (charges de Tunic) ; négatif →
-    // « -N » (counters). 0/absent → pas de badge (théâtre d'erreur : pas de
-    // fausse valeur). Réversible en scrubbant, comme applyEquipState().
+    // Compteurs d'équipement captés par tour, DEUX familles jamais mélangées :
+    // charges (clé « chest », badge haut-droite, Tunic 1/2/3…) et compteurs de
+    // BLOCAGE (clé « chest.def », badge bas-droite, « -1 » de battleworn).
+    // 0/absent → pas de badge (théâtre d'erreur : pas de fausse valeur).
+    // Réversible en scrubbant, comme applyEquipState().
     function applyEquipCounters(zoneSel, ctrMap) {
       const zone = $(zoneSel); if (!zone) return;
       const m = ctrMap || {};
-      zone.querySelectorAll('[data-slot]').forEach(el => {
-        const badge = el.querySelector('.br-counter'); if (!badge) return;
-        const v = m[el.getAttribute('data-slot')];
+      const paint = (badge, v) => {
+        if (!badge) return;
         if (v == null || v === 0) {
           badge.textContent = '';
           badge.classList.remove('br-counter--on', 'br-counter--neg');
         } else {
-          badge.textContent = String(v);              // « 3 » (Tunic) ou « -1 » (counter)
+          badge.textContent = String(v);              // « 3 » (Tunic) ou « -1 » (blocage)
           badge.classList.add('br-counter--on');
           badge.classList.toggle('br-counter--neg', v < 0);
         }
+      };
+      zone.querySelectorAll('[data-slot]').forEach(el => {
+        const slot = el.getAttribute('data-slot');
+        paint(el.querySelector('.br-counter:not(.br-counter-def)'), m[slot]);
+        paint(el.querySelector('.br-counter-def'), m[slot + '.def']);
       });
     }
     // Armes CRÉÉES en jeu (ex. Graphene Chelicera) : masquées (br-unborn) tant

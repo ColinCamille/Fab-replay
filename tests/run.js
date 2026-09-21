@@ -700,6 +700,21 @@ assert(eqTl.steps.every(s => s.state.meEquipCounters && Object.keys(s.state.meEq
   && s.state.oppEquipCounters && Object.keys(s.state.oppEquipCounters).length === 0),
   'compteur : bloc absent (vieux log) → maps vides, aucune erreur');
 
+// D. Compteurs de BLOCAGE « -1 » (battleworn, grabber ≥ v1.31) : clé « slot.def »,
+//    distincte des charges (« slot ») — les deux cohabitent sur le même slot.
+const defRaw = [
+  '=== Talishar game 902 — test ===', '',
+  "Me's turn 1 has begun.", 'Me played Card A', '',
+  '=== EQUIP COUNTERS (compteurs d\'équipement par tour : toi | adversaire) ===',
+  '[Me #1] me: chest=3, chest.def=-1 | opp: legs.def=-2, arms.def=-1', '',
+  '=== META ===', 'me: Me', 'opp: Opp', ''
+].join('\n');
+const defT1 = Parser.parse(defRaw).turns.find(t => t.turnNumber === 1);
+eq(defT1.equipCounters.me['chest.def'], -1, 'EQUIP COUNTERS : compteur de blocage -1 (clé pointée) lu');
+eq(defT1.equipCounters.me.chest, 3, 'EQUIP COUNTERS : charges du MÊME slot conservées à part');
+eq(defT1.equipCounters.opp['legs.def'], -2, 'EQUIP COUNTERS : blocage adverse à -2');
+eq(defT1.equipCounters.opp['arms.def'], -1, 'EQUIP COUNTERS : 2e slot adverse à -1');
+
 // ── Zone « SOUL » par tour (Boltyn, Breaker of Dawn…) ────────────────────────
 // A. Parser : le bloc SOUL SNAPSHOTS est extrait (nombre + noms si révélés) et
 //    rattaché par tour ; les noms sont optionnels (entre parenthèses).
@@ -2000,6 +2015,22 @@ console.log('Grabber merge —');
   // « your opponent » ne doit produire AUCUN issue de pseudo.
   const nameIssues = ['your opponent', 'SpicyNoodles'].filter(n => isUiGarbageName(n));
   eq(nameIssues.length, 0, 'régression 1946448: « your opponent » n’ajoute plus d’issue → envoi débloqué');
+
+  // ── Compteurs d'équipement (v1.31) : DEUX champs distincts sur l'objet-carte.
+  // `counters` = charges (Tunic…), `defCounters` = compteurs de BLOCAGE « -1 »
+  // (battleworn : CoreLogic.php fait `$equipCharacter[$i+4] -= 1`, sérialisé en
+  // defCounters par BuildGameState.php). Le bug : on ne lisait que `counters`
+  // → aucun « -1 » n'était capté et le bloc EQUIP COUNTERS disparaissait du log.
+  const equipCounterOf = eval('(function(){' + grab('asNum') + '\n' + grab('equipCounterOf') + '\nreturn equipCounterOf;})()');
+  const ctrOf = card => JSON.stringify(equipCounterOf(card));
+  eq(ctrOf({ counters: 0, defCounters: -1 }), '{"n":null,"def":-1}',
+    'compteurs: battleworn (defCounters=-1) capté même sans charges');
+  eq(ctrOf({ counters: 3 }), '{"n":3,"def":null}', 'compteurs: charges (Tunic=3) captées');
+  eq(ctrOf({ counters: 3, defCounters: -1 }), '{"n":3,"def":-1}',
+    'compteurs: charges et blocage coexistent sans être mélangés');
+  eq(equipCounterOf({ counters: 0, defCounters: 0 }), null, 'compteurs: 0/0 → null (pas de badge)');
+  eq(equipCounterOf({}), null, 'compteurs: objet sans compteur → null');
+  eq(equipCounterOf(undefined), null, 'compteurs: slot vide → null');
 
   // ── Purge LRU du localStorage (v1.27) : borne l'empreinte pour ne pas saturer
   // le quota partagé avec l'app Talishar (« exceeded the quota »). On extrait les
