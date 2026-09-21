@@ -1639,7 +1639,6 @@ footer a{color:var(--text-dim)}
      au centre. Moi (bloc du bas) : ordre naturel → compteur collé au centre,
      tokens DESSOUS. Les deux compteurs se rejoignent ainsi au milieu. */
   #boardReplay .br-liferow.br-opp{flex-direction:column-reverse}
-  #boardReplay.br-fs .br-liferow{flex:1 1 0}
   #boardReplay .br-life{width:100%;box-sizing:border-box;padding:4px 5px}
   #boardReplay .br-life-who{max-width:100%}
   /* flex:1 1 auto + min-height:0 + overflow-y:auto : la colonne de tokens est
