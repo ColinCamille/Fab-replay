@@ -1276,7 +1276,7 @@ footer a{color:var(--text-dim)}
 .br-rail{display:flex;flex-direction:column;gap:5px;align-items:center;flex:0 0 auto}
 /* Mobile : rail gauche en 2×2 (cimetière·deck / pitch·banni) → plus compact
    en hauteur, ce qui remonte les boutons et laisse la place au héros. */
-.br-rail.br-left{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:5px;align-content:center}
+.br-rail.br-left{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:calc(44px * 7 / 5);gap:5px;align-content:center}
 .br-rail.br-right{justify-self:end}
 .br-zpair{display:flex;flex-direction:column;align-items:center;gap:2px}
 .br-zlbl{font:600 .5rem/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);white-space:nowrap}
@@ -1287,7 +1287,7 @@ footer a{color:var(--text-dim)}
 .br-cluster>.br-equip{justify-self:end}
 .br-wpns{justify-self:start;display:flex;align-items:center;gap:5px}
 .br-wpns>.br-gcard{width:50px;aspect-ratio:5/7}
-.br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:4px}
+.br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:calc(44px * 7 / 5);gap:4px}
 /* Dimensions des tuiles — mobile (héros/équipement/arme agrandis). */
 .br-rail .br-slot,.br-rail .br-deck{width:44px;aspect-ratio:5/7;min-height:0;height:auto}
 .br-equip .br-gcard{width:44px;aspect-ratio:5/7}
@@ -1375,6 +1375,15 @@ footer a{color:var(--text-dim)}
    vie (adversaire en haut, toi en bas — miroir des PV). */
 .br-liferow{display:flex;flex-direction:row;align-items:center;gap:8px;min-width:0}
 .br-tokrow{display:flex;flex-direction:row;flex-wrap:wrap;gap:4px;align-items:center;max-width:230px}
+/* PLEIN ÉCRAN (mobile ET desktop) : là, la HAUTEUR pilote l'échelle de fitBoard,
+   qui n'est recalculée qu'au montage et au resize. Une pile de permanents un peu
+   fournie faisait donc grandir la bande APRÈS le calage et débordait de l'écran.
+   Les deux blocs se partagent strictement la hauteur de la bande (celle de la
+   piste, figée par stabilizeStage) et les tokens en trop défilent à l'intérieur :
+   la colonne PV ne peut plus agrandir le plateau. */
+#boardReplay.br-fs .br-lifeside>.br-liferow{flex:1 1 0;min-height:0}
+#boardReplay.br-fs .br-tokrow{min-height:0;align-self:stretch;overflow-y:auto;overflow-x:hidden;
+  align-content:flex-start;overscroll-behavior:contain;scrollbar-width:none}
 .br-tok{position:relative;width:40px;aspect-ratio:5/7;flex:0 0 auto;border-radius:7px;overflow:hidden;
   border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel))}
 .br-tok.br-opp{border-color:#8b6bff66} .br-tok.br-me{border-color:rgba(201,162,39,.5)}
@@ -1543,7 +1552,8 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-cluster>.br-gcard.br-hero{width:118px}
   #boardReplay .br-wpns>.br-gcard{width:92px}
   #boardReplay .br-lifetok{width:38px;height:38px;font-size:1rem;right:-11px;top:-11px}
-  #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm{font-size:.58rem;padding-top:10px}
+  #boardReplay .br-lab,#boardReplay .br-pcard .br-nm,#boardReplay .br-zcard .br-nm,
+  #boardReplay .br-tok .br-nm{font-size:.58rem;padding-top:10px}
 
   /* Piste de combat centrale : cartes nettement plus grandes (c'est le focus). */
   #boardReplay .br-mid{gap:16px}
@@ -1555,6 +1565,11 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-life-who{font-size:.56rem;max-width:120px}
   /* Desktop : tokens en ligne à droite du compteur de vie (place dispo). */
   #boardReplay .br-tokrow{gap:6px;max-width:300px}
+  /* La pastille « Tour N » est en surimpression au sommet de la bande
+     (.br-turnchip, top:-4px) : sur desktop les tokens adverses, en ligne à
+     droite du compteur, montaient jusque-là et passaient dessous. On décale
+     leur rangée sous la pastille. */
+  #boardReplay .br-liferow.br-opp .br-tokrow{padding-top:18px}
   #boardReplay .br-tok{width:62px}
   #boardReplay .br-playone{max-width:100%}
   #boardReplay .br-pitch-pill,#boardReplay .br-discard-pill,#boardReplay .br-reveal-pill{max-width:100%;white-space:normal;text-align:center}
@@ -1600,14 +1615,73 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-mat{order:1}
   #boardReplay .br-timeline{order:2}
   #boardReplay .br-toolbar{order:3;margin:12px 0 2px}
-  /* Plein écran mobile : la place verticale récupérée (plateau recentré) sert à
-     AGRANDIR les cartes du centre (attaque/défense/carte jouée) — le focus du
-     replay. Sizes vérifiées pour ne PAS élargir le plateau (l'échelle globale
-     reste inchangée) : la piste centrale est plus étroite que les champs. */
-  #boardReplay.br-fs .br-lane .br-pcard{width:92px}
-  #boardReplay.br-fs .br-lane .br-cardrow .br-pcard{width:64px}
-  #boardReplay.br-fs .br-lane .br-pcard.br-lg{width:132px}
-  #boardReplay.br-fs .br-cardrow{max-width:230px}
+  /* ---- Bande centrale : la largeur du tapis doit TOUJOURS être dictée par les
+     .br-field, JAMAIS par .br-mid. Le tapis est en width:max-content : dès qu'un
+     camp avait des tokens (affichés en ligne à droite du compteur), .br-mid
+     devenait la rangée la plus large (mesuré : 671px contre 429 pour les champs)
+     et élargissait le tapis, alors que fitBoard a verrouillé wrap.style.width sur
+     l'étape 0 (447px) → arsenal rogné / scroll horizontal.
+     contain:inline-size rend la largeur de .br-mid INDÉPENDANTE de son contenu :
+     elle est simplement étirée à la largeur du tapis, et la piste (flex) prend
+     tout ce qui reste. Mesuré à 390×844 : tapis 447, .br-mid 429, piste 321 —
+     CONSTANTS sur toutes les étapes et tous les nombres de tokens. */
+  #boardReplay .br-mid{contain:inline-size;--br-side-w:96px}
+  /* Colonne PV de largeur FIXE : les tokens passent EN COLONNE sous mon compteur
+     et au-dessus du compteur adverse (ils rayonnent vers l'extérieur, en miroir
+     du tapis) au lieu d'une ligne à droite qui volait jusqu'à 230px. */
+  #boardReplay .br-lifeside{width:var(--br-side-w);flex:0 0 var(--br-side-w);gap:6px;justify-content:center}
+  /* flex:1 1 auto (et non 1 1 0) : les deux blocs partent de leur hauteur
+     NATURELLE avant de se partager la place. Un camp à 5 permanents emprunte
+     donc à un camp qui n'en a aucun, au lieu d'être coupé dans sa moitié. */
+  #boardReplay .br-liferow{flex-direction:column;align-items:center;justify-content:flex-start;
+    gap:4px;width:100%;flex:1 1 auto;min-height:0}
+  /* Adversaire (bloc du haut) : ordre inversé → tokens AU-DESSUS, compteur collé
+     au centre. Moi (bloc du bas) : ordre naturel → compteur collé au centre,
+     tokens DESSOUS. Les deux compteurs se rejoignent ainsi au milieu. */
+  #boardReplay .br-liferow.br-opp{flex-direction:column-reverse}
+  #boardReplay .br-life{width:100%;box-sizing:border-box;padding:4px 5px}
+  #boardReplay .br-life-who{max-width:100%}
+  /* flex:1 1 auto + min-height:0 + overflow-y:auto : la colonne de tokens est
+     BORNÉE par la hauteur de la bande (.br-mid est en align-items:stretch, et
+     cette hauteur est figée par stabilizeStage) → en plein écran les tokens ne
+     peuvent plus gonfler natH et rétrécir tout le plateau. */
+  #boardReplay .br-tokrow{width:100%;max-width:none;gap:4px;justify-content:center;
+    align-content:flex-start;flex:1 1 auto;min-height:0;
+    overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none}
+  #boardReplay .br-liferow.br-opp .br-tokrow{align-content:flex-end}
+  #boardReplay .br-tok{width:44px}                        /* 2 par rangée dans 96px */
+  /* ≥3 tokens distincts : tuiles réduites → 3 par rangée, ça tient sans scroll
+     dans la demi-hauteur de la bande. */
+  #boardReplay .br-tokrow:has(.br-tok:nth-child(3)) .br-tok{width:29px}
+  #boardReplay .br-tokrow:has(.br-tok:nth-child(3)) .br-tok .br-nm{font-size:.38rem;
+    -webkit-line-clamp:3;padding-top:5px}
+
+  /* ---- Piste de combat : la largeur récupérée sert à AGRANDIR les cartes ----
+     Budget (pire cas = 1 arme) : 429 (contenu du tapis) − 96 (PV) − 12 (gap)
+     = 321px de piste, soit 301px utiles (padding 10+10 conservé pour que la
+     pastille ⚔ .br-pw, en top/left:-7px, ne soit pas rognée).
+     Mêmes tailles en fenêtré et en plein écran : la piste y fait désormais la
+     même largeur, donc un seul jeu de valeurs suffit. */
+  #boardReplay .br-lane{min-width:0}
+  #boardReplay .br-lane .br-pcard{width:90px}             /* attaquant : 66 → 90 */
+  #boardReplay .br-lane .br-cardrow .br-pcard{width:60px} /* bloqueurs/renforts : 50 → 60 */
+  #boardReplay .br-lane .br-reacts .br-pcard{width:50px}  /* réactions : 44 → 50 */
+  #boardReplay .br-lane .br-pcard.br-lg{width:140px}      /* carte jouée : 100 → 140 */
+  #boardReplay .br-cardrow{max-width:300px}
+  /* Dans la passe d'armes on borne en % (PAS en px) : les deux camps se partagent
+     la piste et les rangées s'enroulent → rognage structurellement impossible,
+     quelle que soit la largeur réelle du tapis (héros à 2 armes, grosse main…). */
+  #boardReplay .br-duel .br-side{min-width:0}
+  #boardReplay .br-duel .br-cardrow,
+  #boardReplay .br-pumps .br-cardrow,
+  #boardReplay .br-reacts .br-cardrow{max-width:100%}
+  #boardReplay .br-kwline{max-width:100%}
+  #boardReplay .br-pitch-pill,#boardReplay .br-discard-pill,
+  #boardReplay .br-reveal-pill,#boardReplay .br-arc-prevent{max-width:100%}
+  /* Étape terminale : .br-mid--end masque la colonne PV → la piste s'étend à
+     toute la bande ; max-width:100% pour que la bannière suive la piste au lieu
+     de son plafond fixe de 360px (qui dépasserait les 321px de la piste). */
+  #boardReplay .br-banner.br-end{max-width:100%}
 }
 
 /* ============================================================

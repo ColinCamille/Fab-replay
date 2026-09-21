@@ -5,6 +5,6 @@
   "private": true,
   "scripts": {
     "test": "node tests/run.js",
-    "check": "node --check talishar-parser.js && node --check js/images.js && node --check js/db.js && node --check js/sync.js && node --check js/replay.js && node --check js/dashboard.js"
+    "check": "node --check talishar-parser.js && node --check js/images.js && node --check js/db.js && node --check js/sync.js && node --check js/replay.js && node --check js/dashboard.js && node --check js/boardreplay.js && node --check js/cloud.js"
   }
 }

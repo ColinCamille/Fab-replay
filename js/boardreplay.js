@@ -1486,6 +1486,15 @@
       // que les PV (à sa gauche) restent collés au combat au lieu de flotter au
       // bord ; sur mobile elle remplit l'espace restant (flex) → largeur libre.
       const wide = !!(window.matchMedia && window.matchMedia('(min-width: 900px)').matches);
+      // L'étape TERMINALE masque la colonne PV (.br-mid--end) → la piste y est
+      // plus large, donc les passages à la ligne y sont différents. Si on mesure
+      // toutes les étapes avec cette classe active (rotation de l'écran alors
+      // qu'on est sur la dernière étape), les hauteurs sont sous-estimées et le
+      // contenu est rogné en revenant en arrière. On mesure donc TOUJOURS dans
+      // la géométrie « étape normale » ; le render(null) final repose la classe
+      // selon l'étape courante.
+      const midEl = container.querySelector('.br-mid');
+      if (midEl) midEl.classList.remove('br-mid--end');
       const savedH = stage.style.height, savedMin = stage.style.minHeight;
       stage.style.height = 'auto'; stage.style.minHeight = '0'; stage.style.width = 'auto';
       let maxH = 0, maxW = 0;
