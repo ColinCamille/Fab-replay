@@ -1276,7 +1276,7 @@ footer a{color:var(--text-dim)}
 .br-rail{display:flex;flex-direction:column;gap:5px;align-items:center;flex:0 0 auto}
 /* Mobile : rail gauche en 2×2 (cimetière·deck / pitch·banni) → plus compact
    en hauteur, ce qui remonte les boutons et laisse la place au héros. */
-.br-rail.br-left{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:5px;align-content:center}
+.br-rail.br-left{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:calc(44px * 7 / 5);gap:5px;align-content:center}
 .br-rail.br-right{justify-self:end}
 .br-zpair{display:flex;flex-direction:column;align-items:center;gap:2px}
 .br-zlbl{font:600 .5rem/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);white-space:nowrap}
@@ -1287,7 +1287,7 @@ footer a{color:var(--text-dim)}
 .br-cluster>.br-equip{justify-self:end}
 .br-wpns{justify-self:start;display:flex;align-items:center;gap:5px}
 .br-wpns>.br-gcard{width:50px;aspect-ratio:5/7}
-.br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:61px;gap:4px}
+.br-equip{display:grid;grid-template-columns:repeat(2,44px);grid-auto-rows:calc(44px * 7 / 5);gap:4px}
 /* Dimensions des tuiles — mobile (héros/équipement/arme agrandis). */
 .br-rail .br-slot,.br-rail .br-deck{width:44px;aspect-ratio:5/7;min-height:0;height:auto}
 .br-equip .br-gcard{width:44px;aspect-ratio:5/7}
@@ -1375,6 +1375,15 @@ footer a{color:var(--text-dim)}
    vie (adversaire en haut, toi en bas — miroir des PV). */
 .br-liferow{display:flex;flex-direction:row;align-items:center;gap:8px;min-width:0}
 .br-tokrow{display:flex;flex-direction:row;flex-wrap:wrap;gap:4px;align-items:center;max-width:230px}
+/* PLEIN ÉCRAN (mobile ET desktop) : là, la HAUTEUR pilote l'échelle de fitBoard,
+   qui n'est recalculée qu'au montage et au resize. Une pile de permanents un peu
+   fournie faisait donc grandir la bande APRÈS le calage et débordait de l'écran.
+   Les deux blocs se partagent strictement la hauteur de la bande (celle de la
+   piste, figée par stabilizeStage) et les tokens en trop défilent à l'intérieur :
+   la colonne PV ne peut plus agrandir le plateau. */
+#boardReplay.br-fs .br-lifeside>.br-liferow{flex:1 1 0;min-height:0}
+#boardReplay.br-fs .br-tokrow{min-height:0;align-self:stretch;overflow-y:auto;overflow-x:hidden;
+  align-content:flex-start;overscroll-behavior:contain;scrollbar-width:none}
 .br-tok{position:relative;width:40px;aspect-ratio:5/7;flex:0 0 auto;border-radius:7px;overflow:hidden;
   border:1px solid var(--line);background:linear-gradient(160deg,var(--panel-2),var(--panel))}
 .br-tok.br-opp{border-color:#8b6bff66} .br-tok.br-me{border-color:rgba(201,162,39,.5)}
@@ -1556,6 +1565,11 @@ footer a{color:var(--text-dim)}
   #boardReplay .br-life-who{font-size:.56rem;max-width:120px}
   /* Desktop : tokens en ligne à droite du compteur de vie (place dispo). */
   #boardReplay .br-tokrow{gap:6px;max-width:300px}
+  /* La pastille « Tour N » est en surimpression au sommet de la bande
+     (.br-turnchip, top:-4px) : sur desktop les tokens adverses, en ligne à
+     droite du compteur, montaient jusque-là et passaient dessous. On décale
+     leur rangée sous la pastille. */
+  #boardReplay .br-liferow.br-opp .br-tokrow{padding-top:18px}
   #boardReplay .br-tok{width:62px}
   #boardReplay .br-playone{max-width:100%}
   #boardReplay .br-pitch-pill,#boardReplay .br-discard-pill,#boardReplay .br-reveal-pill{max-width:100%;white-space:normal;text-align:center}
@@ -1625,9 +1639,6 @@ footer a{color:var(--text-dim)}
      au centre. Moi (bloc du bas) : ordre naturel → compteur collé au centre,
      tokens DESSOUS. Les deux compteurs se rejoignent ainsi au milieu. */
   #boardReplay .br-liferow.br-opp{flex-direction:column-reverse}
-  /* PLEIN ÉCRAN : là, la hauteur pilote l'échelle (fitBoard). On revient au
-     partage 50/50 strict → la colonne PV ne peut plus faire grandir la bande
-     (les piles très fournies défilent à l'intérieur) et le plateau reste grand. */
   #boardReplay.br-fs .br-liferow{flex:1 1 0}
   #boardReplay .br-life{width:100%;box-sizing:border-box;padding:4px 5px}
   #boardReplay .br-life-who{max-width:100%}
