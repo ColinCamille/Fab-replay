@@ -504,9 +504,12 @@
     return { rest, snapshots: out };
   }
 
-  // Compteurs d'ÉQUIPEMENT par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…),
-  // DEUX camps. Valeur = map slot -> entier signé (slots : head/chest/arms/legs/
-  // weaponL/weaponR). Format d'une ligne : [LABEL] me: weaponR=2, chest=1 | opp: legs=3
+  // Compteurs d'ÉQUIPEMENT par tour, DEUX camps. Valeur = map clé -> entier signé.
+  // Clé = slot (head/chest/arms/legs/weaponL/weaponR) pour les CHARGES (Tunic 1/2/3,
+  // jetons de vapeur…) ou slot + « .def » pour les compteurs de BLOCAGE « -1 »
+  // (battleworn ; grabber ≥ v1.31 — les deux familles viennent de deux champs
+  // distincts côté Talishar, cf. le grabber).
+  // Format d'une ligne : [LABEL] me: weaponR=2, chest=1 | opp: legs.def=-1
   // Bloc absent (vieux logs) → {} → aucun compteur (rétro-compat, pas d'erreur).
   function parseEquipCounterBlock(text, marker) {
     const out = {};
@@ -517,7 +520,7 @@
       const m = {};
       if (!s || /^\(aucun\)$/i.test(s.trim())) return m;
       s.split(',').map(x => x.trim()).filter(Boolean).forEach(tok => {
-        const mm = tok.match(/^(\w+)\s*=\s*(-?\d+)$/);
+        const mm = tok.match(/^([\w.]+)\s*=\s*(-?\d+)$/);
         if (mm) { const v = parseInt(mm[2], 10); if (isFinite(v)) m[mm[1]] = v; }
       });
       return m;
