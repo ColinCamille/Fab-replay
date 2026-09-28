@@ -304,14 +304,16 @@
   // sous #dashboardBody pour ne jamais entrer en collision avec le
   // reste de l'app (replay, header…).
   // ============================================================
-  let _entries = [], _onOpen = null, _onDelete = null, _onMeta = null, _built = false, _A = null, _L = null, _trendGeom = null;
+  let _entries = [], _onOpen = null, _onDelete = null, _onDeleteMany = null, _onMeta = null, _built = false, _A = null, _L = null, _trendGeom = null;
   // Lecture seule (vue « parties d'un ami ») : masque favori / tags / suppression.
   let _readOnly = false;
   const DEFAULT_ACCENT = '#c9a227';
   const state = {
     hero: null, format: '', opp: '', period: 'all', includeAI: false, tag: '',
     tab: 'stats', sub: 'overview', histView: 'detailed', res: 'all', fav: false, q: '',
-    cardQ: '', cardMode: 'total', cardCap: 20, cardSort: { key: 'played', dir: 'desc' }, cwlMin: 1
+    cardQ: '', cardMode: 'total', cardCap: 20, cardSort: { key: 'played', dir: 'desc' }, cwlMin: 1,
+    // Mode sélection de l'historique (suppression multiple) : ids cochés + ancre du Maj+clic.
+    selMode: false, sel: new Set(), selAnchor: null
   };
   const CARD_COLS = [
     { key: 'name', label: 'Carte' },
@@ -462,6 +464,7 @@
           '<div class="seg" id="hxHistView">' +
             '<button data-hv="detailed" aria-pressed="true">Détaillé</button>' +
             '<button data-hv="compact" aria-pressed="false">Compact</button></div>' +
+          '<button class="chip selbtn" id="hxSelBtn" aria-pressed="false" title="Sélectionner plusieurs parties pour les supprimer" hidden>☑ Sélectionner</button>' +
         '</div>' +
         '<div class="resfilter" id="hxRes">' +
           '<button class="chip" data-res="all" aria-pressed="true">Toutes</button>' +
@@ -469,6 +472,12 @@
           '<button class="chip loss" data-res="loss" aria-pressed="false">Défaites</button>' +
           '<button class="chip fav" id="hxFav" aria-pressed="false" title="N\'afficher que les parties en favori">☆ Favoris</button></div>' +
         '<div class="listmeta" id="hxMeta"></div>' +
+        '<div class="hxselbar" id="hxSelBar" hidden>' +
+          '<span class="selcount" id="hxSelCount"></span>' +
+          '<button class="chip" id="hxSelAll" title="Sélectionner toutes les parties affichées (filtres compris)">Tout</button>' +
+          '<button class="chip" id="hxSelNone">Aucune</button>' +
+          '<button class="chip seldel" id="hxSelDel" disabled>🗑 Supprimer</button>' +
+          '<button class="chip" id="hxSelDone">Terminer</button></div>' +
         '<div id="hxList" class="grouped"></div>' +
       '</section>' +
       '</div>';
@@ -698,8 +707,12 @@
   const favBtnHTML = e => '<button class="gfav' + (e.favorite ? ' on' : '') + '" data-fav="' + esc2(e.gameId) + '" title="' + (e.favorite ? 'Retirer des favoris' : 'Mettre en favori') + '" aria-pressed="' + (!!e.favorite) + '" aria-label="Favori">' + (e.favorite ? '★' : '☆') + '</button>';
   const tagBtnHTML = e => '<button class="gtagbtn' + (entryTags(e).length ? ' has' : '') + '" data-tag="' + esc2(e.gameId) + '" title="Modifier les tags" aria-label="Modifier les tags">🏷</button>';
   // Bloc d'actions par partie (favori / tags / suppression) — vide en lecture seule.
-  const gactsHTML = e => _readOnly ? '' : '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
+  // En mode sélection, les actions individuelles laissent place à une case à cocher.
+  const gactsHTML = e => _readOnly ? '' : state.selMode
+    ? '<span class="gchk' + (state.sel.has(String(e.gameId)) ? ' on' : '') + '" aria-hidden="true"></span>'
+    : '<div class="gacts">' + favBtnHTML(e) + tagBtnHTML(e) +
     '<button class="gdel" data-del="' + esc2(e.gameId) + '" title="Supprimer cette partie" aria-label="Supprimer">✕</button></div>';
+  const selCls = e => state.selMode && state.sel.has(String(e.gameId)) ? ' selected' : '';
   function tagsRowHTML(e) {
     const tags = entryTags(e);
     if (!tags.length) return '';
@@ -708,7 +721,7 @@
   function gcardHTML(e) {
     const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
     const sub = [rec.format, fmtDate(dateOf(rec)), turnsOf(rec) + ' t', firstPlayerOf(rec) === false ? '2e' : (firstPlayerOf(rec) ? 'init.' : null)].filter(Boolean).concat(isVsAI(rec) ? ['🤖'] : []).join(' · ');
-    return '<div class="gcard ' + cls + (e.favorite ? ' isfav' : '') + '" data-id="' + esc2(e.gameId) + '"><div class="duo">' + avatarHTML(me, 'mini') + avatarHTML(op, 'mini opp') + '</div>' +
+    return '<div class="gcard ' + cls + (e.favorite ? ' isfav' : '') + selCls(e) + '" data-id="' + esc2(e.gameId) + '"><div class="duo">' + avatarHTML(me, 'mini') + avatarHTML(op, 'mini opp') + '</div>' +
       '<div class="body"><div class="mu"><span class="me">' + esc2(me) + '</span><span class="vs">vs</span><span>' + esc2(op) + '</span></div>' +
       '<div class="gsub">' + esc2(sub) + '</div>' + tagsRowHTML(e) + '</div>' +
       '<div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
@@ -718,7 +731,7 @@
     const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
     const tags = entryTags(e);
     const tagMini = tags.length ? '<span class="ctags">' + tags.map(t => '<span class="gtag">' + esc2(t) + '</span>').join('') + '</span>' : '';
-    return '<div class="crow ' + cls + (e.favorite ? ' isfav' : '') + '" data-id="' + esc2(e.gameId) + '"><span class="cdot"></span>' +
+    return '<div class="crow ' + cls + (e.favorite ? ' isfav' : '') + selCls(e) + '" data-id="' + esc2(e.gameId) + '"><span class="cdot"></span>' +
       '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + tagMini + '</span>' +
       '<span class="cmeta">' + fmtDate(dateOf(rec)) + ' · ' + turnsOf(rec) + 't</span>' +
       '<span class="cv">' + (o == null ? '·' : (o ? 'V' : 'D')) + '</span>' +
@@ -743,6 +756,7 @@
     const w = gs.filter(e => outcome(e.record) === true).length, l = gs.filter(e => outcome(e.record) === false).length, ong = gs.filter(e => outcome(e.record) == null).length;
     D.getElementById('hxMeta').textContent = gs.length + ' partie' + (gs.length > 1 ? 's' : '') + (gs.length ? '  ·  ' + w + 'V / ' + l + 'D' + (ong ? ' · ' + ong + ' en cours' : '') : '');
     const hc = D.getElementById('hxHistCount'); if (hc) hc.textContent = '(' + _A.kept.length + ')';
+    renderSelBar(gs);
     if (!gs.length) { list.innerHTML = '<div class="empty">Aucune partie ne correspond.</div>'; return; }
     if (state.histView === 'compact') {
       list.innerHTML = gs.map(crowHTML).join('');
@@ -753,6 +767,51 @@
         return '<div class="daygroup"><div class="dayhead"><span>' + esc2(fmtDay(dateOf(a[0].record))) + '</span><span>' + ww + 'V · ' + ll + 'D</span></div>' + a.map(gcardHTML).join('') + '</div>'; }).join('');
     }
     hydrateBg(list);
+  }
+
+  // ---------- Sélection multiple (suppression groupée) ----------
+  function renderSelBar(gs) {
+    const btn = D.getElementById('hxSelBtn'), bar = D.getElementById('hxSelBar');
+    if (!btn || !bar) return;
+    if (_readOnly || !_onDeleteMany) state.selMode = false;
+    btn.hidden = _readOnly || !_onDeleteMany;
+    btn.setAttribute('aria-pressed', state.selMode);
+    bar.hidden = !state.selMode;
+    if (!state.selMode) return;
+    // On oublie les ids qui ne sont plus dans la bibliothèque (supprimés ailleurs).
+    const known = new Set(_entries.map(e => String(e.gameId)));
+    state.sel.forEach(id => { if (!known.has(id)) state.sel.delete(id); });
+    const n = state.sel.size, vis = gs.length;
+    D.getElementById('hxSelCount').textContent = n + ' sélectionnée' + (n > 1 ? 's' : '');
+    D.getElementById('hxSelAll').textContent = 'Tout (' + vis + ')';
+    const del = D.getElementById('hxSelDel');
+    del.textContent = '🗑 Supprimer (' + n + ')'; del.disabled = n === 0;
+  }
+  function setSelMode(on) {
+    state.selMode = on; state.sel.clear(); state.selAnchor = null;
+    renderHistory();
+  }
+  // Clic sur une partie en mode sélection : bascule ; Maj+clic = plage depuis l'ancre
+  // (dans l'ordre affiché, donc filtres/recherche respectés).
+  function toggleSel(id, shift) {
+    if (shift && state.selAnchor != null) {
+      const ids = histList().map(e => String(e.gameId));
+      const a = ids.indexOf(state.selAnchor), b = ids.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        const on = !state.sel.has(id) || state.sel.has(state.selAnchor);
+        ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => { if (on) state.sel.add(x); else state.sel.delete(x); });
+        state.selAnchor = id; renderHistory(); return;
+      }
+    }
+    if (state.sel.has(id)) state.sel.delete(id); else state.sel.add(id);
+    state.selAnchor = id;
+    renderHistory();
+  }
+  async function deleteSelected() {
+    if (!_onDeleteMany || !state.sel.size) return;
+    const ids = Array.from(state.sel);
+    const done = await _onDeleteMany(ids);
+    if (done) setSelMode(false);
   }
 
   // ---------- Facettes / synchro contrôles ----------
@@ -999,7 +1058,17 @@
     host.querySelector('#hxRes').querySelectorAll('button[data-res]').forEach(b => b.addEventListener('click', () => { state.res = b.dataset.res; host.querySelectorAll('#hxRes button[data-res]').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
     host.querySelector('#hxFav').addEventListener('click', () => { state.fav = !state.fav; renderHistory(); });
     host.querySelector('#hxSearch').addEventListener('input', e => { state.q = e.target.value; renderHistory(); });
+    host.querySelector('#hxSelBtn').addEventListener('click', () => setSelMode(!state.selMode));
+    host.querySelector('#hxSelDone').addEventListener('click', () => setSelMode(false));
+    host.querySelector('#hxSelNone').addEventListener('click', () => { state.sel.clear(); state.selAnchor = null; renderHistory(); });
+    host.querySelector('#hxSelAll').addEventListener('click', () => { histList().forEach(e => state.sel.add(String(e.gameId))); renderHistory(); });
+    host.querySelector('#hxSelDel').addEventListener('click', deleteSelected);
     host.querySelector('#hxList').addEventListener('click', e => {
+      if (state.selMode) {
+        const it = e.target.closest('[data-id]');
+        if (it) { e.preventDefault(); toggleSel(it.dataset.id, e.shiftKey); }
+        return;
+      }
       const fav = e.target.closest('[data-fav]');
       if (fav) { e.stopPropagation(); toggleFav(fav.dataset.fav); return; }
       const tag = e.target.closest('[data-tag]');
@@ -1019,6 +1088,7 @@
     _entries = (opts && opts.entries) || [];
     _onOpen = (opts && opts.onOpen) || null;
     _onDelete = (opts && opts.onDelete) || null;
+    _onDeleteMany = (opts && opts.onDeleteMany) || null;
     _onMeta = (opts && opts.onMeta) || null;
     _readOnly = !!(opts && opts.readOnly);
     // Changement de contexte (bascule ma biblio ↔ celle d'un ami) : on peut

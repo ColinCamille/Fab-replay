@@ -211,6 +211,19 @@
     return true;
   }
 
+  // Supprime PLUSIEURS parties du compte en quelques requêtes (lots de 200,
+  // pour garder l'URL du filtre `in` raisonnable). Suppression multiple de l'historique.
+  async function deleteGames(gameIds) {
+    if (!client || !currentUser) return false;
+    const ids = (gameIds || []).map(String);
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await client.from('games').delete()
+        .eq('user_id', currentUser.id).in('game_id', ids.slice(i, i + 200));
+      if (error) throw error;
+    }
+    return true;
+  }
+
   // RGPD : supprime le compte + toutes les données (via l'Edge Function
   // delete-account, qui appelle l'API admin ; cascade sur games/device_tokens).
   async function deleteAccount() {
@@ -305,7 +318,7 @@
   }
 
   root.Cloud = {
-    available, init, onChange, getUser, signIn, signOut, fetchGames, fetchGamesIndex, fetchGamesRaw, updateMeta, updateRaw, createPairing, uploadGames, deleteGame, deleteAccount,
+    available, init, onChange, getUser, signIn, signOut, fetchGames, fetchGamesIndex, fetchGamesRaw, updateMeta, updateRaw, createPairing, uploadGames, deleteGame, deleteGames, deleteAccount,
     // Amis
     myProfile, setDisplayName, sendFriendRequest, respondRequest, removeFriend, listFriends, pendingRequests, fetchFriendGames
   };

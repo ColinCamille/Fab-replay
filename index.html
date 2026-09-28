@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chain Replay — Analyseur de parties FaB (Talishar)</title>
-<link rel="stylesheet" href="css/style.css?v=202">
+<link rel="stylesheet" href="css/style.css?v=203">
 </head>
 <body>
 
@@ -138,18 +138,18 @@
 <!-- Modules partagés (ordre important : le parseur d'abord).
      ?v=N = cache-bust : à bumper quand on modifie le CSS ou un module JS,
      pour forcer navigateurs (surtout mobiles) à recharger au lieu du cache. -->
-<script src="talishar-parser.js?v=202"></script>
-<script src="js/images.js?v=202"></script>
-<script src="js/db.js?v=202"></script>
-<script src="js/sync.js?v=202"></script>
-<script src="js/replay.js?v=202"></script>
-<script src="js/boardreplay.js?v=202"></script>
-<script src="js/dashboard.js?v=202"></script>
+<script src="talishar-parser.js?v=203"></script>
+<script src="js/images.js?v=203"></script>
+<script src="js/db.js?v=203"></script>
+<script src="js/sync.js?v=203"></script>
+<script src="js/replay.js?v=203"></script>
+<script src="js/boardreplay.js?v=203"></script>
+<script src="js/dashboard.js?v=203"></script>
 <!-- Backend Supabase (option C) : login lien magique + parties privées.
      Additif : sans connexion, l'app fonctionne comme avant. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud-config.js?v=202"></script>
-<script src="js/cloud.js?v=202"></script>
+<script src="js/cloud-config.js?v=203"></script>
+<script src="js/cloud.js?v=203"></script>
 
 <script>
 // ============================================================
@@ -217,7 +217,7 @@
         + '<span style="font-size:.8rem">Tes parties sont privées : toi seul les vois.</span>';
     }
     if (hasGames) {
-      window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onMeta: updateMeta });
+      window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onDeleteMany: deleteGames, onMeta: updateMeta });
     }
     _lastEntries = entries;
     return entries;
@@ -287,26 +287,34 @@
     });
   })();
 
-  async function deleteGame(id) {
-    if (!confirm('Supprimer cette partie de la bibliothèque ?')) return;
-    await window.FabDB.removeGame(id);   // + pierre tombale locale (évite le ré-ajout)
+  // Suppression d'une ou plusieurs parties (bouton ✕ ou mode sélection de
+  // l'historique). Renvoie true si l'utilisateur a confirmé.
+  async function deleteGame(id) { return deleteGames([id]); }
+  async function deleteGames(ids) {
+    ids = Array.from(new Set((ids || []).map(String)));
+    if (!ids.length) return false;
+    const n = ids.length, one = n === 1;
+    if (!confirm(one ? 'Supprimer cette partie de la bibliothèque ?' : 'Supprimer ces ' + n + ' parties de la bibliothèque ?')) return false;
+    for (const id of ids) await window.FabDB.removeGame(id);   // + pierre tombale locale (évite le ré-ajout)
     await reloadDashboard();
-    // Propagation : on efface la partie du COMPTE (Supabase) → disparaît sur
+    const what = one ? 'Partie supprimée' : n + ' parties supprimées';
+    // Propagation : on efface les parties du COMPTE (Supabase) → disparaissent sur
     // tous tes appareils. Repli GitHub seulement si l'héritage est réactivé.
     if (window.Cloud && window.Cloud.getUser()) {
       try {
-        await window.Cloud.deleteGame(id);
-        libHint.textContent = 'Partie supprimée de ton compte (sur tous tes appareils).';
+        await window.Cloud.deleteGames(ids);
+        libHint.textContent = what + ' de ton compte (sur tous tes appareils).';
       } catch (e) {
         console.error(e);
-        libHint.textContent = 'Supprimée ici, mais suppression du compte échouée : ' + (e.message || e);
+        libHint.textContent = what + ' ici, mais suppression du compte échouée : ' + (e.message || e);
       }
     } else if (LEGACY_GITHUB && window.FabSync.canWrite()) {
-      try { await window.FabSync.pushDeletion([id]); libHint.textContent = 'Partie supprimée — propagée à tes autres appareils.'; }
-      catch (e) { console.error(e); libHint.textContent = 'Supprimée ici, mais propagation échouée : ' + e.message; }
+      try { await window.FabSync.pushDeletion(ids); libHint.textContent = what + ' — propagé à tes autres appareils.'; }
+      catch (e) { console.error(e); libHint.textContent = what + ' ici, mais propagation échouée : ' + e.message; }
     } else {
-      libHint.textContent = 'Partie supprimée sur cet appareil. Connecte-toi (🔑) pour supprimer sur tous tes appareils.';
+      libHint.textContent = what + ' sur cet appareil. Connecte-toi (🔑) pour supprimer sur tous tes appareils.';
     }
+    return true;
   }
 
   $('#backToDash').addEventListener('click', () => {
@@ -976,7 +984,7 @@
     const hasGames = entries.length > 0;
     $('#dashEmpty').style.display = hasGames ? 'none' : 'block';
     $('#dashboardBody').style.display = hasGames ? 'block' : 'none';
-    if (hasGames) window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onMeta: updateMeta, readOnly: false, hero: (_savedHero || null) });
+    if (hasGames) window.Dashboard.mount({ entries, onOpen: openGame, onDelete: deleteGame, onDeleteMany: deleteGames, onMeta: updateMeta, readOnly: false, hero: (_savedHero || null) });
     showView('dashboard');
   }
 
