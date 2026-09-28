@@ -310,7 +310,7 @@
   const DEFAULT_ACCENT = '#c9a227';
   const state = {
     hero: null, format: '', opp: '', period: 'all', includeAI: false, tag: '',
-    tab: 'stats', sub: 'overview', histView: 'detailed', res: 'all', fav: false, q: '',
+    tab: 'stats', sub: 'overview', res: 'all', fav: false, q: '',
     cardQ: '', cardMode: 'total', cardCap: 20, cardSort: { key: 'played', dir: 'desc' }, cwlMin: 1,
     // Mode sélection de l'historique (suppression multiple) : ids cochés + ancre du Maj+clic.
     selMode: false, sel: new Set(), selAnchor: null
@@ -461,9 +461,6 @@
         '<div class="hxhist-hd"><h2>🗒 Historique des parties</h2><button class="hx-expand" data-max="hist" title="Agrandir" aria-label="Agrandir le panneau historique">⤢</button></div>' +
         '<div class="controls">' +
           '<input class="search" id="hxSearch" type="search" placeholder="Rechercher (adversaire, format…)">' +
-          '<div class="seg" id="hxHistView">' +
-            '<button data-hv="detailed" aria-pressed="true">Détaillé</button>' +
-            '<button data-hv="compact" aria-pressed="false">Compact</button></div>' +
           '<button class="chip selbtn" id="hxSelBtn" aria-pressed="false" title="Sélectionner plusieurs parties pour les supprimer" hidden>☑ Sélectionner</button>' +
         '</div>' +
         '<div class="resfilter" id="hxRes">' +
@@ -727,16 +724,6 @@
       '<div class="verdict ' + cls + '">' + verdictLbl(o) + '</div>' +
       gactsHTML(e) + '</div>';
   }
-  function crowHTML(e) {
-    const rec = e.record, me = myHeroOf(rec) || '?', op = oppHeroOf(rec) || '?', o = outcome(rec), cls = verdictCls(o);
-    const tags = entryTags(e);
-    const tagMini = tags.length ? '<span class="ctags">' + tags.map(t => '<span class="gtag">' + esc2(t) + '</span>').join('') + '</span>' : '';
-    return '<div class="crow ' + cls + (e.favorite ? ' isfav' : '') + selCls(e) + '" data-id="' + esc2(e.gameId) + '"><span class="cdot"></span>' +
-      '<span class="cmatch"><b>' + esc2(me) + '</b><span class="vs">vs</span>' + esc2(op) + tagMini + '</span>' +
-      '<span class="cmeta">' + fmtDate(dateOf(rec)) + ' · ' + turnsOf(rec) + 't</span>' +
-      '<span class="cv">' + (o == null ? '·' : (o ? 'V' : 'D')) + '</span>' +
-      gactsHTML(e) + '</div>';
-  }
   function histList() {
     const qn = norm(state.q);
     return _A.kept.slice().sort((a, b) => (Date.parse(dateOf(b.record) || '') || 0) - (Date.parse(dateOf(a.record) || '') || 0)).filter(e => {
@@ -752,20 +739,15 @@
     const list = D.getElementById('hxList'), gs = histList();
     const favBtn = D.getElementById('hxFav');
     if (favBtn) { favBtn.setAttribute('aria-pressed', state.fav); favBtn.textContent = (state.fav ? '★' : '☆') + ' Favoris'; }
-    list.className = state.histView === 'compact' ? 'compact' : 'grouped';
     const w = gs.filter(e => outcome(e.record) === true).length, l = gs.filter(e => outcome(e.record) === false).length, ong = gs.filter(e => outcome(e.record) == null).length;
     D.getElementById('hxMeta').textContent = gs.length + ' partie' + (gs.length > 1 ? 's' : '') + (gs.length ? '  ·  ' + w + 'V / ' + l + 'D' + (ong ? ' · ' + ong + ' en cours' : '') : '');
     const hc = D.getElementById('hxHistCount'); if (hc) hc.textContent = '(' + _A.kept.length + ')';
     renderSelBar(gs);
     if (!gs.length) { list.innerHTML = '<div class="empty">Aucune partie ne correspond.</div>'; return; }
-    if (state.histView === 'compact') {
-      list.innerHTML = gs.map(crowHTML).join('');
-    } else {
-      const grp = {}, order = [];
-      gs.forEach(e => { const k = new Date(dateOf(e.record)).toDateString(); if (!grp[k]) { grp[k] = []; order.push(k); } grp[k].push(e); });
-      list.innerHTML = order.map(k => { const a = grp[k], ww = a.filter(e => outcome(e.record) === true).length, ll = a.filter(e => outcome(e.record) === false).length;
-        return '<div class="daygroup"><div class="dayhead"><span>' + esc2(fmtDay(dateOf(a[0].record))) + '</span><span>' + ww + 'V · ' + ll + 'D</span></div>' + a.map(gcardHTML).join('') + '</div>'; }).join('');
-    }
+    const grp = {}, order = [];
+    gs.forEach(e => { const k = new Date(dateOf(e.record)).toDateString(); if (!grp[k]) { grp[k] = []; order.push(k); } grp[k].push(e); });
+    list.innerHTML = order.map(k => { const a = grp[k], ww = a.filter(e => outcome(e.record) === true).length, ll = a.filter(e => outcome(e.record) === false).length;
+      return '<div class="daygroup"><div class="dayhead"><span>' + esc2(fmtDay(dateOf(a[0].record))) + '</span><span>' + ww + 'V · ' + ll + 'D</span></div>' + a.map(gcardHTML).join('') + '</div>'; }).join('');
     hydrateBg(list);
   }
 
@@ -1054,7 +1036,6 @@
       th.addEventListener('touchmove', e => { if (e.touches[0]) trendHover(e.touches[0].clientX); }, { passive: true });
       th.addEventListener('touchend', trendLeave);
     }
-    host.querySelector('#hxHistView').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { state.histView = b.dataset.hv; host.querySelector('#hxHistView').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
     host.querySelector('#hxRes').querySelectorAll('button[data-res]').forEach(b => b.addEventListener('click', () => { state.res = b.dataset.res; host.querySelectorAll('#hxRes button[data-res]').forEach(x => x.setAttribute('aria-pressed', x === b)); renderHistory(); }));
     host.querySelector('#hxFav').addEventListener('click', () => { state.fav = !state.fav; renderHistory(); });
     host.querySelector('#hxSearch').addEventListener('input', e => { state.q = e.target.value; renderHistory(); });
