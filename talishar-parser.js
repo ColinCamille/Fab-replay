@@ -22,7 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 5;   // v5 : compteur « charged » (cartes envoyées dans la soul, Boltyn…) lu dans END GAME STATS → re-parse LOCAL des parties en cache
+  const SCHEMA_VERSION = 6;   // v6 : re-parse forcé → compaction (index.html) des RAW CHATLOG gonflés par le grabber ≤ 1.31.1, renvoyés compactés au compte
+  // v5 : compteur « charged » (cartes envoyées dans la soul, Boltyn…) lu dans END GAME STATS → re-parse LOCAL des parties en cache
   // v3 : garde-fou duplication moins agressif (health.ok peut passer false→true)
   // v2 : ajout de turns[].equipCounters + snapshots.equipCounters
   const PARSER_VERSION = '2.3.0';
@@ -227,6 +228,11 @@
   function chatKey(x) { return String(x == null ? '' : x).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); }
   function compactChatLogArray(arr) {
     if (!Array.isArray(arr) || arr.length < RAWCHAT_MIN_BLOCK * 2) return arr || [];
+    // Entrées VIDES (texte nul) retirées d'abord : le grabber ≤ 1.31.1 en glissait
+    // une en tête de CHAQUE fenêtre recopiée (tampon Talishar plein) ; gardées,
+    // elles s'intercalent dans la sortie et coupent les blocs → recopies non
+    // reconnues. Elles ne portent aucune carte (inutiles aux couleurs).
+    arr = arr.filter(x => chatKey(x));
     const keys = arr.map(chatKey);
     const out = [], outKeys = [], pos = new Map();   // clé → positions dans `out`
     let i = 0;

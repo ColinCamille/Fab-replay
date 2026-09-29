@@ -2707,6 +2707,15 @@ console.log('Compaction chatLog brut —');
   eq(compact.map(strip).join('|'), trueLog('arakni').map(strip).join('|'),
     'compaction : les recopies sont retirées, le journal d’origine est restitué');
 
+  // Variante grabber ≤ 1.31.1 : tampon Talishar PLEIN → chaque fenêtre recopiée
+  // commence par une entrée VIDE « » (parties 2562557, 2554674). La compaction
+  // doit aussi les restituer (entrées vides retirées, recopies sautées).
+  let bloatedEmpty = trueLog('arakni').slice(0, 20);
+  for (let end = 25; end <= 40; end += 5) bloatedEmpty = bloatedEmpty.concat([''], trueLog('arakni').slice(end - 20, end));
+  const compactEmpty = Parser.compactChatLogArray(bloatedEmpty);
+  eq(compactEmpty.map(strip).join('|'), trueLog('arakni').map(strip).join('|'),
+    'compaction : fenêtres à entrée vide en tête → journal d’origine restitué');
+
   // Sur le .txt complet : le record re-parsé doit être IDENTIQUE (c’est la
   // garantie exigée avant de remplacer quoi que ce soit).
   const body = "Arakni's turn 1 has begun.\n" + trueLog('arakni').slice(1).map(strip)
