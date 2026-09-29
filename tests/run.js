@@ -1905,6 +1905,15 @@ console.log('Grabber merge —');
   // Sans clé de comparaison, le même scénario empilerait tout (garde du bug).
   assert(run([r1, r2, r1, r2]).length > 3, 'raw HTML : comparaison brute (sans clé) → c’était bien ça le bug');
 
+  // Tampon roulant PLEIN : Talishar fait démarrer chaque fenêtre par une entrée
+  // VIDE « » → sans filtre, aucun chevauchement : fenêtre ré-empilée à chaque
+  // action (partie 2562557, brut recopié 28×). rawChatWindow retire ces entrées.
+  const rawChatWindow = eval('(function(){' + grab('stripHtmlText') + '\n' + grab('rawChatWindow') + '\nreturn rawChatWindow;})()');
+  const v1 = ['a', 'b', 'c', 'd'], v2 = ['', 'c', 'd', 'e'], v3 = ['', 'd', 'e', 'f'];   // v1 : début de partie, tampon pas encore plein
+  assert(run([v1, v2, v3], stripTxt).length > 6, 'raw : entrée vide en tête de fenêtre → c’était bien ça le bug');
+  eq(run([v1, v2, v3].map(rawChatWindow), stripTxt).join('|'), 'a|b|c|d|e|f',
+    'raw : entrées vides filtrées → fenêtres recousues sans duplication');
+
   // Fenêtre en RETARD (déjà entièrement contenue dans l'accumulé) → rien à ajouter.
   eq(mergeLines(['a', 'b', 'c', 'd'], ['b', 'c']).lines.join('|'), 'a|b|c|d',
     'merge: fenêtre déjà contenue → aucun ré-empilement');
