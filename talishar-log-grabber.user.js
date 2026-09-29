@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.31.0
+// @version      1.31.1
 // @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). v1.28 : SOUL — capte la zone « soul » par tour (nombre de cartes des 2 camps via playerX.SoulCount, + noms si révélés) pour les héros à soul (Boltyn, Breaker of Dawn…) → la vue Table l'affiche. v1.30 : PLAFOND EN OCTETS du localStorage (~1,5 Mo pour nous) appliqué à chaque chargement de talishar.net, même hors partie — le quota (~5 Mo) est PARTAGÉ avec Talishar : quand on le remplit, c'est LUI qui casse (« exceeded the quota » sur sessionRecoveryDismissed_*) pendant que nos écritures passent encore, donc borner un NOMBRE de parties (v1.27) ne suffisait pas ; on ne garde plus que 2 parties (aucune UI ne lit les autres, elles sont déjà sur le compte), taliMeta_ est écrite EN PREMIER (une partie reste toujours purgeable) et les clés orphelines des écritures interrompues sont balayées. v1.31 : compteurs « -1 » de BLOCAGE sur les équipements (battleworn : Nullrune, équipements Shadow de Levia…) — ils vivent dans `defCounters` de l'objet-carte (CoreLogic.php : `$equipCharacter[$i+4] -= 1`), PAS dans `counters` (charges de Tunic) que le grabber était seul à lire : le bloc EQUIP COUNTERS était donc vide/omis et la vue Table n'affichait aucun badge ; les deux familles sont désormais captées séparément (clés `slot` et `slot.def`). Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.31.0';
+  const VERSION = '1.31.1';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -77,6 +77,7 @@
   let lastRawChatLog = null;    // dernière FENÊTRE chatLog BRUT (verbatim) vue au dernier tick
   let capturedRaw = [];         // chatLog BRUT ACCUMULÉ à travers le tampon roulant (comme `captured` pour le texte) → couleurs COMPLÈTES, tous tours
   let canaryIssues = [];        // hypothèses Talishar cassées détectées à la capture
+  let canaryInfo = [];          // avertissements non bloquants (journal tronqué, localStorage plein)
   let captureIssues = [];       // capture dégradée (ex. écran replay/résumé) → upload bloqué
   let lastBudgetAt = 0;         // dernière mesure de l'empreinte localStorage (throttle)
   let overBudget = false;       // empreinte hors budget malgré la purge → persistance locale dégradée
@@ -398,6 +399,11 @@
   function runCanary(g, name1, name2) {
     const issues = [];
     const gi = g.gameInfo || {};
+    // Deux familles : `format` = Talishar a VRAIMENT changé (à remonter) ;
+    // `info` = simple avertissement sur CETTE partie (ni la capture ni l'envoi ne
+    // sont affectés). Avant, tout s'affichait « format Talishar inattendu » →
+    // alarmes pour rien (journal tronqué, localStorage plein).
+    const info = [];
     if (gi.playerID == null) issues.push('gameInfo.playerID absent');
     // Marqueur de tour : PLUSIEURS fins de tour SANS aucun [[TURN_START]] ⇒ le
     // format du marqueur a changé. On exige >= 2 fins (une seule = simple bord de
@@ -416,15 +422,16 @@
     if (Array.isArray(captured) && captured.length) {
       let ft = null;
       for (const l of captured) { const m = String(l).match(/'s turn (\d+) has begun\.$/) || String(l).match(/^turn (\d+)\s*\S/i); if (m) { ft = +m[1]; break; } }
-      if (ft != null && ft > 1) issues.push('journal tronqué en tête (démarre au tour ' + ft + ' — 1ers tours hors tampon Talishar)');
+      if (ft != null && ft > 1) info.push('journal tronqué en tête (démarre au tour ' + ft + ' — 1ers tours hors tampon Talishar)');
     }
     // Empreinte localStorage hors budget alors que toutes les AUTRES parties ont
     // déjà été purgées (cf. enforceBudget) : cette seule partie dépasse notre part
     // du quota → la persistance locale est dégradée (et Talishar risque à son tour
     // « exceeded the quota »). La capture en mémoire, l'export ⬇ et l'envoi au
     // compte, eux, ne sont PAS affectés.
-    if (overBudget) issues.push('localStorage saturé par cette seule partie (persistance locale dégradée)');
+    if (overBudget) info.push('localStorage saturé par cette seule partie (persistance locale dégradée)');
     canaryIssues = issues;
+    canaryInfo = info;
     if (issues.length && !runCanary._warned) {
       runCanary._warned = true;
       console.warn('[TLG] ⚠ hypothèses Talishar cassées :', issues.join(' · '));
@@ -1434,9 +1441,16 @@
       const heroBit = (meta.myHero || '?') + ' vs ' + (meta.oppHero || '?');
       const fmtBit = meta.format ? ' · ' + meta.format : '';
       // Alerte canari : Talishar a change qqch → on prévient ICI, tout de suite.
-      const canaryBit = canaryIssues.length
-        ? '<br><span style="color:#ff6b6b;font-weight:700" title="' + canaryIssues.join(' · ').replace(/"/g, '') + '">⚠ format Talishar inattendu — préviens le mainteneur</span>'
-        : '';
+      // La CAUSE est affichée en clair (le title n'est pas visible sur mobile) et
+      // on précise que la capture continue : le canari ne bloque rien.
+      const esc = x => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const canaryBit = (canaryIssues.length
+        ? '<br><span style="color:#ff6b6b;font-weight:700">⚠ format Talishar inattendu : ' + esc(canaryIssues.join(' · ')) + '</span>'
+          + '<br><span style="opacity:.7">capture maintenue · envoie le ⬇ Log brut au mainteneur</span>'
+        : '')
+        + (canaryInfo.length
+        ? '<br><span style="color:#e0b44c">ℹ ' + esc(canaryInfo.join(' · ')) + ' — capture et envoi non affectés</span>'
+        : '');
       // Capture dégradée : envoi bloqué. On demande le .txt (⬇ Log brut) pour
       // que le mainteneur puisse déboguer le cas — cf. captureQuality().
       const blockedBit = captureIssues.length
