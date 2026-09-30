@@ -65,6 +65,7 @@ Supabase `games` (raw = log brut)    ← source de vérité
 | `talishar-log-grabber.user.js` | Le **grabber** (userscript). Versionné (`@version`), auto-update via `@updateURL`/`@downloadURL` (raw GitHub). |
 | `supabase/migrations/*.sql` | Schéma + RLS (voir §5). |
 | `supabase/functions/{ingest,delete-account}/` | Edge Functions Deno. `ingest` = point d'entrée du grabber (auth par device_token, service_role). |
+| `scripts/meta_collect.py` + `.github/workflows/meta-collect.yml` | **Collecte méta** : chaque nuit, parties publiques Talishar (API FaB Insights, CC + CC compétitif) → JSONL xz dans le bucket Storage **privé** `meta-games/<format>/<date>.jsonl.xz` (une partie/ligne, les 2 decks joués après side, stats par carte/tour, turnLog). Comble les trous depuis le 25/09/2026, s'arrête proprement sur le quota API (2 Go/jour). Secrets GitHub : `FABINSIGHTS_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. |
 | `tests/run.js` | Suite de tests Node (assertions maison). `npm test`. |
 
 ## 5. Schéma BDD (Supabase / Postgres)
