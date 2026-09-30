@@ -267,3 +267,7 @@ sont **déjà en place** — les maintenir/étendre plutôt que refaire :
   soul dépensée) − **2 par Gold donné** à l'adversaire (+2 si refusé, selon la
   ligne de référence). Comparer aussi valeur / carte dépensée.
 - Données : log brut (`games.raw`) + textes de cartes via goagain (§7).
+  Carte absente de goagain/fab-cube (set très récent) → télécharger l'image
+  Talishar `https://images.talishar.net/public/cardimages/english/<cardId>.webp`
+  (`<cardId>` = id coloré du log, ex. `bravery_of_the_blade_red`) dans le
+  scratchpad et la LIRE avec l'outil Read (le texte est sur l'image).
