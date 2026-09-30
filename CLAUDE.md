@@ -257,6 +257,8 @@ sont **déjà en place** — les maintenir/étendre plutôt que refaire :
 
 ## 13. Analyse de parties (coaching) — méthode demandée par Camille
 
+> Procédure complète : skill **`fab-game-review`** (`.claude/skills/fab-game-review/SKILL.md`).
+
 - Raisonner en **valeur par cycle défense → attaque** : pour chaque décision de
   blocage, comparer les lignes sur le cycle complet = PV perdus en défense
   **vs** dégâts renvoyés au tour suivant (potentiel ET réaliste après blocs
