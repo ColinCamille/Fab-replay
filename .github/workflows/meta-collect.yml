@@ -1,5 +1,5 @@
 # Collecte quotidienne des parties Talishar (FaB Insights) → Supabase Storage (bucket privé meta-games).
-# Secrets requis : FABINSIGHTS_API_KEY, SUPABASE_SERVICE_ROLE_KEY.
+# Secrets requis : FABINSIGHTS_API_KEY, SUPABASE_SECRET_KEY.
 name: Collecte méta FaB Insights
 
 on:
@@ -31,7 +31,7 @@ jobs:
         env:
           FABINSIGHTS_API_KEY: ${{ secrets.FABINSIGHTS_API_KEY }}
           SUPABASE_URL: https://alzldgpopmhxnlxafsrl.supabase.co
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: |
           python scripts/meta_collect.py \
             --since "${{ inputs.since || '2026-09-25' }}" \

@@ -13,8 +13,9 @@ stats par carte, par tour, turnLog…) compressé en xz, et l'envoie dans
 - Le jour courant n'est jamais collecté (le CSV est mis à jour toutes les heures).
 - Stdlib uniquement.
 
-Env : FABINSIGHTS_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
+Env : FABINSIGHTS_API_KEY, SUPABASE_URL, SUPABASE_SECRET_KEY.
 Sans SUPABASE_* (ou avec --out DIR) : écrit en local (test).
+SUPABASE_SECRET_KEY = clé « secret » (sb_secret_…) ou ancienne clé service_role.
 """
 import argparse, ast, csv, datetime as dt, json, lzma, os, sys, tempfile
 import urllib.error, urllib.request
@@ -105,7 +106,12 @@ class Storage:
         self.url, self.key = url.rstrip('/'), key
 
     def _req(self, method, path, body=None, headers=None):
-        h = {'Authorization': f'Bearer {self.key}', 'apikey': self.key}
+        # Clé « secret » (sb_secret_…) : pas un JWT → en-tête apikey seul (la
+        # passerelle Supabase en déduit le rôle service_role). Ancienne clé
+        # service_role (JWT) : aussi en Authorization.
+        h = {'apikey': self.key}
+        if not self.key.startswith('sb_'):
+            h['Authorization'] = f'Bearer {self.key}'
         h.update(headers or {})
         req = urllib.request.Request(f'{self.url}/storage/v1/{path}', data=body, method=method, headers=h)
         return urllib.request.urlopen(req, timeout=120).read()
@@ -158,9 +164,9 @@ def main():
     if a.out:
         store = LocalDir(a.out)
     else:
-        url, sk = os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+        url, sk = os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_SECRET_KEY')
         if not (url and sk):
-            sys.exit('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY manquantes (ou utiliser --out)')
+            sys.exit('SUPABASE_URL / SUPABASE_SECRET_KEY manquantes (ou utiliser --out)')
         store = Storage(url, sk)
 
     until = dt.date.fromisoformat(a.until) if a.until else dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=1)
