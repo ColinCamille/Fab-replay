@@ -10,6 +10,8 @@ stats par carte, par tour, turnLog…) compressé en xz, et l'envoie dans
 - Idempotent : les fichiers déjà présents dans le bucket ne sont pas refaits
   → chaque exécution comble aussi les trous depuis --since (quota API de
   2 Go/jour : si HTTP 429, on s'arrête proprement, la suite passera demain).
+- Rétention (--keep-days, 90 par défaut) : les jours plus anciens sont
+  supprimés du bucket et ne sont pas recollectés.
 - Le jour courant n'est jamais collecté (le CSV est mis à jour toutes les heures).
 - Stdlib uniquement.
 
@@ -121,6 +123,10 @@ class Storage:
         res = json.loads(self._req('POST', f'object/list/{BUCKET}', body, {'Content-Type': 'application/json'}))
         return {o['name'] for o in res}
 
+    def delete(self, names):
+        body = json.dumps({'prefixes': names}).encode()
+        self._req('DELETE', f'object/{BUCKET}', body, {'Content-Type': 'application/json'})
+
     def put(self, name, data):
         self._req('POST', f'object/{BUCKET}/{name}', data,
                   {'Content-Type': 'application/x-xz', 'x-upsert': 'true'})
@@ -134,6 +140,10 @@ class LocalDir:
         p = os.path.join(self.root, folder)
         return set(os.listdir(p)) if os.path.isdir(p) else set()
 
+    def delete(self, names):
+        for n in names:
+            os.remove(os.path.join(self.root, n))
+
     def put(self, name, data):
         p = os.path.join(self.root, name)
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -146,6 +156,8 @@ def main():
     ap.add_argument('--since', default='2026-09-25', help='premier jour à collecter (AAAA-MM-JJ)')
     ap.add_argument('--until', help='dernier jour (défaut : hier, UTC)')
     ap.add_argument('--formats', default='0,1', help='codes FaB Insights, ex. 0,1')
+    ap.add_argument('--keep-days', type=int, default=90,
+                    help='rétention : supprime les jours plus anciens et ne les recollecte pas (0 = illimitée)')
     ap.add_argument('--max-files', type=int, default=0, help='limite de fichiers par exécution (0 = aucune)')
     ap.add_argument('--out', help='écrire en local dans ce dossier au lieu de Supabase')
     ap.add_argument('--from-csv', help='test : convertir ce CSV local (avec --date/--format), sans API')
@@ -171,7 +183,11 @@ def main():
 
     until = dt.date.fromisoformat(a.until) if a.until else dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=1)
     days = []
-    d = dt.date.fromisoformat(a.since)
+    since = dt.date.fromisoformat(a.since)
+    oldest = until - dt.timedelta(days=a.keep_days - 1) if a.keep_days else None
+    if oldest and since < oldest:
+        since = oldest  # hors rétention : ne pas re-télécharger ce qu'on supprime
+    d = since
     while d <= until:
         days.append(d.isoformat())
         d += dt.timedelta(days=1)
@@ -181,6 +197,12 @@ def main():
     for fmt in a.formats.split(','):
         folder = FORMAT_DIRS.get(fmt, fmt)
         have = store.existing(folder)
+        if oldest:
+            old = sorted(n for n in have if n.endswith('.jsonl.xz') and n[:10] < oldest.isoformat())
+            if old:
+                store.delete([f'{folder}/{n}' for n in old])
+                have -= set(old)
+                log(f'🗑 {folder} : {len(old)} fichier(s) de plus de {a.keep_days} jours supprimé(s) ({old[0][:10]} → {old[-1][:10]})')
         todo += [(day, fmt, folder) for day in days if f'{day}.jsonl.xz' not in have]
     todo.sort(key=lambda t: t[0], reverse=True)
     if a.max_files:

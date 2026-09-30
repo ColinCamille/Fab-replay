@@ -13,6 +13,9 @@ on:
       formats:
         description: 'Codes FaB Insights (0 = CC, 1 = CC compétitif, 2 = Blitz…)'
         default: '0,1'
+      keep_days:
+        description: 'Rétention en jours (plus ancien = supprimé du bucket)'
+        default: '90'
 
 concurrency:
   group: meta-collect
@@ -35,4 +38,5 @@ jobs:
         run: |
           python scripts/meta_collect.py \
             --since "${{ inputs.since || '2026-09-25' }}" \
-            --formats "${{ inputs.formats || '0,1' }}"
+            --formats "${{ inputs.formats || '0,1' }}" \
+            --keep-days "${{ inputs.keep_days || '90' }}"
