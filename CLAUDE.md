@@ -254,3 +254,12 @@ sont **déjà en place** — les maintenir/étendre plutôt que refaire :
   (clés, `chatLog` verbatim des actions carte, objets carte complets,
   `activeChainLink`…) → c'est ce qu'il faut demander à l'utilisateur quand un
   format semble avoir changé.
+
+## 13. Analyse de parties (coaching) — méthode demandée par Camille
+
+- Raisonner en **valeur par cycle défense → attaque** : pour chaque décision de
+  blocage, comparer les lignes sur le cycle complet = PV perdus en défense
+  **vs** dégâts renvoyés au tour suivant (potentiel ET réaliste après blocs
+  adverses), en comptant aussi les cartes perdues/gagnées et les ressources
+  données à l'adversaire (ex. Gold de Marlynn). Jamais juger un blocage isolé.
+- Données : log brut (`games.raw`) + textes de cartes via goagain (§7).
