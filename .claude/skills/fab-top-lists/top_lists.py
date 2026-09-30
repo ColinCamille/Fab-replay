@@ -16,9 +16,15 @@ la liste de 80) → la « réserve » est reconstituée à partir de toutes les
 parties du joueur. Les pseudos sont hachés (SHA-256) : stables, mais anonymes.
 """
 import argparse, ast, collections as C, concurrent.futures as cf, csv, datetime as dt
-import json, os, re, sys, tempfile, time, urllib.error, urllib.request
+import json, lzma, os, re, sys, tempfile, time, urllib.error, urllib.request
+
+# Dossiers du bucket meta-games : même table que la collecte quotidienne
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'scripts'))
+from meta_collect import BUCKET, FORMAT_DIRS  # noqa: E402
 
 API = 'https://fab-insights.azurewebsites.net/api/v1/download_csv'
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://alzldgpopmhxnlxafsrl.supabase.co').rstrip('/')
+SUPABASE_KEY = os.environ.get('SUPABASE_SECRET_KEY')
 FORMATS = {'0': 'CC', '1': 'CC compétitif', '2': 'Blitz', '3': 'Blitz compétitif',
            '4': 'Open CC', '5': 'Commoner', '8': 'LL CC', '9': 'LL Blitz',
            '13': 'LL compétitif', '14': 'Silver Age', '15': 'Silver Age compétitif',
@@ -62,11 +68,66 @@ def fetch_day(date, fmt, hero, cache, key, tries=6):
     return None
 
 
+def hero_rows(g1, g2, pl, hero, gid, date, fmt):
+    """Les lignes « une partie du héros » d'une partie (deux decks + pseudos hachés)."""
+    rows = []
+    for me, op, idx in ((g1, g2, 1), (g2, g1, 2)):
+        if me.get('playerHero') != hero or not me.get('cardResults'):
+            continue
+        rows.append({
+            'gid': gid, 'date': date, 'fmt': fmt,
+            'won': me.get('winner') == idx, 'turns': me.get('turns'),
+            'player': pl[idx - 1], 'opp': op.get('playerHero'),
+            'deck': {c['cardId']: c['numCopies'] for c in me['cardResults']},
+            'equip': [c['cardId'] for c in me.get('character', [])[1:]],
+        })
+    return rows
+
+
+def write_cache(out, rows, date, fmt, src):
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, 'w') as f:
+        for x in rows:
+            f.write(json.dumps(x) + '\n')
+    log(f'  {date} {FORMATS.get(fmt, fmt)} : {len(rows)} parties ({src})')
+    return out
+
+
+def from_bucket(date, fmt, hero, out):
+    """Fichier du jour dans le bucket Supabase meta-games (collecte nocturne). None si absent."""
+    if not SUPABASE_KEY or fmt not in FORMAT_DIRS:
+        return None
+    h = {'apikey': SUPABASE_KEY}
+    if not SUPABASE_KEY.startswith('sb_'):
+        h['Authorization'] = f'Bearer {SUPABASE_KEY}'
+    url = f'{SUPABASE_URL}/storage/v1/object/{BUCKET}/{FORMAT_DIRS[fmt]}/{date}.jsonl.xz'
+    try:
+        raw = urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=120).read()
+    except urllib.error.HTTPError as e:
+        if e.code in (400, 404):  # pas (encore) collecté → API
+            return None
+        raise
+    rows = []
+    needle = f'"playerHero":"{hero}"'
+    for line in lzma.decompress(raw).decode().splitlines():
+        if needle not in line:
+            continue
+        g = json.loads(line)
+        rows += hero_rows(g['decks'][0], g['decks'][1], g['players'], hero, g['id'], date, fmt)
+    return write_cache(out, rows, date, fmt, 'bucket')
+
+
 def _fetch_day(date, fmt, hero, cache, key):
     out = os.path.join(cache, hero, f'{date}_{fmt}.jsonl')
     today = dt.date.today().isoformat()
     if os.path.exists(out) and date != today:
         return out
+    if date != today:
+        got = from_bucket(date, fmt, hero, out)
+        if got:
+            return got
+    if not key:
+        raise RuntimeError('absent du bucket et FABINSIGHTS_API_KEY non définie')
     req = urllib.request.Request(f'{API}?format={fmt}&date={date}', headers={'x-functions-key': key})
     meta = json.load(urllib.request.urlopen(req, timeout=60))
     fd, tmp = tempfile.mkstemp(suffix='.csv', dir=cache)
@@ -83,22 +144,8 @@ def _fetch_day(date, fmt, hero, cache, key):
                     a, b = ast.literal_eval(j1), ast.literal_eval(j2)
                 except Exception:
                     continue
-                for me, op, idx in ((a, b, 1), (b, a, 2)):
-                    if me.get('playerHero') != hero or not me.get('cardResults'):
-                        continue
-                    rows.append({
-                        'gid': r['game_id'], 'date': date, 'fmt': fmt,
-                        'won': me.get('winner') == idx, 'turns': me.get('turns'),
-                        'player': r[f'player{idx}_name'], 'opp': op.get('playerHero'),
-                        'deck': {c['cardId']: c['numCopies'] for c in me['cardResults']},
-                        'equip': [c['cardId'] for c in me.get('character', [])[1:]],
-                    })
-        os.makedirs(os.path.dirname(out), exist_ok=True)
-        with open(out, 'w') as f:
-            for x in rows:
-                f.write(json.dumps(x) + '\n')
-        log(f'  {date} {FORMATS.get(fmt, fmt)} : {len(rows)} parties')
-        return out
+                rows += hero_rows(a, b, [r['player1_name'], r['player2_name']], hero, r['game_id'], date, fmt)
+        return write_cache(out, rows, date, fmt, 'API')
     finally:
         os.remove(tmp)
 
@@ -170,8 +217,10 @@ def main():
     args = ap.parse_args()
 
     key = os.environ.get('FABINSIGHTS_API_KEY')
-    if not key:
-        sys.exit('FABINSIGHTS_API_KEY absent de l\'environnement.')
+    if not key and not SUPABASE_KEY:
+        sys.exit('Ni SUPABASE_SECRET_KEY (bucket meta-games) ni FABINSIGHTS_API_KEY dans l\'environnement.')
+    if not SUPABASE_KEY:
+        log('  (SUPABASE_SECRET_KEY absente : tout passe par l\'API FaB Insights, quota 2 Go/jour)')
     log(f'Chargement {args.hero} sur {args.days} jours, formats {args.formats} (cache {args.cache})…')
     G, days, missing = load(args, key)
     if not G:

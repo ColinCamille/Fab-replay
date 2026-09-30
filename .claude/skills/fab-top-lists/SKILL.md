@@ -10,9 +10,16 @@ Sortie : Markdown sur stdout (progression sur stderr) → à restituer tel quel 
 
 ## Prérequis
 
-- `FABINSIGHTS_API_KEY` dans l'environnement (clé FaB Insights, obtenue via
-  metafy.gg/@fabinsights). Si absente : le dire à l'utilisateur, ne rien deviner.
-- Réseau : `fab-insights.azurewebsites.net` + `fabinsights.blob.core.windows.net`.
+- Source principale : le bucket Supabase **privé** `meta-games` (collecte
+  nocturne, `scripts/meta_collect.py`, 90 derniers jours, CC + CC compétitif).
+  Clé : `SUPABASE_SECRET_KEY` (clé « secret » `sb_secret_…`) dans l'environnement.
+  Aucun quota consommé.
+- Secours : les jours absents du bucket (pas encore rattrapés, autre format,
+  jour courant) passent par l'API FaB Insights → `FABINSIGHTS_API_KEY`
+  (quota 2 Go/jour **partagé avec la collecte nocturne** : éviter les longues
+  périodes hors bucket). Si aucune des deux clés : le dire, ne rien deviner.
+- Réseau : `alzldgpopmhxnlxafsrl.supabase.co` ; pour le secours,
+  `fab-insights.azurewebsites.net` + `fabinsights.blob.core.windows.net`.
 
 ## Utilisation
 
@@ -39,8 +46,8 @@ python3 .claude/skills/fab-top-lists/top_lists.py --hero fai_rising_rebellion \
 
 ## Performance / cache
 
-L'API ne filtre pas par héros : chaque jour × format = un CSV de 50-150 Mo à
-parser. 21 jours × 2 formats ≈ 1 à 2 min au premier lancement (3 téléchargements
+Bucket : un fichier de 2-3 Mo par jour × format (quelques secondes). API (secours) :
+un CSV de 50-150 Mo par jour × format à parser. 21 jours × 2 formats ≈ 1 à 2 min au premier lancement (3 téléchargements
 en parallèle, attente progressive si l'API renvoie 429). Les parties du héros sont mises en cache (JSONL compact) dans
 `$FAB_INSIGHTS_CACHE` (défaut : `/tmp/fab-insights-cache`) → relances instantanées.
 **Mettre le cache dans le scratchpad de session**, jamais dans le repo.
