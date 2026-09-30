@@ -40,8 +40,8 @@ python3 .claude/skills/fab-top-lists/top_lists.py --hero fai_rising_rebellion \
 ## Performance / cache
 
 L'API ne filtre pas par héros : chaque jour × format = un CSV de 50-150 Mo à
-parser. 21 jours × 2 formats ≈ 1 à 2 min au premier lancement (4 téléchargements
-en parallèle). Les parties du héros sont mises en cache (JSONL compact) dans
+parser. 21 jours × 2 formats ≈ 1 à 2 min au premier lancement (3 téléchargements
+en parallèle, attente progressive si l'API renvoie 429). Les parties du héros sont mises en cache (JSONL compact) dans
 `$FAB_INSIGHTS_CACHE` (défaut : `/tmp/fab-insights-cache`) → relances instantanées.
 **Mettre le cache dans le scratchpad de session**, jamais dans le repo.
 Le lancer en arrière-plan si > 30 jours, et ne pas attendre avec une boucle

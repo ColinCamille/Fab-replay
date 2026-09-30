@@ -16,7 +16,7 @@ la liste de 80) → la « réserve » est reconstituée à partir de toutes les
 parties du joueur. Les pseudos sont hachés (SHA-256) : stables, mais anonymes.
 """
 import argparse, ast, collections as C, concurrent.futures as cf, csv, datetime as dt
-import json, os, re, sys, tempfile, urllib.request
+import json, os, re, sys, tempfile, time, urllib.error, urllib.request
 
 API = 'https://fab-insights.azurewebsites.net/api/v1/download_csv'
 FORMATS = {'0': 'CC', '1': 'CC compétitif', '2': 'Blitz', '3': 'Blitz compétitif',
@@ -46,13 +46,19 @@ def pretty(cid):
 
 # ---------- téléchargement + cache ----------
 
-def fetch_day(date, fmt, hero, cache, key, tries=3):
-    # Le proxy / le blob Azure coupent parfois la connexion → quelques tentatives.
+def fetch_day(date, fmt, hero, cache, key, tries=6):
+    # Le proxy / le blob Azure coupent parfois la connexion, et l'API limite le
+    # débit (HTTP 429) → nouvelles tentatives avec attente croissante.
     for i in range(tries):
         try:
             return _fetch_day(date, fmt, hero, cache, key)
         except Exception as e:
-            log(f'  ! {date} fmt {fmt} : {e} (tentative {i + 1}/{tries})')
+            wait = 5 * 2 ** i
+            if isinstance(e, urllib.error.HTTPError) and e.code == 429:
+                wait = max(wait, int(e.headers.get('Retry-After') or 0))
+            log(f'  ! {date} fmt {fmt} : {e} (tentative {i + 1}/{tries}, nouvel essai dans {wait}s)')
+            if i < tries - 1:
+                time.sleep(wait)
     return None
 
 
@@ -104,12 +110,13 @@ def load(args, key):
     os.makedirs(os.path.join(args.cache, args.hero), exist_ok=True)
     with cf.ThreadPoolExecutor(args.workers) as ex:
         files = list(ex.map(lambda j: fetch_day(j[0], j[1], args.hero, args.cache, key), jobs))
+    missing = [f'{d} ({FORMATS.get(f, f)})' for (d, f), fn in zip(jobs, files) if not fn]
     games = {}
     for fn in filter(None, files):
         for line in open(fn):
             g = json.loads(line)
             games[(g['gid'], g['player'])] = g  # l'export contient des doublons
-    return list(games.values()), days
+    return list(games.values()), days, missing
 
 
 # ---------- analyse ----------
@@ -159,14 +166,14 @@ def main():
     ap.add_argument('--compare', help='fichier texte de TA liste (une carte par ligne : « 3 Ignite red »)')
     ap.add_argument('--game', help='game_id Talishar d\'une de tes parties : ta liste = le deck joué + tes stats')
     ap.add_argument('--cache', default=os.environ.get('FAB_INSIGHTS_CACHE', os.path.join(tempfile.gettempdir(), 'fab-insights-cache')))
-    ap.add_argument('--workers', type=int, default=4)
+    ap.add_argument('--workers', type=int, default=3)
     args = ap.parse_args()
 
     key = os.environ.get('FABINSIGHTS_API_KEY')
     if not key:
         sys.exit('FABINSIGHTS_API_KEY absent de l\'environnement.')
     log(f'Chargement {args.hero} sur {args.days} jours, formats {args.formats} (cache {args.cache})…')
-    G, days = load(args, key)
+    G, days, missing = load(args, key)
     if not G:
         sys.exit(f'Aucune partie trouvée pour {args.hero}. Vérifie l\'identifiant (ex. fai_rising_rebellion).')
 
@@ -193,6 +200,9 @@ def main():
     print(f'# {pretty(args.hero)[0]} — meilleurs joueurs')
     print(f'\n{len(G)} parties, {days[-1]} → {days[0]}, formats : '
           + ', '.join(FORMATS.get(f, f) for f in args.formats.split(',')) + f'. Winrate moyen du héros : **{base:.0%}**.')
+    if missing:
+        print(f'\n> ⚠️ **{len(missing)} fichier(s) non téléchargé(s)** (limite de débit / réseau) : '
+              + ', '.join(missing) + '. Relancer : les jours déjà en cache ne sont pas re-téléchargés.\n')
     print('Classement = winrate lissé (≥ %d parties). Pseudos hachés → lettres.\n' % args.min_games)
     print('| | Parties | WR | ' + (f'vs {pretty(args.vs)[0]} | ' if args.vs else '') + 'Équipement le plus porté |')
     print('|---|--:|--:|' + ('--:|' if args.vs else '') + '---|')
