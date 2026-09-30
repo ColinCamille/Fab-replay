@@ -262,4 +262,8 @@ sont **déjà en place** — les maintenir/étendre plutôt que refaire :
   **vs** dégâts renvoyés au tour suivant (potentiel ET réaliste après blocs
   adverses), en comptant aussi les cartes perdues/gagnées et les ressources
   données à l'adversaire (ex. Gold de Marlynn). Jamais juger un blocage isolé.
+- **Barème (additif)** : valeur du cycle = dégâts **prévenus** en défense +
+  dégâts **infligés** en attaque + **1 par carte mise en soul** (−1 par carte de
+  soul dépensée) − **2 par Gold donné** à l'adversaire (+2 si refusé, selon la
+  ligne de référence). Comparer aussi valeur / carte dépensée.
 - Données : log brut (`games.raw`) + textes de cartes via goagain (§7).
