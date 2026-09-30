@@ -6,6 +6,7 @@ Thumbs.db
 # — sauf settings.json (mode plan + opusplan par défaut), qu'on versionne
 .claude/*
 !.claude/settings.json
+!.claude/skills/
 
 # Ancien viewer standalone mono-partie — remplacé par index.html + build/standalone.html
 fab-replay-viewer-standalone-4.html
