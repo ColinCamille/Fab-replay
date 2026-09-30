@@ -20,11 +20,12 @@ import json, lzma, os, re, sys, tempfile, time, urllib.error, urllib.request
 
 # Dossiers du bucket meta-games : même table que la collecte quotidienne
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'scripts'))
-from meta_collect import BUCKET, FORMAT_DIRS  # noqa: E402
+from meta_collect import FORMAT_DIRS  # noqa: E402
 
 API = 'https://fab-insights.azurewebsites.net/api/v1/download_csv'
-SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://alzldgpopmhxnlxafsrl.supabase.co').rstrip('/')
-SUPABASE_KEY = os.environ.get('SUPABASE_SECRET_KEY')
+# Bucket lu via l'Edge Function meta-read (jeton de lecture seule, jamais la clé secrète)
+META_READ = 'https://alzldgpopmhxnlxafsrl.supabase.co/functions/v1/meta-read'
+META_TOKEN = os.environ.get('META_READ_TOKEN')
 FORMATS = {'0': 'CC', '1': 'CC compétitif', '2': 'Blitz', '3': 'Blitz compétitif',
            '4': 'Open CC', '5': 'Commoner', '8': 'LL CC', '9': 'LL Blitz',
            '13': 'LL compétitif', '14': 'Silver Age', '15': 'Silver Age compétitif',
@@ -95,18 +96,17 @@ def write_cache(out, rows, date, fmt, src):
 
 def from_bucket(date, fmt, hero, out):
     """Fichier du jour dans le bucket Supabase meta-games (collecte nocturne). None si absent."""
-    if not SUPABASE_KEY or fmt not in FORMAT_DIRS:
+    if not META_TOKEN or fmt not in FORMAT_DIRS:
         return None
-    h = {'apikey': SUPABASE_KEY}
-    if not SUPABASE_KEY.startswith('sb_'):
-        h['Authorization'] = f'Bearer {SUPABASE_KEY}'
-    url = f'{SUPABASE_URL}/storage/v1/object/{BUCKET}/{FORMAT_DIRS[fmt]}/{date}.jsonl.xz'
+    req = urllib.request.Request(f'{META_READ}?path={FORMAT_DIRS[fmt]}/{date}.jsonl.xz',
+                                 headers={'x-meta-token': META_TOKEN})
     try:
-        raw = urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=120).read()
+        signed = json.load(urllib.request.urlopen(req, timeout=60))['url']
     except urllib.error.HTTPError as e:
-        if e.code in (400, 404):  # pas (encore) collecté → API
+        if e.code == 404:  # pas (encore) collecté → API
             return None
         raise
+    raw = urllib.request.urlopen(signed, timeout=120).read()
     rows = []
     needle = f'"playerHero":"{hero}"'
     for line in lzma.decompress(raw).decode().splitlines():
@@ -217,10 +217,10 @@ def main():
     args = ap.parse_args()
 
     key = os.environ.get('FABINSIGHTS_API_KEY')
-    if not key and not SUPABASE_KEY:
-        sys.exit('Ni SUPABASE_SECRET_KEY (bucket meta-games) ni FABINSIGHTS_API_KEY dans l\'environnement.')
-    if not SUPABASE_KEY:
-        log('  (SUPABASE_SECRET_KEY absente : tout passe par l\'API FaB Insights, quota 2 Go/jour)')
+    if not key and not META_TOKEN:
+        sys.exit('Ni META_READ_TOKEN (bucket meta-games) ni FABINSIGHTS_API_KEY dans l\'environnement.')
+    if not META_TOKEN:
+        log('  (META_READ_TOKEN absent : tout passe par l\'API FaB Insights, quota 2 Go/jour)')
     log(f'Chargement {args.hero} sur {args.days} jours, formats {args.formats} (cache {args.cache})…')
     G, days, missing = load(args, key)
     if not G:

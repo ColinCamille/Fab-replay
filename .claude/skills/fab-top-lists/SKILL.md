@@ -12,13 +12,14 @@ Sortie : Markdown sur stdout (progression sur stderr) → à restituer tel quel 
 
 - Source principale : le bucket Supabase **privé** `meta-games` (collecte
   nocturne, `scripts/meta_collect.py`, 90 derniers jours, CC + CC compétitif).
-  Clé : `SUPABASE_SECRET_KEY` (clé « secret » `sb_secret_…`) dans l'environnement.
-  Aucun quota consommé.
+  Lu via l'Edge Function `meta-read` avec `META_READ_TOKEN` (jeton de **lecture
+  seule** de ce bucket, table `meta_read_tokens`) — jamais la clé secrète
+  Supabase dans les sessions. Aucun quota consommé.
 - Secours : les jours absents du bucket (pas encore rattrapés, autre format,
   jour courant) passent par l'API FaB Insights → `FABINSIGHTS_API_KEY`
   (quota 2 Go/jour **partagé avec la collecte nocturne** : éviter les longues
   périodes hors bucket). Si aucune des deux clés : le dire, ne rien deviner.
-- Réseau : `alzldgpopmhxnlxafsrl.supabase.co` ; pour le secours,
+- Réseau : `alzldgpopmhxnlxafsrl.supabase.co` (fonction + lien signé) ; pour le secours,
   `fab-insights.azurewebsites.net` + `fabinsights.blob.core.windows.net`.
 
 ## Utilisation
