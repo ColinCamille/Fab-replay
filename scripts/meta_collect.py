@@ -8,7 +8,7 @@ stats par carte, par tour, turnLog…) compressé en xz, et l'envoie dans
 `meta-games/<format>/<date>.jsonl.xz`.
 
 - Idempotent : les fichiers déjà présents dans le bucket ne sont pas refaits
-  → chaque exécution comble aussi les trous depuis --since (quota API de
+  → chaque exécution comble aussi les trous sur toute la fenêtre de rétention (quota API de
   2 Go/jour : si HTTP 429, on s'arrête proprement, la suite passera demain).
 - Rétention (--keep-days, 90 par défaut) : les jours plus anciens sont
   supprimés du bucket et ne sont pas recollectés.
@@ -153,7 +153,8 @@ class LocalDir:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--since', default='2026-09-25', help='premier jour à collecter (AAAA-MM-JJ)')
+    ap.add_argument('--since', default='2025-06-01',
+                    help='premier jour à collecter (défaut : début des données FaB Insights, borné par --keep-days)')
     ap.add_argument('--until', help='dernier jour (défaut : hier, UTC)')
     ap.add_argument('--formats', default='0,1', help='codes FaB Insights, ex. 0,1')
     ap.add_argument('--keep-days', type=int, default=90,

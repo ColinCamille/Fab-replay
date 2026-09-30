@@ -4,12 +4,12 @@ name: Collecte méta FaB Insights
 
 on:
   schedule:
-    - cron: '37 4 * * *'   # chaque nuit (UTC) : collecte la veille + comble les trous
+    - cron: '37 4 * * *'   # chaque nuit (UTC) : la veille d'abord, puis comble les trous des 90 derniers jours (~10 jours/nuit, quota API)
   workflow_dispatch:
     inputs:
       since:
-        description: 'Premier jour à collecter (AAAA-MM-JJ)'
-        default: '2026-09-25'
+        description: 'Premier jour à collecter (AAAA-MM-JJ) — borné par la rétention'
+        default: '2025-06-01'
       formats:
         description: 'Codes FaB Insights (0 = CC, 1 = CC compétitif, 2 = Blitz…)'
         default: '0,1'
@@ -37,6 +37,6 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: |
           python scripts/meta_collect.py \
-            --since "${{ inputs.since || '2026-09-25' }}" \
+            --since "${{ inputs.since || '2025-06-01' }}" \
             --formats "${{ inputs.formats || '0,1' }}" \
             --keep-days "${{ inputs.keep_days || '90' }}"

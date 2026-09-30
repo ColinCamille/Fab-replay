@@ -10,3 +10,4 @@ Thumbs.db
 
 # Ancien viewer standalone mono-partie — remplacé par index.html + build/standalone.html
 fab-replay-viewer-standalone-4.html
+__pycache__/
