@@ -266,6 +266,11 @@ sont **déjà en place** — les maintenir/étendre plutôt que refaire :
   dégâts **infligés** en attaque + **1 par carte mise en soul** (−1 par carte de
   soul dépensée) − **2 par Gold donné** à l'adversaire (+2 si refusé, selon la
   ligne de référence). Comparer aussi valeur / carte dépensée.
+- **Équipement = ressource pour empêcher un on-hit.** Si le hit est
+  inévitable (défense max < puissance), ne pas « user » l'armure pour grappiller
+  des PV : la garder pour un tour où elle permet de **bloquer complètement** et
+  d'annuler l'effet on-hit (Go Fish, destruction d'arsenal, Gold…). Compter la
+  perte de durabilité (Temper, Blade Break) comme un coût futur.
 - Données : log brut (`games.raw`) + textes de cartes via goagain (§7).
   Carte absente de goagain/fab-cube (set très récent) → télécharger l'image
   Talishar `https://images.talishar.net/public/cardimages/english/<cardId>.webp`
