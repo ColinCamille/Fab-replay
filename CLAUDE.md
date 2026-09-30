@@ -156,8 +156,9 @@ des parties d'un **ami accepté**).
   `pitch` en **chaîne** `"1"/"2"/"3"`, et images dans **`printings[].image_url`**).
   D'où : pour la couleur d'une carte, on filtre par `pitch` ; pour un héros
   multi-formes, plusieurs objets (« Arakni », « Arakni, Funnel Web »…, certains de
-  type `Demi-Hero`). C'est notre SEULE source d'images. **Bloquée en sandbox**
-  (cf. §8) → faire coller la réponse par l'utilisateur si besoin de vérifier.
+  type `Demi-Hero`). C'est notre SEULE source d'images. Donne aussi le **texte des cartes**
+  (`functional_text`, `cost`, `power`, `defense`…) → utile pour analyser une
+  partie. **Accessible depuis le sandbox** (cf. §8) : `curl` direct.
 
 ## 8. Pièges connus
 
@@ -170,10 +171,11 @@ des parties d'un **ami accepté**).
 - **Images héros multi-formes** : goagain renvoie plusieurs formes (« Arakni »,
   « Arakni, Funnel Web »… certaines de type **`Demi-Hero`**). Choisir par **mots
   distinctifs partagés**, jamais le préfixe (sinon on retombe sur la forme de base).
-- **Réseau** : en environnement sandbox Claude, **goagain.dev et le CDN Talishar
-  sont INJOIGNABLES** (curl 000/403). GitHub (raw + clone) marche. Pour vérifier
-  une résolution d'image/couleur : demander à l'utilisateur de coller la réponse
-  d'une URL goagain, ou tester la logique hors-ligne.
+- **Réseau** : en environnement sandbox Claude, **goagain.dev, le CDN Talishar
+  (`images.talishar.net`) et GitHub (raw + clone) sont joignables** (vérifié
+  09/2026). Si un domaine répond 403 un jour : l'ajouter aux domaines autorisés
+  de l'environnement (menu environnement → Edit → Network access). Secours pour
+  les données cartes : `the-fab-cube/flesh-and-blood-cards` (JSON sur GitHub).
 - **AskUserQuestion** est parfois instable → si échec, poser la question en texte.
 
 ## 9. Vérifier ses changements
@@ -232,8 +234,8 @@ git clone --depth 1 https://github.com/Talishar/Talishar-FE.git   # front (React
 - `src/utils/multilanguage/multilanguage.ts` — `getCollectionCardImagePath()`
   (URL d'image par n° de collection).
 
-> Rappel réseau : cloner Talishar via GitHub **marche** ; interroger **goagain.dev**
-> ou le **CDN d'images** Talishar **ne marche pas** dans le sandbox (cf. §8).
+> Rappel réseau : cloner Talishar via GitHub, interroger **goagain.dev** et le
+> **CDN d'images** Talishar **marchent** dans le sandbox (cf. §8).
 
 ## 12. Garde-fous « Talishar a changé de format » (existant — ne pas réinventer)
 
