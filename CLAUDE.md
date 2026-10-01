@@ -64,7 +64,7 @@ Supabase `games` (raw = log brut)    ← source de vérité
 | `js/db.js`, `js/sync.js` | IndexedDB ; synchro (héritage GitHub, en voie d'extinction). |
 | `talishar-log-grabber.user.js` | Le **grabber** (userscript). Versionné (`@version`), auto-update via `@updateURL`/`@downloadURL` (raw GitHub). |
 | `supabase/migrations/*.sql` | Schéma + RLS (voir §5). |
-| `supabase/functions/{ingest,delete-account}/` | Edge Functions Deno. `ingest` = point d'entrée du grabber (auth par device_token, service_role). |
+| `supabase/functions/{ingest,delete-account,game-read}/` | Edge Functions Deno. `ingest` = point d'entrée du grabber (auth par device_token, service_role). `game-read` = lecture SEULE des parties pour les sessions Claude (jeton `GAME_READ_TOKEN`, hash dans `game_read_tokens`). |
 | *(méta FaB Insights)* | **Migré dans le dépôt privé `ColinCamille/fab-insights`** : collecte nocturne (bucket privé `meta-games`), skill `fab-top-lists`, Edge Functions `meta-read`/`report-read`. **Les migrations SQL correspondantes (bucket, `meta_read_tokens`) restent ICI** (un seul historique de migrations pour le projet Supabase). |
 | `tests/run.js` | Suite de tests Node (assertions maison). `npm test`. |
 

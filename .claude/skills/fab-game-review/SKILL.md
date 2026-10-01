@@ -11,18 +11,18 @@ des impressions : chaque recommandation est chiffrée.
 ## 1. Récupérer la partie
 
 - **Log brut collé / .txt fourni** → l'utiliser tel quel.
-- **Sinon, Supabase** (projet `Fab-replay`, id `alzldgpopmhxnlxafsrl`), table `games` :
-  - Trouver la partie : `select game_id, my_hero, opp_hero, format, captured_at, length(raw)
-    from games where user_id = '<uid>' [and my_hero ilike '%…%' and opp_hero ilike '%…%']
-    order by captured_at desc limit 5` (uid de Camille :
-    `2572c787-c517-4509-a199-307f39ddbb2a`). Attention aux orthographes de héros
-    (« Marlynn », pas « Marilyn ») → `ilike` large.
-  - Le `raw` est gros : repérer les blocs avec `strpos(raw,'=== HAND SNAPSHOTS')`,
-    `'=== COMBAT CHAIN'`, `'=== END GAME STATS'`, `'=== RAW CHATLOG'`, puis lire par
-    `substr()` : (1) le **journal** (début → HAND SNAPSHOTS), (2) les **snapshots**
-    (HAND SNAPSHOTS → COMBAT CHAIN), (3) **COMBAT CHAIN**. Le `RAW CHATLOG` est
-    rarement utile.
-  - `execute_sql` demande confirmation (pas en liste blanche) : c'est normal.
+- **Sinon, Edge Function `game-read`** (lecture seule, sans confirmation) — jeton
+  dans la variable d'environnement `GAME_READ_TOKEN` :
+  ```
+  F=https://alzldgpopmhxnlxafsrl.supabase.co/functions/v1/game-read
+  curl -s -H "x-read-token: $GAME_READ_TOKEN" "$F?hero=boltyn&opp=marlynn&limit=5"   # liste
+  curl -s -H "x-read-token: $GAME_READ_TOKEN" "$F?game_id=2577664" -o <scratchpad>/game.txt
+  ```
+  Puis lire `game.txt` par blocs (`grep -n '^=== '` pour les repérer) : (1) le
+  **journal** (début → HAND SNAPSHOTS), (2) les **snapshots** (→ COMBAT CHAIN),
+  (3) **COMBAT CHAIN**. Le `RAW CHATLOG` est rarement utile. Filtres `hero`/`opp`
+  larges (« Marlynn », pas « Marilyn »).
+- Repli si `GAME_READ_TOKEN` absent : `execute_sql` sur `games` (demande confirmation).
 
 ## 2. Données utiles dans le log (grabber)
 
