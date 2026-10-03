@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Talishar Log Grabber
 // @namespace    camille.fab.tools
-// @version      1.31.2
-// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). v1.28 : SOUL — capte la zone « soul » par tour (nombre de cartes des 2 camps via playerX.SoulCount, + noms si révélés) pour les héros à soul (Boltyn, Breaker of Dawn…) → la vue Table l'affiche. v1.30 : PLAFOND EN OCTETS du localStorage (~1,5 Mo pour nous) appliqué à chaque chargement de talishar.net, même hors partie — le quota (~5 Mo) est PARTAGÉ avec Talishar : quand on le remplit, c'est LUI qui casse (« exceeded the quota » sur sessionRecoveryDismissed_*) pendant que nos écritures passent encore, donc borner un NOMBRE de parties (v1.27) ne suffisait pas ; on ne garde plus que 2 parties (aucune UI ne lit les autres, elles sont déjà sur le compte), taliMeta_ est écrite EN PREMIER (une partie reste toujours purgeable) et les clés orphelines des écritures interrompues sont balayées. v1.31 : compteurs « -1 » de BLOCAGE sur les équipements (battleworn : Nullrune, équipements Shadow de Levia…) — ils vivent dans `defCounters` de l'objet-carte (CoreLogic.php : `$equipCharacter[$i+4] -= 1`), PAS dans `counters` (charges de Tunic) que le grabber était seul à lire : le bloc EQUIP COUNTERS était donc vide/omis et la vue Table n'affichait aucun badge ; les deux familles sont désormais captées séparément (clés `slot` et `slot.def`). Export texte / téléchargement + localStorage.
+// @version      1.31.3
+// @description  Capture le log COMPLET des parties Talishar + snapshots main/arsenal/terrain(permanents·tokens des 2 joueurs)/vie/deck à chaque tour + bloc META (héros, format, équipements, pseudos). v1.8 : lit directement le store Redux de Talishar via les fibres React (données exactes, plus de dépendance aux classes CSS), fallback DOM si indisponible. v1.10 : envoi direct de la partie dans le dépôt GitHub (Phase 3, API en CORS). v1.11 : capture des permanents/tokens en jeu (playerX.Permanents/Effects) pour les deux camps. v1.13 : @match sur tout le site + widget limité aux pages de partie — corrige la non-injection quand on charge Talishar sur la page d'accueil (SPA). v1.16 : détecte les captures dégradées (état de partie non lisible, ex. écran replay/résumé) et bloque l'envoi au compte pour ne pas polluer les stats. v1.18 : capte la main d'OUVERTURE dès la fenêtre pré-action (mulligan, log encore vide) via Redux — corrige la main de départ tronquée quand TU commences (1re carte jouée sinon perdue). v1.19 : ignore les parties regardées en SPECTATEUR (playerID 3) — plus de partie parasite dans l'historique. v1.20 : capte l'IMPRESSION (couleur) de chaque carte en main (« Nom (card_id) » dans HAND SNAPSHOTS/TIMELINE) → la vue Table colore la carte en main et en pitch. v1.21 : sur les LONGUES parties, préserve les 1ers tours quand le chatLog (tampon roulant borné) démarre déjà tronqué — l'adoption du chatLog n'efface plus le préfixe accumulé (stitch par n° de tour) + avertit si le journal reste tronqué en tête. v1.22 : FIELD TIMELINE — capte le terrain (permanents/tokens des 2 camps) à CHAQUE changement (pas seulement par tour) → révèle les jetons/auras éphémères créés puis consommés dans un même tour (ex. Ponder de Turn to Mindfire). v1.23 : un adversaire non nommé (« your opponent », pas de jet de dé) ne bloque plus l'envoi — seul du vrai texte d'UI dégradé (« PRIORITY », « Unknown's Turn ») bloque ; les libellés génériques ne sont plus stockés comme pseudos. v1.25 : recoud le chatLog BRUT (couleurs) à travers le tampon roulant borné — comme le journal texte — au lieu de ne garder que la dernière fenêtre → impression (rouge/jaune/bleu) correcte de TOUTES les cartes, y compris les 1ers tours des longues parties. v1.26 : EQUIP COUNTERS — capte les compteurs d'équipement par tour (Tunic 1/2/3, -1 counters, jetons de vapeur…) depuis card.counters → la vue Table les affiche en badge ; le Diag 🔍 dumpe désormais les objets-cartes d'équipement (6 slots, 2 joueurs) pour confirmer le champ. v1.27 : purge LRU du localStorage — ne garde que les 8 parties les plus récentes (les autres sont déjà sur le compte) et réessaie l'écriture après purge si le quota sature → corrige « exceeded the quota » (le grabber accumulait toutes les parties à vie et saturait le quota partagé avec l'app Talishar). v1.28 : SOUL — capte la zone « soul » par tour (nombre de cartes des 2 camps via playerX.SoulCount, + noms si révélés) pour les héros à soul (Boltyn, Breaker of Dawn…) → la vue Table l'affiche. v1.30 : PLAFOND EN OCTETS du localStorage (~1,5 Mo pour nous) appliqué à chaque chargement de talishar.net, même hors partie — le quota (~5 Mo) est PARTAGÉ avec Talishar : quand on le remplit, c'est LUI qui casse (« exceeded the quota » sur sessionRecoveryDismissed_*) pendant que nos écritures passent encore, donc borner un NOMBRE de parties (v1.27) ne suffisait pas ; on ne garde plus que 2 parties (aucune UI ne lit les autres, elles sont déjà sur le compte), taliMeta_ est écrite EN PREMIER (une partie reste toujours purgeable) et les clés orphelines des écritures interrompues sont balayées. v1.31 : compteurs « -1 » de BLOCAGE sur les équipements (battleworn : Nullrune, équipements Shadow de Levia…) — ils vivent dans `defCounters` de l'objet-carte (CoreLogic.php : `$equipCharacter[$i+4] -= 1`), PAS dans `counters` (charges de Tunic) que le grabber était seul à lire : le bloc EQUIP COUNTERS était donc vide/omis et la vue Table n'affichait aucun badge ; les deux familles sont désormais captées séparément (clés `slot` et `slot.def`). v1.31.3 : pseudos repris du chatLog BRUT (couleur du locuteur : bleu = toi, rouge = adversaire ; « Player N (pseudo) won! ») — corrige « me » = pseudo de l'adversaire quand le jet de dé est hors du log (repli DOM à l'ordre non garanti) ; « Player 1/2 » n'est plus stocké comme pseudo. Export texte / téléchargement + localStorage.
 // @author       ColinCamille
 // @match        *://talishar.net/*
 // @match        *://www.talishar.net/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.31.2';
+  const VERSION = '1.31.3';
   console.log('%c[TLG] userscript v' + VERSION + ' chargé — Alt+Shift+D = télécharger, Alt+Shift+C = copier, Alt+Shift+S = envoyer au compte, Alt+Shift+X = réduire',
               'color:#c9a227;font-weight:bold');
 
@@ -463,7 +463,7 @@
   // ils ne doivent JAMAIS bloquer l'envoi — la capture peut être parfaitement
   // complète par ailleurs (cas réel : partie 1946448, « opponent: your opponent »).
   function isPlaceholderName(name) {
-    return /^(you|your opponent|opponent)$/i.test(String(name || '').trim());
+    return /^(you|your opponent|opponent|player [12])$/i.test(String(name || '').trim());
   }
   // Texte d'UI Talishar scrapé PAR ERREUR comme pseudo, signe d'une capture
   // vraiment DÉGRADÉE (écran replay/résumé où l'état de partie n'est plus
@@ -1083,6 +1083,7 @@
     // Un libellé générique de Talishar (« you », « your opponent »…) n'est PAS
     // un pseudo : on le remet à null plutôt que de stocker une fausse valeur
     // (cf. règle « pas de théâtre d'erreur »). META affichera « (non capté) ».
+    reconcileNamesFromRawChat();   // chatLog brut : fait autorité sur Redux/DOM
     if (isPlaceholderName(meta.myName)) meta.myName = null;
     if (isPlaceholderName(meta.oppName)) meta.oppName = null;
   }
@@ -1679,9 +1680,44 @@
     }
   }
 
+  // Pseudos lus dans le chatLog BRUT — source SANS AMBIGUÏTÉ, qui prime sur tout
+  // le reste (Redux n'a les noms qu'au chargement initial, `initialLoad`, et
+  // l'ordre du repli DOM n'est pas garanti : game 2607518, jet de dé hors du log
+  // → « me » = pseudo de l'ADVERSAIRE). Talishar colore chaque message selon le
+  // point de vue du capteur (WriteLog.php LogForViewer : BLEU = joueur local,
+  // ROUGE = adversaire ; spectateur/modo = autre couleur → ignoré) :
+  //   · chat : « <span style='font-weight:bold; color:BLEU;'>[badges]Pseudo: </span>… » (SubmitChat.php)
+  //   · fin  : « <span style='color:ROUGE;'>Player 2 (Pseudo) won! 🎉</span> » (CoreLogic.php)
+  function pseudosFromRawChat(raw) {
+    const out = { me: null, opp: null };
+    if (!Array.isArray(raw)) return out;
+    const strip = x => String(x).replace(/<[^>]+>/g, '').replace(/&#0?39;/g, "'").replace(/&amp;/g, '&').trim();
+    const put = (color, name) => {
+      const n = strip(name), c = color.toLowerCase();
+      const side = c === '#128ee5' ? 'me' : c === '#cb0202' ? 'opp' : null;
+      if (side && n && n.length <= 40 && !out[side]) out[side] = n;
+    };
+    for (const e of raw) {
+      const s = String(e == null ? '' : e);
+      let m = s.match(/^<span style='font-weight:bold; color:(#[0-9a-f]{6});'>(.+?): <\/span>/i);
+      if (m) { put(m[1], m[2]); continue; }
+      m = s.match(/<span style='color:(#[0-9a-f]{6});'>Player [12] \((.+?)\) won!/i);
+      if (m) put(m[1], m[2]);
+    }
+    if (out.me && out.me === out.opp) out.opp = null;
+    return out;
+  }
+  function reconcileNamesFromRawChat() {
+    const src = (Array.isArray(capturedRaw) && capturedRaw.length) ? capturedRaw : lastRawChatLog;
+    const p = pseudosFromRawChat(src);
+    if (p.me) { meta.myName = p.me; if (meta.oppName === p.me) meta.oppName = null; }
+    if (p.opp) { meta.oppName = p.opp; if (meta.myName === p.opp) meta.myName = null; }
+  }
+
   function logText() {
     reconcileHeroesFromStats();
     reconcileNamesFromHand();
+    reconcileNamesFromRawChat();   // en DERNIER : fait autorité
     return '=== Talishar game ' + gameName + ' — ' + new Date().toLocaleString() + ' ===\n\n'
       + captured.join('\n') + '\n'
       + snapshotBlockText('HAND SNAPSHOTS (ta main, captée depuis le DOM — jamais celle de l\'adversaire)', handSnapshots,

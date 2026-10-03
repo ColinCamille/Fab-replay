@@ -2777,6 +2777,34 @@ console.log('Compaction chatLog brut —');
     'cardCellValue : pas de dénominateur → null (pas de faux 0 %)');
 })();
 
+// ---------- Grabber : pseudos depuis le chatLog brut (couleur du locuteur) ----------
+console.log('Grabber pseudos —');
+(function () {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'talishar-log-grabber.user.js'), 'utf8');
+  const start = src.indexOf('function pseudosFromRawChat');
+  let depth = 0, end = src.indexOf('{', start);
+  for (; end < src.length; end++) { const c = src[end]; if (c === '{') depth++; else if (c === '}' && --depth === 0) { end++; break; } }
+  const pseudos = eval('(' + src.slice(start, end) + ')');
+  // Game 2607518 : jet de dé hors du log → le repli DOM avait mis « me » = Zup
+  // (l'adversaire). Bleu = joueur local, rouge = adversaire.
+  const raw = [
+    "Player 2 played Mangle",
+    "<span style='font-weight:bold; color:#128ee5;'>Ehecalt: </span>pk ?",
+    "<span style='font-weight:bold; color:#cb0202;'>Zup: </span>yep",
+    "<span style='font-weight:bold; color:<PLAYER3COLOR>;'>Spectateur: </span>gg",
+    "<span style='color:#cb0202;'>Player 2 (Zup) won! 🎉</span>",
+  ];
+  const p = pseudos(raw);
+  eq(p.me, 'Ehecalt', 'pseudos chatLog : bleu = moi');
+  eq(p.opp, 'Zup', 'pseudos chatLog : rouge = adversaire (chat)');
+  // Sans chat : la ligne de victoire suffit (couleur du gagnant).
+  eq(pseudos([raw[4]]).opp, 'Zup', 'pseudos chatLog : ligne « won! » rouge = adversaire');
+  eq(pseudos(["<span style='color:#128ee5;'>Player 1 (Ehecalt) won! 🎉</span>"]).me, 'Ehecalt', 'pseudos chatLog : ligne « won! » bleue = moi');
+  // Badges (img/lien) devant le pseudo : retirés.
+  eq(pseudos(["<span style='font-weight:bold; color:#cb0202;'><a href='x'><img src='y'/></a>Zup: </span>hi"]).opp, 'Zup', 'pseudos chatLog : badges retirés');
+  eq(pseudos(null).me, null, 'pseudos chatLog : pas de chatLog → rien');
+})();
+
 // ---------- Bilan ----------
 console.log('\n' + passed + ' assertions OK, ' + failed + ' échec(s).');
 process.exit(failed ? 1 : 0);
