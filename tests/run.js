@@ -2803,6 +2803,27 @@ console.log('Grabber pseudos —');
   // Badges (img/lien) devant le pseudo : retirés.
   eq(pseudos(["<span style='font-weight:bold; color:#cb0202;'><a href='x'><img src='y'/></a>Zup: </span>hi"]).opp, 'Zup', 'pseudos chatLog : badges retirés');
   eq(pseudos(null).me, null, 'pseudos chatLog : pas de chatLog → rien');
+
+  // Fusion avec Redux/DOM (mergePseudos) — dépend d'isPlaceholderName.
+  const grab = name => { const st = src.indexOf('function ' + name); let d = 0, e = src.indexOf('{', st);
+    for (; e < src.length; e++) { const c = src[e]; if (c === '{') d++; else if (c === '}' && --d === 0) { e++; break; } }
+    return src.slice(st, e); };
+  const merge = eval('(function(){ ' + grab('isPlaceholderName') + '\n' + grab('mergePseudos') + '\n return mergePseudos; })()');
+  // Game 2654423 : DOM avait « me » = winry (l'adversaire), opp vide ; l'adversaire
+  // n'a ni parlé ni gagné → le chatLog ne donne que « me » = Ehecalt.
+  let r = merge({ me: 'winry', opp: null }, { me: 'Ehecalt', opp: null });
+  eq(r.me, 'Ehecalt', 'mergePseudos : chatLog fait autorité sur « me »');
+  eq(r.opp, 'winry', 'mergePseudos : l’ancien « me » (DOM) devient l’adversaire');
+  r = merge({ me: 'Zup', opp: 'Player 2' }, { me: 'Ehecalt', opp: null });
+  eq(r.opp, 'Zup', 'mergePseudos : « Player 2 » (libellé) est remplacé par l’ancien « me »');
+  r = merge({ me: 'winry', opp: 'Ehecalt' }, { me: 'Ehecalt', opp: null });
+  eq(r.me + '/' + r.opp, 'Ehecalt/winry', 'mergePseudos : perspective inversée → échange');
+  r = merge({ me: 'Player 1', opp: null }, { me: 'Ehecalt', opp: null });
+  eq(r.opp, null, 'mergePseudos : un libellé générique n’est jamais promu adversaire');
+  r = merge({ me: 'Ehecalt', opp: 'winry' }, { me: 'Ehecalt', opp: 'winry' });
+  eq(r.me + '/' + r.opp, 'Ehecalt/winry', 'mergePseudos : déjà cohérent → inchangé');
+  r = merge({ me: null, opp: 'Ehecalt' }, { me: null, opp: 'winry' });
+  eq(r.me + '/' + r.opp, 'Ehecalt/winry', 'mergePseudos : symétrique côté adversaire');
 })();
 
 // ---------- Bilan ----------
