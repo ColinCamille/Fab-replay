@@ -2278,6 +2278,10 @@ console.log('Garde-fou nom/id héros —');
   assert(!okApostrophe.warnings.some(w => /incohérent/.test(w)), 'nom/id : apostrophes → pas de faux positif');
   const okCardNumber = Parser.parse(mkMetaRaw('Briar (ELE001)', 'Briar (ELE001)'));
   assert(!okCardNumber.warnings.some(w => /incohérent/.test(w)), 'nom/id : ID numéro de carte (legacy) jamais comparé');
+  // Héros renommé par Talishar (même ID) : ancienne orthographe → nom canonique,
+  // sinon le dashboard (groupé par nom) affiche deux barres pour Jarl.
+  const oldJarl = Parser.parse(mkMetaRaw('Fai Rising Rebellion (fai_rising_rebellion)', 'Jarl Vetreidi (jarl_vetreidi)'));
+  eq(oldJarl.players.opp.hero, 'Jarl Vetreiði', 'héros renommé : « Jarl Vetreidi » → « Jarl Vetreiði »');
 })();
 
 // ---------- Régression : capture fantôme réelle (ZUP, game #1750820) ----------

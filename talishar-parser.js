@@ -22,11 +22,14 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 6;   // v6 : re-parse forcé → compaction (index.html) des RAW CHATLOG gonflés par le grabber ≤ 1.31.1, renvoyés compactés au compte
+  const SCHEMA_VERSION = 7;   // v7 : nom de héros canonique par ID (Jarl Vetreidi → Vetreiði) → re-parse LOCAL
+  // v6 : re-parse forcé → compaction (index.html) des RAW CHATLOG gonflés par le grabber ≤ 1.31.1, renvoyés compactés au compte
   // v5 : compteur « charged » (cartes envoyées dans la soul, Boltyn…) lu dans END GAME STATS → re-parse LOCAL des parties en cache
   // v3 : garde-fou duplication moins agressif (health.ok peut passer false→true)
   // v2 : ajout de turns[].equipCounters + snapshots.equipCounters
-  const PARSER_VERSION = '2.3.0';
+  const PARSER_VERSION = '2.3.1';
+  // Nom canonique des héros dont Talishar a changé l'orthographe (clé = ID du log).
+  const HERO_NAME_BY_ID = { jarl_vetreidi: 'Jarl Vetreiði' };
 
   const EQ_SLOTS = ['head', 'chest', 'arms', 'legs', 'weaponL', 'weaponR'];
 
@@ -679,6 +682,12 @@
     };
     myHero = fixHeroLabel(myHero, 'moi');
     oppHero = fixHeroLabel(oppHero, 'adversaire');
+    // Héros RENOMMÉS par Talishar (même ID, orthographe changée) : sans ça le
+    // tableau de bord, qui groupe par NOM, affiche deux barres pour un même
+    // héros (« Jarl Vetreidi » avant fin 09/2026, « Jarl Vetreiði » après).
+    // On aligne sur l'orthographe actuelle de Talishar.
+    const canonHero = hero => (hero.id && HERO_NAME_BY_ID[hero.id]) ? { name: HERO_NAME_BY_ID[hero.id], id: hero.id } : hero;
+    myHero = canonHero(myHero); oppHero = canonHero(oppHero);
     if (heroLabelIssues.length) meta.heroLabelIssues = heroLabelIssues;
     meta.capturedWith = clean(kv.captured_with);
     meta.capturedAt = clean(kv.captured_at);
