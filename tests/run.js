@@ -2299,6 +2299,11 @@ console.log('Garde-fou nom/id héros —');
   const levia = Parser.parse(mk('Levia, Shadowborn Abomination (levia_shadowborn_abomination)', 'blasmophet_levia_consumed',
     "Levia's turn 1 has begun.\nLevia played X\nArakni's turn 1 has begun.\nArakni played Y\nBlasmophet took 1 damage\n"));
   eq(levia.players.opp.hero, 'Levia, Shadowborn Abomination', 'héros figé : transformation (Levia) non corrigée');
+  // Log capté EN COURS de partie (pas d'END GAME STATS) → repli HERO FORMS.
+  const noStats = Parser.parse('=== Talishar game 3 — test ===\n\n' + body
+    + '\n=== HERO FORMS (forme du héros par tour : toi | adversaire) ===\n[OUVERTURE] me: Arakni | opp: Puffin Hightail\n'
+    + '\n=== META ===\nme: Me\nopponent: Opp\nmy_hero: Arakni (arakni_5lp3d_7hru_7h3_cr4x)\nopp_hero: Tuffnut, Bumbling Hulkster (tuffnut_bumbling_hulkster)\n');
+  eq(noStats.players.opp.hero, 'Puffin Hightail', 'héros figé sans stats : repli sur HERO FORMS');
 })();
 
 // ---------- Régression : capture fantôme réelle (ZUP, game #1750820) ----------

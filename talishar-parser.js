@@ -22,7 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 8;   // v8 : héros figé d'une partie précédente → repris des END GAME STATS → re-parse LOCAL
+  const SCHEMA_VERSION = 9;   // v9 : héros figé → repli HERO FORMS si log capté sans END GAME STATS → re-parse LOCAL
+  // v8 : héros figé d'une partie précédente → repris des END GAME STATS → re-parse LOCAL
   // v7 : nom de héros canonique par ID (Jarl Vetreidi → Vetreiði) → re-parse LOCAL
   // v6 : re-parse forcé → compaction (index.html) des RAW CHATLOG gonflés par le grabber ≤ 1.31.1, renvoyés compactés au compte
   // v5 : compteur « charged » (cartes envoyées dans la soul, Boltyn…) lu dans END GAME STATS → re-parse LOCAL des parties en cache
@@ -823,24 +824,34 @@
     // nulle part dans le journal alors que celui des stats y apparaît — une
     // transformation (Levia → Blasmophet) laisse le héros de départ dans le
     // journal et n'est donc jamais « corrigée ».
+    // Sans END GAME STATS (log capté en cours de partie) : repli sur la 1re
+    // forme du bloc HERO FORMS (lue dans l'état du jeu, pas dans gameInfo).
     (function fixStaleHeroes() {
-      const es = endStatsRes.endStats;
-      if (!es || !es.me) return;
+      const es = endStatsRes.endStats || {};
+      const firstForm = side => {
+        const snaps = heroFormRes.snapshots || {};
+        for (const k in snaps) if (snaps[k] && snaps[k][side]) return snaps[k][side];
+        return null;
+      };
       const logText = ' ' + logLines.join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
       const toks = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(w => w.length >= 3);
       const inLog = s => toks(s).some(t => logText.indexOf(' ' + t + ' ') >= 0);
-      const fix = (side, statsId, statsName) => {
+      const fix = (side, statsId, statsName, formName) => {
         const nameKey = side + 'Hero', idKey = side + 'HeroId';
-        if (!statsId || !/^[a-z][a-z0-9]*(_[a-z0-9]+)*$/.test(statsId)) return;
-        if (!metaRes.meta[nameKey] || metaRes.meta[idKey] === statsId) return;
-        if (inLog(metaRes.meta[nameKey]) || !inLog(statsId)) return;
-        const name = HERO_NAME_BY_ID[statsId] || statsName
-          || statsId.split('_').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        if (!metaRes.meta[nameKey] || inLog(metaRes.meta[nameKey])) return;
+        let name;
+        if (statsId && /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/.test(statsId)) {
+          if (metaRes.meta[idKey] === statsId || !inLog(statsId)) return;
+          name = HERO_NAME_BY_ID[statsId] || statsName
+            || statsId.split('_').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        } else if (formName && inLog(formName)) {
+          name = formName; statsId = null;
+        } else return;
         warnings.push('Héros ' + (side === 'my' ? 'joueur' : 'adverse') + ' du META absent du journal (« ' + metaRes.meta[nameKey] + ' », sans doute figé d\'une partie précédente) — remplacé par « ' + name + ' » (stats Talishar).');
         metaRes.meta[nameKey] = name; metaRes.meta[idKey] = statsId;
       };
-      fix('my', es.me.heroId, es.me.heroName);
-      fix('opp', es.me.oppHeroId, es.opp && es.opp.heroName);
+      fix('my', es.me && es.me.heroId, es.me && es.me.heroName, firstForm('me'));
+      fix('opp', es.me && es.me.oppHeroId, es.opp && es.opp.heroName, firstForm('opp'));
     })();
 
     // 2 bis) Repli héros : capture dégradée (DOM) sans bloc META → déduire les
