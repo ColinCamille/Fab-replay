@@ -2284,6 +2284,23 @@ console.log('Garde-fou nom/id héros —');
   eq(oldJarl.players.opp.hero, 'Jarl Vetreiði', 'héros renommé : « Jarl Vetreidi » → « Jarl Vetreiði »');
 })();
 
+// Héros FIGÉ d'une partie précédente (cas réel #2667028 : META « Tuffnut »,
+// partie contre Puffin) : nom ET id faux ensemble → les stats de fin de partie
+// (id réel) l'emportent, mais seulement si le héros du META est absent du journal.
+(function () {
+  const mk = (oppMeta, oppStatsId, body) => '=== Talishar game 2 — test ===\n\n' + body
+    + '\n=== META ===\nme: Me\nopponent: Opp\nmy_hero: Arakni, 5L!p3d 7hRu 7h3 cR4X (arakni_5lp3d_7hru_7h3_cr4x)\nopp_hero: ' + oppMeta + '\n'
+    + '\n=== END GAME STATS (Talishar, JSON) ===\n' + JSON.stringify({ myPlayerID: 2, byPlayer: { 2: { yourHero: 'arakni_5lp3d_7hru_7h3_cr4x', opponentHero: oppStatsId, winner: 2, turnResults: {} } } }) + '\n';
+  const body = "Puffin Hightail's turn 1 has begun.\nPuffin Hightail played Copper Cog\nArakni's turn 1 has begun.\nArakni played Ravenous Rabble\n🎯Puffin, Hightail was chosen as the target.\n";
+  const stale = Parser.parse(mk('Tuffnut, Bumbling Hulkster (tuffnut_bumbling_hulkster)', 'puffin_hightail', body));
+  eq(stale.players.opp.hero, 'Puffin Hightail', 'héros figé : adversaire repris des stats Talishar');
+  assert(stale.warnings.some(w => /figé/.test(w)), 'héros figé : avertissement émis');
+  // Transformation (héros de départ présent dans le journal) → jamais touché.
+  const levia = Parser.parse(mk('Levia, Shadowborn Abomination (levia_shadowborn_abomination)', 'blasmophet_levia_consumed',
+    "Levia's turn 1 has begun.\nLevia played X\nArakni's turn 1 has begun.\nArakni played Y\nBlasmophet took 1 damage\n"));
+  eq(levia.players.opp.hero, 'Levia, Shadowborn Abomination', 'héros figé : transformation (Levia) non corrigée');
+})();
+
 // ---------- Régression : capture fantôme réelle (ZUP, game #1750820) ----------
 // Une même partie (Arakni, Marionette vs Valda) capturée 2 FOIS côté grabber :
 // #1750692 saine, puis #1750820 22 min plus tard depuis un état Talishar
