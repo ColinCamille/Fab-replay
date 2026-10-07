@@ -22,7 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 7;   // v7 : nom de héros canonique par ID (Jarl Vetreidi → Vetreiði) → re-parse LOCAL
+  const SCHEMA_VERSION = 8;   // v8 : héros figé d'une partie précédente → repris des END GAME STATS → re-parse LOCAL
+  // v7 : nom de héros canonique par ID (Jarl Vetreidi → Vetreiði) → re-parse LOCAL
   // v6 : re-parse forcé → compaction (index.html) des RAW CHATLOG gonflés par le grabber ≤ 1.31.1, renvoyés compactés au compte
   // v5 : compteur « charged » (cartes envoyées dans la soul, Boltyn…) lu dans END GAME STATS → re-parse LOCAL des parties en cache
   // v3 : garde-fou duplication moins agressif (health.ok peut passer false→true)
