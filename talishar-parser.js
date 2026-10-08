@@ -22,7 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 9;   // v9 : héros figé → repli HERO FORMS si log capté sans END GAME STATS → re-parse LOCAL
+  const SCHEMA_VERSION = 10;  // v10 : partie fantôme (stats d'une autre partie) → health KO ;
+  // v9 : héros figé → repli HERO FORMS si log capté sans END GAME STATS → re-parse LOCAL
   // v8 : héros figé d'une partie précédente → repris des END GAME STATS → re-parse LOCAL
   // v7 : nom de héros canonique par ID (Jarl Vetreidi → Vetreiði) → re-parse LOCAL
   // v6 : re-parse forcé → compaction (index.html) des RAW CHATLOG gonflés par le grabber ≤ 1.31.1, renvoyés compactés au compte
@@ -400,7 +401,9 @@
         // héros figé d'une partie précédente dans le bloc META.
         heroId: d.yourHero || null,
         oppHeroId: d.opponentHero || d.opposingHero || null,
-        heroName: (Array.isArray(d.character) && d.character[0] && d.character[0].cardName) || null
+        heroName: (Array.isArray(d.character) && d.character[0] && d.character[0].cardName) || null,
+        // N° de partie vu par Talishar : démasque des stats d'une AUTRE partie.
+        gameId: d.gameId != null ? String(d.gameId) : null
       };
     };
     const otherId = Object.keys(payload.byPlayer).find(k => String(k) !== String(myId));
@@ -1488,6 +1491,12 @@
       [meta.myName, meta.oppName, myName, oppName].forEach(n => {
         if (isUiGarbageName(n)) flagHealth('Nom de joueur suspect « ' + String(n).trim() + ' » (texte d’UI) — capture probablement prise sur l’écran replay/résumé.');
       });
+      // G. Stats de fin d'une AUTRE partie : le grabber (≤ v1.31.5) envoyait,
+      //    depuis le lobby de la partie suivante, le résumé de la précédente sous
+      //    le nouveau numéro (game fantôme #2663354 = copie de #2663278).
+      const esGid = endStatsRes.endStats && endStatsRes.endStats.me && endStatsRes.endStats.me.gameId;
+      if (gameId && esGid && esGid !== String(gameId))
+        flagHealth('Capture d’une autre partie : les stats de fin portent le n° ' + esGid + ', pas ' + gameId + ' (partie fantôme).');
     }
 
     // 12) Assemblage du record normalisé

@@ -2306,6 +2306,19 @@ console.log('Garde-fou nom/id héros —');
   eq(noStats.players.opp.hero, 'Puffin Hightail', 'héros figé sans stats : repli sur HERO FORMS');
 })();
 
+// Partie FANTÔME (cas réel #2663354) : le grabber ≤ 1.31.5 a envoyé, depuis le
+// lobby de la partie suivante, le résumé de #2663278 sous le nouveau numéro →
+// health KO (exclue du tableau de bord). Même n° → aucune alerte.
+(function () {
+  const mk = (num, statsId) => "=== Talishar game " + num + " — test ===\n\nArakni's turn 1 has begun.\nArakni played Y\n"
+    + '\n=== META ===\nme: Me\nopponent: Opp\nmy_hero: Arakni (arakni_5lp3d_7hru_7h3_cr4x)\nopp_hero: Oscilio (oscilio_constella_intelligence)\n'
+    + '\n=== END GAME STATS (Talishar, JSON) ===\n' + JSON.stringify({ myPlayerID: 1, byPlayer: { 1: { gameId: statsId, winner: 2, turnResults: {} } } }) + '\n';
+  const ghost = Parser.parse(mk('2663354', '2663278'));
+  assert(ghost.health.ok === false && ghost.health.issues.some(i => /autre partie/.test(i)), 'fantôme : stats d\'une autre partie → health KO');
+  const real = Parser.parse(mk('2663278', '2663278'));
+  assert(!real.health.issues.some(i => /autre partie/.test(i)), 'fantôme : même n° → pas d\'alerte');
+})();
+
 // ---------- Régression : capture fantôme réelle (ZUP, game #1750820) ----------
 // Une même partie (Arakni, Marionette vs Valda) capturée 2 FOIS côté grabber :
 // #1750692 saine, puis #1750820 22 min plus tard depuis un état Talishar
