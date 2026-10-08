@@ -22,7 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 11;  // v11 : héros figé masqué par un mot courant (« the ») → re-parse LOCAL
+  const SCHEMA_VERSION = 12;  // v12 : héros figé → forme de DÉPART (HERO FORMS) plutôt que forme finale des stats
+  // v11 : héros figé masqué par un mot courant (« the ») → re-parse LOCAL
   // v10 : partie fantôme (stats d'une autre partie) → health KO ;
   // v9 : héros figé → repli HERO FORMS si log capté sans END GAME STATS → re-parse LOCAL
   // v8 : héros figé d'une partie précédente → repris des END GAME STATS → re-parse LOCAL
@@ -856,6 +857,10 @@
           if (metaRes.meta[idKey] === statsId || !inLog(statsId)) return;
           name = HERO_NAME_BY_ID[statsId] || statsName
             || statsId.split('_').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          // Les stats donnent la forme FINALE (« viserai_usurper ») : on préfère
+          // le héros de DÉPART lu dans HERO FORMS (cas réel #2663063), sinon la
+          // miniature montre une forme que la vue Table n'affiche qu'en fin de partie.
+          if (formName && inLog(formName)) { name = formName; statsId = null; }
         } else if (formName && inLog(formName)) {
           name = formName; statsId = null;
         } else return;

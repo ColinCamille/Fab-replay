@@ -2309,6 +2309,11 @@ console.log('Garde-fou nom/id héros —');
   const viserai = Parser.parse(mk('Viserai, the Forsaken (viserai_the_forsaken)', 'oscilio_constella_intelligence',
     "Oscilio Constella Intelligence's turn 1 has begun.\nOscilio Constella Intelligence played Kindle\nArakni's turn 1 has begun.\nArakni played Shelter from the Storm\n"));
   eq(viserai.players.opp.hero, 'Oscilio Constella Intelligence', 'héros figé : mot courant (« the ») ignoré');
+  // Stats = forme FINALE (« viserai_usurper ») → on garde le héros de départ de HERO FORMS (cas réel #2663063).
+  const usurper = Parser.parse(mk('Cindra, Dracai of Retribution (cindra_dracai_of_retribution)', 'viserai_usurper',
+    "Viserai The Forsaken's turn 1 has begun.\nViserai The Forsaken played Kindle\nArakni's turn 1 has begun.\nArakni played Y\n")
+    .replace('=== META', '=== HERO FORMS (forme du héros par tour : toi | adversaire) ===\n[OUVERTURE] me: Arakni | opp: Viserai The Forsaken\n\n=== META'));
+  eq(usurper.players.opp.hero, 'Viserai The Forsaken', 'héros figé : forme de départ (HERO FORMS) préférée à la forme finale');
 })();
 
 // Partie FANTÔME (cas réel #2663354) : le grabber ≤ 1.31.5 a envoyé, depuis le
