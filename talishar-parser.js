@@ -22,7 +22,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const SCHEMA_VERSION = 10;  // v10 : partie fantôme (stats d'une autre partie) → health KO ;
+  const SCHEMA_VERSION = 11;  // v11 : héros figé masqué par un mot courant (« the ») → re-parse LOCAL
+  // v10 : partie fantôme (stats d'une autre partie) → health KO ;
   // v9 : héros figé → repli HERO FORMS si log capté sans END GAME STATS → re-parse LOCAL
   // v8 : héros figé d'une partie précédente → repris des END GAME STATS → re-parse LOCAL
   // v7 : nom de héros canonique par ID (Jarl Vetreidi → Vetreiði) → re-parse LOCAL
@@ -838,7 +839,15 @@
       };
       const logText = ' ' + logLines.join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
       const toks = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(w => w.length >= 3);
-      const inLog = s => toks(s).some(t => logText.indexOf(' ' + t + ' ') >= 0);
+      // Mot DISTINCTIF du héros = le plus long de la partie avant la virgule
+      // (« Viserai, the Forsaken » → viserai) : un mot courant (« the »,
+      // « of »…) est toujours dans le journal et masquait le héros figé
+      // (cas réel #2663278 : « Viserai » enregistré contre Oscilio).
+      const inLog = s => {
+        const t = toks(String(s || '').split(',')[0]).filter(w => !/^(the|of|and)$/.test(w))
+          .sort((a, b) => b.length - a.length)[0];
+        return !t || logText.indexOf(' ' + t + ' ') >= 0;
+      };
       const fix = (side, statsId, statsName, formName) => {
         const nameKey = side + 'Hero', idKey = side + 'HeroId';
         if (!metaRes.meta[nameKey] || inLog(metaRes.meta[nameKey])) return;

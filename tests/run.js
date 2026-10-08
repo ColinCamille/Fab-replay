@@ -2304,6 +2304,11 @@ console.log('Garde-fou nom/id héros —');
     + '\n=== HERO FORMS (forme du héros par tour : toi | adversaire) ===\n[OUVERTURE] me: Arakni | opp: Puffin Hightail\n'
     + '\n=== META ===\nme: Me\nopponent: Opp\nmy_hero: Arakni (arakni_5lp3d_7hru_7h3_cr4x)\nopp_hero: Tuffnut, Bumbling Hulkster (tuffnut_bumbling_hulkster)\n');
   eq(noStats.players.opp.hero, 'Puffin Hightail', 'héros figé sans stats : repli sur HERO FORMS');
+  // Mot courant (« the ») du héros figé présent dans le journal → ne doit pas
+  // masquer le figé (cas réel #2663278 : « Viserai, the Forsaken » contre Oscilio).
+  const viserai = Parser.parse(mk('Viserai, the Forsaken (viserai_the_forsaken)', 'oscilio_constella_intelligence',
+    "Oscilio Constella Intelligence's turn 1 has begun.\nOscilio Constella Intelligence played Kindle\nArakni's turn 1 has begun.\nArakni played Shelter from the Storm\n"));
+  eq(viserai.players.opp.hero, 'Oscilio Constella Intelligence', 'héros figé : mot courant (« the ») ignoré');
 })();
 
 // Partie FANTÔME (cas réel #2663354) : le grabber ≤ 1.31.5 a envoyé, depuis le
