@@ -29,8 +29,33 @@
     return null;
   }
   function isVsAI(rec) { return rec.vsAI === true; }
-  function oppHeroOf(rec) { return (rec.players && rec.players.opp && rec.players.opp.hero) || null; }
-  function myHeroOf(rec) { return (rec.players && rec.players.me && rec.players.me.hero) || null; }
+  // Un même héros arrive sous plusieurs orthographes : nom officiel (« Ser
+  // Boltyn, Breaker of Dawn ») ou libellé reconstruit depuis l'id par le
+  // grabber (« Ser Boltyn Breaker Of Dawn »). On les fusionne par clé
+  // (minuscules, sans ponctuation) et on affiche la variante officielle
+  // (avec virgule, sinon la plus fréquente) → une seule ligne par MU.
+  const heroKey = n => String(n).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  let _heroCanon = {};
+  function setHeroCanon(entries) {
+    const variants = {};
+    (entries || []).forEach(e => {
+      const p = e && e.record && e.record.players;
+      if (!p) return;
+      [p.me && p.me.hero, p.opp && p.opp.hero].forEach(n => {
+        if (!n) return;
+        const v = variants[heroKey(n)] = variants[heroKey(n)] || {};
+        v[n] = (v[n] || 0) + 1;
+      });
+    });
+    _heroCanon = {};
+    Object.keys(variants).forEach(k => {
+      _heroCanon[k] = Object.keys(variants[k]).sort((a, b) =>
+        (b.indexOf(',') >= 0) - (a.indexOf(',') >= 0) || variants[k][b] - variants[k][a] || a.localeCompare(b))[0];
+    });
+  }
+  const canonHero = n => n ? (_heroCanon[heroKey(n)] || n) : null;
+  function oppHeroOf(rec) { return canonHero(rec.players && rec.players.opp && rec.players.opp.hero); }
+  function myHeroOf(rec) { return canonHero(rec.players && rec.players.me && rec.players.me.hero); }
   // Axe temporel : capturedAt (ISO, triable) prioritaire, sinon parsedAt.
   function dateOf(rec) {
     const src = rec.source || {};
@@ -118,6 +143,7 @@
   // ---------- Cœur d'agrégation ----------
   // entries : [{ gameId, record }] ; filters : { includeAI, format, oppHero, period }
   function aggregate(entries, filters) {
+    setHeroCanon(entries);
     const f = Object.assign({ includeAI: false, format: null, myHero: null, oppHero: null, period: 'all', tag: null }, filters || {});
 
     // Parties mal analysées (health.ok=false côté parseur — ex. capture
@@ -1067,6 +1093,7 @@
 
   function mount(opts) {
     _entries = (opts && opts.entries) || [];
+    setHeroCanon(_entries);
     _onOpen = (opts && opts.onOpen) || null;
     _onDelete = (opts && opts.onDelete) || null;
     _onDeleteMany = (opts && opts.onDeleteMany) || null;

@@ -484,6 +484,14 @@ assert(briCyc && !briCyc.cycled, 'cyclage : héros sans pouvoir de défausse →
 // Filtre héros adverse.
 eq(Dashboard.aggregate(entries, { oppHero: 'Briar' }).global.games, 2, 'filtre héros adverse');
 
+// Variantes d'orthographe d'un même héros (nom officiel vs libellé dérivé de l'id) → une seule ligne de MU.
+const dupAgg = Dashboard.aggregate([
+  { gameId: 'v1', record: mkRec({ iWon: true, myHero: 'Briar', oppHero: 'Ser Boltyn Breaker Of Dawn', first: true, date: '2026-07-01T10:00:00Z' }) },
+  { gameId: 'v2', record: mkRec({ iWon: false, myHero: 'Briar', oppHero: 'Ser Boltyn, Breaker of Dawn', first: true, date: '2026-07-02T10:00:00Z' }) }
+], {});
+eq(dupAgg.byMatchup.length, 1, 'orthographes d\'un même héros fusionnées');
+eq(dupAgg.byMatchup[0].hero, 'Ser Boltyn, Breaker of Dawn', 'variante officielle (virgule) affichée');
+
 // Filtre « mon héros » + facette myHeroes.
 const meEntries = [
   { gameId: 'm1', record: mkRec({ iWon: true, myHero: 'Briar', oppHero: 'Kano', first: true, date: '2026-07-01T10:00:00Z' }) },
