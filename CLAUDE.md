@@ -268,6 +268,9 @@ sont **déjà en place** — les maintenir/étendre plutôt que refaire :
   dégâts **infligés** en attaque + **1 par carte mise en soul** (−1 par carte de
   soul dépensée) − **2 par Gold donné** à l'adversaire (+2 si refusé, selon la
   ligne de référence). Comparer aussi valeur / carte dépensée.
+- **Arsenal en défense** : seule une carte avec **Ambush** ou une **réaction de
+  défense** peut défendre depuis l'arsenal ; toute autre carte d'arsenal (ex.
+  Premeditate) ne bloque pas.
 - **Équipement = ressource pour empêcher un on-hit.** Si le hit est
   inévitable (défense max < puissance), ne pas « user » l'armure pour grappiller
   des PV : la garder pour un tour où elle permet de **bloquer complètement** et

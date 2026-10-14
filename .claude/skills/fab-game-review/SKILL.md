@@ -70,6 +70,10 @@ des impressions : chaque recommandation est chiffrée.
   coût futur.
 - Overpower : **1 seule carte action** en blocage ; équipement et réactions de
   défense restent autorisés.
+- **Arsenal en défense** : une carte de l'arsenal ne peut défendre que si elle a
+  **Ambush** (elle bloque depuis l'arsenal) ou si c'est une **réaction de défense**
+  (jouée depuis l'arsenal à l'étape de réaction). Toute autre carte d'arsenal
+  (ex. Premeditate) ne bloque **pas** : ne jamais la proposer dans une ligne de blocage.
 - Regarder ce que l'**on-hit** vole (Go Fish rouge/jaune/attaque, arsenal…) : charger
   en priorité la couleur ciblée pour vider la cible.
 - Pour Boltyn : une charge **jaune** débloque Duty Bound Blitz, le +1 de Beaming, la
@@ -84,7 +88,8 @@ Pour **chaque tour** (les deux joueurs), à partir des snapshots :
 1. État : PV des deux camps, **ta main + arsenal**, équipement restant (durabilité),
    soul, tokens, menace adverse (puissance, overpower, on-hit).
 2. Lister les **lignes possibles** (blocages, charges, séquences d'attaque, pitch),
-   en vérifiant les coûts, go again, conditions (« si tu as chargé ce tour »…).
+   en vérifiant les coûts, go again, conditions (« si tu as chargé ce tour »…) et
+   qu'une carte d'arsenal proposée en défense a bien Ambush ou est une réaction de défense.
 3. Chiffrer chaque ligne avec le barème (sur le cycle défense → attaque).
 4. Comparer à la ligne **jouée** (reconstituée depuis le journal ; attention aux
    `undo`).
