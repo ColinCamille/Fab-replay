@@ -271,6 +271,9 @@ sont **déjà en place** — les maintenir/étendre plutôt que refaire :
 - **Arsenal en défense** : seule une carte avec **Ambush** ou une **réaction de
   défense** peut défendre depuis l'arsenal ; toute autre carte d'arsenal (ex.
   Premeditate) ne bloque pas.
+- **Une carte ne sert qu'une fois par cycle** : celle qui bloque n'est plus en main
+  au tour suivant. Une attaque « appât » bloquée a quand même absorbé des bloqueurs
+  adverses : sans elle, ils vont sur l'attaque suivante.
 - **Équipement = ressource pour empêcher un on-hit.** Si le hit est
   inévitable (défense max < puissance), ne pas « user » l'armure pour grappiller
   des PV : la garder pour un tour où elle permet de **bloquer complètement** et

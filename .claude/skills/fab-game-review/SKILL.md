@@ -74,6 +74,14 @@ des impressions : chaque recommandation est chiffrée.
   **Ambush** (elle bloque depuis l'arsenal) ou si c'est une **réaction de défense**
   (jouée depuis l'arsenal à l'étape de réaction). Toute autre carte d'arsenal
   (ex. Premeditate) ne bloque **pas** : ne jamais la proposer dans une ligne de blocage.
+- **Une carte ne sert qu'une fois** sur un cycle : une carte qui bloque pendant le
+  tour adverse n'est plus en main au tour suivant (on ne pioche qu'en fin de son
+  propre tour). Lister la main **restante** (HAND SNAPSHOTS) avant de chiffrer
+  l'attaque de la ligne alternative ; compter les exemplaires.
+- **Une attaque bloquée n'est pas « sans valeur »** : elle a consommé des bloqueurs
+  adverses (équipement surtout). Si la ligne alternative la retire, l'adversaire
+  peut mettre ces bloqueurs sur l'attaque suivante : recalculer ses dégâts avec
+  ces blocs.
 - Regarder ce que l'**on-hit** vole (Go Fish rouge/jaune/attaque, arsenal…) : charger
   en priorité la couleur ciblée pour vider la cible.
 - Pour Boltyn : une charge **jaune** débloque Duty Bound Blitz, le +1 de Beaming, la
