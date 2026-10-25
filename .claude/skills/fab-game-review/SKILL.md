@@ -82,6 +82,10 @@ des impressions : chaque recommandation est chiffrée.
   adverses (équipement surtout). Si la ligne alternative la retire, l'adversaire
   peut mettre ces bloqueurs sur l'attaque suivante : recalculer ses dégâts avec
   ces blocs.
+- **Effets qui équipent une arme** (Lobotomy → Orbitoclast…) : il faut un **emplacement
+  d'arme libre** au moment où l'attaque est jouée. Avec les deux dagues en jeu, l'effet est
+  perdu : ne jamais proposer ces cartes dans ce cas. Libérer d'abord un emplacement (Flick
+  Knives, dague lancée) puis jouer la carte, et ne pas reprocher d'avoir gardé la carte.
 - Regarder ce que l'**on-hit** vole (Go Fish rouge/jaune/attaque, arsenal…) : charger
   en priorité la couleur ciblée pour vider la cible.
 - Pour Boltyn : une charge **jaune** débloque Duty Bound Blitz, le +1 de Beaming, la
